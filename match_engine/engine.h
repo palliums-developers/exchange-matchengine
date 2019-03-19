@@ -1,0 +1,273 @@
+#ifndef __EXCHANGE_MATCH_ENGINE__
+#define __EXCHANGE_MATCH_ENGINE__
+
+namespace exchange {
+  
+  enum {
+    TOKEN_BTC = 0,
+    TOKEN_USDT,
+    TOKEN_MAX,
+  };
+
+  enum {
+    ORDER_TYPE_DELEGATE_BY_MARKET_PRICE = 0,
+    ORDER_TYPE_DELEGATE_BY_LIMIT_PRICE,
+    ORDER_TYPE_MAX,
+  };
+
+  enum {
+    TX_STATUS_INIT = 0,
+    TX_STATUS_DONE,
+    TX_STATUS_MAX,
+  };
+
+  struct Configure
+  {
+    //static constexpr double initMarketRate = 0.00000005;
+    static constexpr double initMarketRate = 0.5;
+    static constexpr uint64_t minExchangeNum = 1;
+    static constexpr uint64_t maxExchangeNum = 10000;
+  };
+
+  struct Order
+  {
+    static std::atomic<int> gcnt;
+    
+    Order(){}
+    Order(int idx, int from, int to , int type, double rate, int num, int minNum, std::string user)
+      : _idx(idx), _from(from), _to(to), _type(type), _rate(rate), _num(num), _minNum(minNum), _user(user)
+    {
+      _timeStamp = time(NULL);
+      _deadline = _timeStamp + 3600;
+      gcnt++;
+    }
+    ~Order(){
+      if(!_matched && !_timeout) {
+	LOG(ERROR, "order is deleted wrongly");
+	printf("this: %p\n", this);
+	dump();
+      }
+      gcnt--;
+    }
+
+    bool is_order_alive()
+    {
+      return _matched == false && _timeout == false;
+    }
+    
+    int check();
+    
+    std::string string()
+    {
+      char text[512];
+      sprintf(text, "{idx:%d, from:%d,to:%d,type:%d,rate:%.8f,num:%lu,minNum:%lu,user:%s,timeStamp:%u,dealine:%u,matched:%d,timeout:%d}"
+	      , _idx, _from, _to, _type, _rate, _num, _minNum, _user.c_str(), _timeStamp, _deadline, _matched, _timeout);
+      return std::string(text);
+    }
+    
+    void dump()
+    {
+      printf("order -> idx:%d, from:%d, to:%d, type:%d, rate:%.8f, num:%lu, minNum:%lu, user:%s, timeStamp:%u, dealine:%u, matched:%d, timeout:%d, gcnt:%d\n"
+	     , _idx, _from, _to, _type, _rate, _num, _minNum, _user.c_str(), _timeStamp, _deadline, _matched, _timeout, gcnt.load());
+    }
+    
+    int _idx;
+    int _from;
+    int _to;
+    int _type;
+    double _rate;
+    uint64_t _num = 0;
+    uint64_t _minNum = 0;
+    std::string _user;
+    uint32_t _timeStamp;
+    uint32_t _deadline;
+    bool _matched = false;
+    bool _timeout = false;
+  };
+
+  struct comparebynum
+  {
+    bool operator()(const std::shared_ptr<Order>& lhs, const std::shared_ptr<Order>& rhs) const
+    {
+      return lhs->_num < rhs->_num;
+    }
+  };
+
+  struct comparebyrate1
+  {
+    bool operator()(const std::shared_ptr<Order>& lhs, const std::shared_ptr<Order>& rhs) const
+    {
+      return lhs->_rate < rhs->_rate;
+    }
+  };
+
+  struct comparebyrate2
+  {
+    bool operator()(const std::shared_ptr<Order>& lhs, const std::shared_ptr<Order>& rhs) const
+    {
+      return !(lhs->_rate < rhs->_rate);
+    }
+  };
+
+  struct comparebydeadline
+  {
+    bool operator()(const std::shared_ptr<Order>& lhs, const std::shared_ptr<Order>& rhs) const
+    {
+      return lhs->_deadline < rhs->_deadline;
+    }
+  };
+
+  typedef std::shared_ptr<Order> OrderPtr;
+  typedef std::multiset<OrderPtr, comparebynum>  OrderNumSet;
+  typedef std::multiset<OrderPtr, comparebyrate1> OrderRateSet1;
+  typedef std::multiset<OrderPtr, comparebyrate2> OrderRateSet2;
+  
+  struct Transaction
+  {
+    Transaction(int idx, OrderPtr d1, OrderPtr d2, double rate, uint64_t num)
+      : _idx(idx), _rate(rate), _num(num)
+    {
+      _timeStamp = time(NULL);
+      _order1 = d1->string();
+      _order2 = d2->string();
+    }
+  
+    void dump()
+    {
+      printf("tx %d-> \n", _idx);
+      printf("%s\n%s\nrate:%.8f, num:%lu, timeStamp:%u status:%d\n", _order1.c_str(), _order2.c_str(), _rate, _num, _timeStamp, _status);
+    }
+
+    int _idx;
+    std::string _order1;
+    std::string _order2;
+    double _rate;
+    uint64_t _num;
+    uint32_t _timeStamp;
+    int _status = 0;
+  };
+
+  typedef std::shared_ptr<Transaction> TransactionPtr;
+
+  template<class OrderRateSet>
+  struct OrderBook
+  {
+    typedef OrderRateSet OrderRateSet_t;
+    
+    OrderBook(bool isSeller)
+      : _isSeller(isSeller) {}
+  
+    int insert(OrderPtr order);
+    void remove_cached_invalid_order();
+    void dump();
+
+    size_t count()
+    {
+      return _marketPriceOrderQueue.size() + _limitPriceOrderSetByRate.size() + _retry4minNumQueue.size();
+    }
+
+    void clear_cache()
+    {
+      _marketPriceOrderSetByNum.clear();
+      _limitPriceOrderMapByNum.clear();
+    }
+
+    bool _isSeller;
+    
+    std::list<OrderPtr> _marketPriceOrderQueue;
+    OrderNumSet _marketPriceOrderSetByNum;
+
+    OrderRateSet _limitPriceOrderSetByRate;
+    std::map<uint64_t, std::shared_ptr<OrderRateSet>> _limitPriceOrderMapByNum;
+
+    std::list<OrderPtr> _retry4minNumQueue;
+  };
+
+  struct MatchEngine
+  {
+    void run(volatile bool* alive);
+
+    void set_queues(utils::Queue<OrderPtr>* in, utils::Queue<TransactionPtr>* out)
+    {
+      _qin = in;
+      _qout = out;
+    }
+
+    //private:
+    
+    double market_rate()
+    {
+      return _marketRate;
+    }
+
+    bool is_seller(int from, int to)
+    {
+      return to == TOKEN_BTC;
+    }
+    
+    int insert_order(OrderPtr order);
+  
+    void update_market_rate(double rate);
+
+    bool is_order_rate_match(OrderPtr a, OrderPtr b);
+
+    bool is_order_mininal_num_match(OrderPtr a, OrderPtr b)
+    {
+      auto num = std::min(a->_num, b->_num);
+      return a->_minNum <= num && b->_minNum <= num;
+    }
+    
+    bool is_order_match(OrderPtr a, OrderPtr b)
+    {
+      return is_order_rate_match(a, b) && is_order_mininal_num_match(a, b);
+    }
+      
+    bool check_order_minimal_num(OrderPtr a, OrderPtr b);
+
+    bool check_order_timeout(OrderPtr a)
+    {
+      return a->_timeout;
+    }
+
+    bool check_order_matched(OrderPtr a)
+    {
+      return a->_matched;
+    }
+    
+    void match_handler(OrderPtr a, OrderPtr b);
+
+    int handle_orders(OrderPtr a, OrderPtr b);
+
+    template<class BOOK1, class BOOK2>
+      int do_match(BOOK1 & book1, BOOK2 & book2);
+    
+    template<class BOOK1, class BOOK2>
+      int do_one_match(BOOK1 & book1, BOOK2 & book2, OrderPtr order);
+
+    utils::Queue<OrderPtr>* _qin{nullptr};
+    utils::Queue<TransactionPtr>* _qout{nullptr};
+    
+    std::vector<double> _lastRates;
+    double _marketRate = Configure::initMarketRate;
+  
+    OrderBook<OrderRateSet1> _sellerOrderBook{true};
+    OrderBook<OrderRateSet2> _buyerOrderBook{false};
+
+    std::multiset<OrderPtr, comparebydeadline> _timeoutQueue;
+  };
+
+  OrderNumSet::iterator
+    num_set_find_nearest(uint64_t num, OrderNumSet & set);
+
+  template<class OrderRateSet>
+    typename std::map<uint64_t, std::shared_ptr<OrderRateSet>>::iterator
+    num_map_find_nearest(uint64_t num, std::map<uint64_t, std::shared_ptr<OrderRateSet>> & map);
+  
+  template<class OrderRateSet>
+    std::pair<typename OrderRateSet::iterator, typename OrderRateSet::iterator>
+    find_valid_order_by_rate(double rate, std::shared_ptr<OrderRateSet> & set);
+  
+} // namespace exchange
+
+
+#endif
