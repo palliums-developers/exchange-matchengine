@@ -66,6 +66,33 @@ void log(int level, const char* file, int line, const char* func, const char *fo
     lvlstr = red_text(lvlstrs[level].c_str());
   std::string task = blue_text("match-engine");
   
+  char content[1024];
+  va_list args;
+  va_start(args, format);
+  vsnprintf(content, sizeof(content), format, args);
+  va_end(args);
+
+  printf("{ \"time\": \"%s\", \"lvl\": \"%s\",  \"file\": \"%s\", \"line\": %d, \"func\": \"%s\", \"task\": \"%s\", \"content\": \"%s\" }\n"
+	 , timestamp_2_string(now).c_str(), lvlstr.c_str(), file, line, func, task.c_str(), content);
+  
+  printf("\n");
+}
+
+void log2(int level, const char* file, int line, const char* func, const char *format, ...)
+{
+  if(level < g_log_level)
+    return;
+  
+  static std::vector<std::string> lvlstrs{"DEBUG", "INFO", "WARNING", "ERROR", "FATAL"};
+  auto now = uint32_t(time(NULL));
+
+  std::string lvlstr;
+  if(level == INFO)
+    lvlstr = green_text(lvlstrs[level].c_str());
+  if(level >= WARNING)
+    lvlstr = red_text(lvlstrs[level].c_str());
+  std::string task = blue_text("match-engine");
+  
   char str[512];
   sprintf(str, "%s %s %s:%d %s %s\n", timestamp_2_string(now).c_str(), lvlstr.c_str(), file, line, func, task.c_str());
   printf("%s", str);

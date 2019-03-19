@@ -43,8 +43,7 @@ namespace exchange {
     }
     ~Order(){
       if(!_matched && !_timeout) {
-	LOG(ERROR, "order is deleted wrongly");
-	printf("this: %p\n", this);
+	LOG(ERROR, "order is deleted wrongly: %s", string().c_str());
 	dump();
       }
       gcnt--;
@@ -59,16 +58,16 @@ namespace exchange {
     
     std::string string()
     {
-      char text[512];
-      sprintf(text, "{idx:%d, from:%d,to:%d,type:%d,rate:%.8f,num:%lu,minNum:%lu,user:%s,timeStamp:%u,dealine:%u,matched:%d,timeout:%d}"
+      char text[1024];
+      snprintf(text, sizeof(text), "{idx:%d, from:%d,to:%d,type:%d,rate:%.8f,num:%lu,minNum:%lu,user:%s,timeStamp:%u,dealine:%u,matched:%d,timeout:%d}"
 	      , _idx, _from, _to, _type, _rate, _num, _minNum, _user.c_str(), _timeStamp, _deadline, _matched, _timeout);
       return std::string(text);
     }
     
     void dump()
     {
-      printf("order -> idx:%d, from:%d, to:%d, type:%d, rate:%.8f, num:%lu, minNum:%lu, user:%s, timeStamp:%u, dealine:%u, matched:%d, timeout:%d, gcnt:%d\n"
-	     , _idx, _from, _to, _type, _rate, _num, _minNum, _user.c_str(), _timeStamp, _deadline, _matched, _timeout, gcnt.load());
+      /* printf("order -> idx:%d, from:%d, to:%d, type:%d, rate:%.8f, num:%lu, minNum:%lu, user:%s, timeStamp:%u, dealine:%u, matched:%d, timeout:%d, gcnt:%d\n" */
+      /* 	     , _idx, _from, _to, _type, _rate, _num, _minNum, _user.c_str(), _timeStamp, _deadline, _matched, _timeout, gcnt.load()); */
     }
     
     int _idx;
@@ -134,10 +133,18 @@ namespace exchange {
   
     void dump()
     {
-      printf("tx %d-> \n", _idx);
-      printf("%s\n%s\nrate:%.8f, num:%lu, timeStamp:%u status:%d\n", _order1.c_str(), _order2.c_str(), _rate, _num, _timeStamp, _status);
+      /* printf("tx %d-> \n", _idx); */
+      /* printf("%s\n%s\nrate:%.8f, num:%lu, timeStamp:%u status:%d\n", _order1.c_str(), _order2.c_str(), _rate, _num, _timeStamp, _status); */
     }
 
+    std::string string()
+    {
+      char text[1024];
+      snprintf(text, sizeof(text), "{idx:%d, order1:%s, order2:%s, rate:%.8f, num:%lu, timeStamp:%u, status:%d}"
+	       , _idx, _order1.c_str(), _order2.c_str(), _rate, _num, _timeStamp, _status);
+      return std::string(text);
+    }
+    
     int _idx;
     std::string _order1;
     std::string _order2;

@@ -131,16 +131,13 @@ namespace exchange {
 	    _timeoutQueue.erase(pos);
 	
 	    if(!order->_matched)
-	      LOG(INFO, "order timeout!");
-	    order->dump();
+	      LOG(INFO, "order timeout! : %s", order->string().c_str());
 	  }
 	
 	while(!_qin->empty())
 	  {
 	    auto order = _qin->pop();
-	    LOG(INFO, "order is coming...");
-	    if(g_log_level >= INFO)
-	      order->dump();
+	    LOG(INFO, "order is coming...: %s", order->string().c_str());
 	
 	    insert_order(order);
 	  }
@@ -187,9 +184,9 @@ namespace exchange {
 	    std::function<bool(OrderPtr)> func = [](OrderPtr order){ return order->_matched; };
 	    remove_if_ex(_timeoutQueue, func);
 	  
-	    _sellerOrderBook.dump();
-	    printf("\n");
-	    _buyerOrderBook.dump();
+	    // _sellerOrderBook.dump();
+	    // printf("\n");
+	    // _buyerOrderBook.dump();
 
 	    if(Order::gcnt.load() > 0)
 	      LOG(INFO, "order gcnt: %d, buyers:%lu, sellers:%lu", Order::gcnt.load(), _buyerOrderBook.count(), _sellerOrderBook.count());
@@ -205,8 +202,7 @@ namespace exchange {
     
     if(ret != 0)
       {
-	LOG(WARNING, "invalid order, error:%d", ret);
-	order->dump();
+	LOG(WARNING, "invalid order, error:%d : %s", ret, order->string().c_str());
 	return ret;
       }
     
@@ -336,6 +332,8 @@ namespace exchange {
 
     static int txidx = 0;
     auto ptx = std::make_shared<Transaction>(txidx++, sellerOrder, buyerOrder, rate, std::min(sellerOrder->_num, buyerOrder->_num));
+
+    LOG(INFO, "new transacton: %s", ptx->string().c_str());
     
     _qout->push(ptx);
       

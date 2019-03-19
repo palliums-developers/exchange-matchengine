@@ -53,7 +53,7 @@ int main()
       for(;;)
 	{
 	  auto tx = qtx.pop();
-	  //tx->dump();
+	  tx->dump();
 	}
     });
   
