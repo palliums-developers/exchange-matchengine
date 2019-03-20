@@ -1,3 +1,5 @@
 
-g++ main.cpp engine.cpp ../utils/utilities.cpp -std=c++1z -pthread -Wfatal-errors -g -o match_engine
+g++ main.cpp engine.cpp localdb.cpp ../utils/utilities.cpp -std=c++1z -pthread -Wfatal-errors -g -o match_engine     \
+   -I /home/lmf/github.com/rocksdb/include -L /home/lmf/github.com/rocksdb -Wl,-rpath,/home/lmf/github.com/rocksdb   \
+   -lrocksdb -lsnappy \
 
