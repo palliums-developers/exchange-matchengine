@@ -102,7 +102,7 @@ void LocalDB::run(volatile bool* alive)
 	  s = _db->Put(rocksdb::WriteOptions(), std::string(key), pair.second);
 	}
       
-      if(now != last && (now-last) >= 10)
+      if(now != last && (now-last) >= 300)
 	{
 	  last = now;
 

@@ -1,6 +1,8 @@
 #ifndef __EXCHANGE_MATCH_ENGINE__
 #define __EXCHANGE_MATCH_ENGINE__
 
+struct LocalDB;
+
 namespace exchange {
   
   enum {
@@ -34,7 +36,7 @@ namespace exchange {
     static std::atomic<int> gcnt;
     
     Order(){}
-    Order(int idx, int from, int to , int type, double rate, int num, int minNum, std::string user)
+    Order(long idx, int from, int to , int type, double rate, int num, int minNum, std::string user)
       : _idx(idx), _from(from), _to(to), _type(type), _rate(rate), _num(num), _minNum(minNum), _user(user)
     {
       _timeStamp = time(NULL);
@@ -59,9 +61,31 @@ namespace exchange {
     std::string string()
     {
       char text[1024];
-      snprintf(text, sizeof(text), "{idx:%d, from:%d,to:%d,type:%d,rate:%.8f,num:%lu,minNum:%lu,user:%s,timeStamp:%u,dealine:%u,matched:%d,timeout:%d}"
-	      , _idx, _from, _to, _type, _rate, _num, _minNum, _user.c_str(), _timeStamp, _deadline, _matched, _timeout);
+      snprintf(text, sizeof(text), "{idx:%ld,from:%d,to:%d,type:%d,rate:%.8f,num:%lu,minNum:%lu,user:%s,timeStamp:%u,deadline:%u,matched:%d,timeout:%d,txidx:%ld}"
+	       , _idx, _from, _to, _type, _rate, _num, _minNum, _user.c_str(), _timeStamp, _deadline, _matched, _timeout, _txidx);
       return std::string(text);
+    }
+
+    static std::shared_ptr<Order> create_from_string(std::string str)
+    {
+      auto v = json_get_object(str);
+      auto order = std::make_shared<Order>(
+					   std::atol(v["idx"].c_str()),
+					   std::atoi(v["from"].c_str()),
+					   std::atoi(v["to"].c_str()),
+					   std::atoi(v["type"].c_str()),
+					   std::atof(v["rate"].c_str()),
+					   std::atol(v["num"].c_str()),
+					   std::atol(v["minNum"].c_str()),
+					   v["user"]);
+      
+      order->_timeStamp = std::atoi(v["timeStamp"].c_str());
+      order->_deadline = std::atoi(v["deadline"].c_str());
+      order->_matched = std::atoi(v["matched"].c_str());
+      order->_timeout = std::atoi(v["timeout"].c_str());
+      order->_txidx = std::atol(v["txidx"].c_str());
+      
+      return order;
     }
     
     void dump()
@@ -70,7 +94,7 @@ namespace exchange {
       /* 	     , _idx, _from, _to, _type, _rate, _num, _minNum, _user.c_str(), _timeStamp, _deadline, _matched, _timeout, gcnt.load()); */
     }
     
-    int _idx;
+    long _idx;
     int _from;
     int _to;
     int _type;
@@ -82,6 +106,7 @@ namespace exchange {
     uint32_t _deadline;
     bool _matched = false;
     bool _timeout = false;
+    long _txidx = -1;
   };
 
   struct comparebynum
@@ -123,14 +148,37 @@ namespace exchange {
   
   struct Transaction
   {
-    Transaction(int idx, OrderPtr d1, OrderPtr d2, double rate, uint64_t num)
+    Transaction(long idx, OrderPtr d1, OrderPtr d2, double rate, uint64_t num)
       : _idx(idx), _rate(rate), _num(num)
     {
       _timeStamp = time(NULL);
       _order1 = d1->string();
       _order2 = d2->string();
     }
-  
+
+  Transaction(long idx, std::string d1, std::string d2, double rate, uint64_t num)
+      : _idx(idx), _order1(d1), _order2(d2), _rate(rate), _num(num)
+    {
+      _timeStamp = time(NULL);
+    }
+    
+    static std::shared_ptr<Transaction> create_from_string(std::string str)
+    {
+      auto v = json_get_object(str);
+      auto tx = std::make_shared<Transaction>(
+					   std::atol(v["idx"].c_str()),
+					   v["order1"],
+					   v["order2"],
+					   std::atof(v["rate"].c_str()),
+					   std::atol(v["num"].c_str())
+					      );
+      
+      tx->_timeStamp = std::atoi(v["timeStamp"].c_str());
+      tx->_status = std::atoi(v["status"].c_str());
+      
+      return tx;
+    }
+    
     void dump()
     {
       /* printf("tx %d-> \n", _idx); */
@@ -140,12 +188,12 @@ namespace exchange {
     std::string string()
     {
       char text[1024];
-      snprintf(text, sizeof(text), "{idx:%d, order1:%s, order2:%s, rate:%.8f, num:%lu, timeStamp:%u, status:%d}"
+      snprintf(text, sizeof(text), "{idx:%ld, order1:%s, order2:%s, rate:%.8f, num:%lu, timeStamp:%u, status:%d}"
 	       , _idx, _order1.c_str(), _order2.c_str(), _rate, _num, _timeStamp, _status);
       return std::string(text);
     }
     
-    int _idx;
+    long _idx;
     std::string _order1;
     std::string _order2;
     double _rate;
@@ -201,7 +249,9 @@ namespace exchange {
     }
 
     //private:
-    
+
+    bool start_localdb(volatile bool* alive);
+
     double market_rate()
     {
       return _marketRate;
@@ -261,6 +311,8 @@ namespace exchange {
     OrderBook<OrderRateSet2> _buyerOrderBook{false};
 
     std::multiset<OrderPtr, comparebydeadline> _timeoutQueue;
+
+    LocalDB* _localdb = nullptr;
   };
 
   OrderNumSet::iterator

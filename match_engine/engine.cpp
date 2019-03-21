@@ -18,7 +18,11 @@
 #include <time.h>
 #include <sys/time.h>
 
+#include "rocksdb/db.h"
+
 #include "../utils/utilities.h"
+
+#include "localdb.h"
 
 #include "engine.h"
 
@@ -103,10 +107,70 @@ namespace exchange {
     printf("retry4minNumQueue: %lu\n", _retry4minNumQueue.size());
   }
 
+  bool MatchEngine::start_localdb(volatile bool* alive)
+  {
+    _localdb = new LocalDB("testdb");
+
+    auto orderHandler = [&](std::string a)
+      {
+	auto order = Order::create_from_string(a);
+	insert_order(order);
+	return 0;
+      };
+    
+    auto isOrderAlive = [&](std::string a)
+      {
+	auto order = Order::create_from_string(a);
+	return order->is_order_alive();
+      };
+
+    auto isOrderTimeout4remove = [&](std::string a)
+      {
+	auto now = uint32_t(time(NULL));
+	auto order = Order::create_from_string(a);
+	return (now - order->_timeStamp) >= 10*24*3600;
+      };
+
+    auto isTxTimeout4remove = [&](std::string a)
+      {
+	auto now = uint32_t(time(NULL));
+	auto tx = Transaction::create_from_string(a);
+	return (now - tx->_timeStamp) >= 10*24*3600;
+      };
+    
+    _localdb->set_handlers(
+			   orderHandler,
+			   isOrderAlive,
+			   isOrderTimeout4remove,
+			   isTxTimeout4remove
+			   // [](std::string a){ std::cout << "order handler: " << a << "\n"; return 0; },
+			   // [](std::string a){ std::cout << "order alive  : " << a << "\n"; return true; },
+			   // [](std::string a){ std::cout << "order remove : " << a << "\n"; return false; },
+			   // [](std::string a){ std::cout << "tx remove    : " << a << "\n"; return false; }
+			   );
+    
+    auto ret = _localdb->load();
+
+    if(ret != 0)
+      {
+	LOG(ERROR, "localdb load failed: %d", ret);
+	return false;
+      }
+    
+    std::thread localdb_thrd([&]{ _localdb->run(alive); });
+    
+    localdb_thrd.detach();
+    
+    return true;
+  }
+  
   void MatchEngine::run(volatile bool* alive)
   {
-    LOG(INFO, "MatchEngine::run start!\n");
+    if(!start_localdb(alive))
+      return;
 
+    LOG(INFO, "MatchEngine::run start!\n");
+    
     while(*alive)
       {
 	auto now = uint32_t(time(NULL));
@@ -183,16 +247,12 @@ namespace exchange {
 	    
 	    std::function<bool(OrderPtr)> func = [](OrderPtr order){ return order->_matched; };
 	    remove_if_ex(_timeoutQueue, func);
-	  
-	    // _sellerOrderBook.dump();
-	    // printf("\n");
-	    // _buyerOrderBook.dump();
 
 	    if(Order::gcnt.load() > 0)
 	      LOG(INFO, "order gcnt: %d, buyers:%lu, sellers:%lu", Order::gcnt.load(), _buyerOrderBook.count(), _sellerOrderBook.count());
 	  }
       }
-    
+
     LOG(INFO, "MatchEngine::run exit!\n");
   }
 
