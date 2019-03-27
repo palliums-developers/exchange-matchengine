@@ -7,6 +7,14 @@ struct LocalDB
   
   void run(volatile bool* alive);
   int load();
+
+  void get_checkpoints(long* orderidx, long* txidx)
+  {
+    *orderidx = _orderCheckpoint;
+    *txidx = _txCheckpoint;
+  }
+
+  std::string get_order(long idx);
   
   int append_order(long idx, std::string order)
   {
@@ -54,6 +62,8 @@ private:
   long _orderCheckpoint = 0;
   long _orderRemove = 0;
   long _txRemove = 0;
+
+  long _txCheckpoint = 0;
   
   rocksdb::DB* _db = nullptr;
 };

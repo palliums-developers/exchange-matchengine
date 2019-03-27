@@ -18,9 +18,9 @@
 #include <time.h>
 #include <sys/time.h>
 
-#include "../utils/utilities.h"
+#include <rocksdb/db.h>
 
-#include "rocksdb/db.h"
+#include "../utils/utilities.h"
 
 #include "localdb.h"
 
@@ -41,6 +41,12 @@ int LocalDB::load()
     _orderCheckpoint = std::atol(value.c_str());
   }
 
+  {
+    std::string value;
+    _db->Get(rocksdb::ReadOptions(), std::string("t-checkpoint"), &value);
+    _txCheckpoint = std::atol(value.c_str());
+  }
+  
   {
     std::string value;
     _db->Get(rocksdb::ReadOptions(), std::string("o-remove"), &value);
@@ -70,6 +76,15 @@ int LocalDB::load()
     }
   
   return 0;
+}
+
+std::string LocalDB::get_order(long idx)
+{
+  char key[80];
+  sprintf(key, "o%08ld", idx);
+  std::string order;
+  auto s = _db->Get(rocksdb::ReadOptions(), std::string(key), &order);
+  return order;
 }
 
 void LocalDB::run(volatile bool* alive)
@@ -129,6 +144,27 @@ void LocalDB::run(volatile bool* alive)
 	      break;
 	    }
 
+	  i = _txCheckpoint;
+	  
+	  for(;;)
+	    {
+	      char key[80];
+	      sprintf(key, "t%08ld", i++);
+	      std::string tx;
+	      auto s = _db->Get(rocksdb::ReadOptions(), std::string(key), &tx);
+	      if (s.ok())
+		continue;
+	      
+	      i--;
+	      
+	      if(i > _txCheckpoint)
+		{
+		  s = _db->Put(rocksdb::WriteOptions(), std::string("t-checkpoint"), std::to_string(i));
+		  _txCheckpoint = i;
+		}
+	      break;
+	    }
+	  
 	  i = _orderRemove;
 
 	  for(;;)

@@ -20,12 +20,58 @@
 
 #include "../utils/utilities.h"
 
+
 #include "engine.h"
+
+// #include <mariadb/mysql.h>
+// #include "remotedb.h"
 
 int g_log_level = INFO;
 
+
 int main()
 {
+  volatile bool alive = true;
+  exchange::MatchEngine engine;
+  
+  engine.run(&alive);
+  
+  return 0;
+}
+
+int main2()
+{
+  // {
+  //   if(1)
+  //     {
+  // 	RemoteDB db;
+  // 	auto ret = db.connect();
+  // 	if(!ret)
+  // 	  {
+  // 	    printf("db.connect failed\n");
+  // 	    return 1;
+  // 	  }
+  // 	int i = 0;
+  // 	// db.append_order({{"id", "32"}, {"age", "34"}, {"my_name", "\"jack031\""}});
+  // 	// db.append_order({{"id", "33"}, {"age", "34"}, {"my_name", "\"jack031\""}});
+  // 	// db.append_order({{"id", "34"}, {"age", "34"}, {"my_name", "\"jack031\""}});
+
+  // 	auto v = db.get_orders(30);
+    
+  // 	for(auto & a : v)
+  // 	  {
+  // 	    for(auto & b : a)
+  // 	      {
+  // 		std::cout << b.first << ":" << b.second << ",";
+  // 	      }
+  // 	    std::cout << "\n";
+  // 	  }
+    
+  // 	return 0;	
+  //     }
+  //   return 0;
+  // }
+  
   volatile bool alive = true;
   
   exchange::MatchEngine engine;
@@ -179,3 +225,5 @@ int main1()
   
   return 0;
 }
+
+// cmake --build . --config Release

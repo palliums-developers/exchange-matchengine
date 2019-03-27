@@ -5,6 +5,7 @@
 #include <set>
 #include <map>
 #include <queue>
+#include <unordered_map>
 #include <functional>
 #include <algorithm>
 #include <mutex>
@@ -18,11 +19,13 @@
 #include <time.h>
 #include <sys/time.h>
 
-#include "rocksdb/db.h"
+#include <rocksdb/db.h>
+#include <mariadb/mysql.h>
 
 #include "../utils/utilities.h"
 
 #include "localdb.h"
+#include "remotedb.h"
 
 #include "engine.h"
 
@@ -114,7 +117,8 @@ namespace exchange {
     auto orderHandler = [&](std::string a)
       {
 	auto order = Order::create_from_string(a);
-	insert_order(order);
+	if(order->is_order_alive())
+	  insert_order(order);
 	return 0;
       };
     
@@ -138,16 +142,7 @@ namespace exchange {
 	return (now - tx->_timeStamp) >= 10*24*3600;
       };
     
-    _localdb->set_handlers(
-			   orderHandler,
-			   isOrderAlive,
-			   isOrderTimeout4remove,
-			   isTxTimeout4remove
-			   // [](std::string a){ std::cout << "order handler: " << a << "\n"; return 0; },
-			   // [](std::string a){ std::cout << "order alive  : " << a << "\n"; return true; },
-			   // [](std::string a){ std::cout << "order remove : " << a << "\n"; return false; },
-			   // [](std::string a){ std::cout << "tx remove    : " << a << "\n"; return false; }
-			   );
+    _localdb->set_handlers(orderHandler, isOrderAlive, isOrderTimeout4remove, isTxTimeout4remove);
     
     auto ret = _localdb->load();
 
@@ -156,6 +151,8 @@ namespace exchange {
 	LOG(ERROR, "localdb load failed: %d", ret);
 	return false;
       }
+
+    _localdb->get_checkpoints(&_orderStartIdx, &_txStartIdx);
     
     std::thread localdb_thrd([&]{ _localdb->run(alive); });
     
@@ -163,13 +160,34 @@ namespace exchange {
     
     return true;
   }
+
+  bool MatchEngine::start_remotedb(volatile bool* alive)
+  {
+     _remotedb = new RemoteDB();
+
+     _remotedb->set_order_tx_queues(&_qorders, &_qtxs, &_qtxFails);
+     
+     _remotedb->set_start_idxs(_orderStartIdx, _txStartIdx);
+
+     if(!_remotedb->connect())
+       return false;
+     
+     std::thread remotedb_thrd([&]{ _remotedb->run(alive); });
+    
+     remotedb_thrd.detach();
+
+     return true;
+  }
   
   void MatchEngine::run(volatile bool* alive)
   {
     if(!start_localdb(alive))
       return;
 
-    LOG(INFO, "MatchEngine::run start!\n");
+    if(!start_remotedb(alive))
+      return;
+    
+    LOG(INFO, "MatchEngine::run start!");
     
     while(*alive)
       {
@@ -193,19 +211,73 @@ namespace exchange {
 	
 	    order->_timeout = true;
 	    _timeoutQueue.erase(pos);
-	
+	    _orders.erase(order->_idx);
+	    _localdb->append_order(order->_idx, order->string());
+	    
 	    if(!order->_matched)
 	      LOG(INFO, "order timeout! : %s", order->string().c_str());
 	  }
 	
-	while(!_qin->empty())
+	while(!_qorders.empty())
 	  {
-	    auto order = _qin->pop();
-	    LOG(INFO, "order is coming...: %s", order->string().c_str());
-	
+	    auto orderp = _qorders.pop();
+	    LOG(INFO, "order is coming...: %s", orderp.second.c_str());
+	    
+	    auto order = Order::create_from_string(orderp.second);
 	    insert_order(order);
+	    _orders[order->_idx] = order;
+	    
+	    _localdb->append_order(orderp.first, orderp.second);
+	  }
+	
+	while(!_qtxs.empty())
+	  {
+	    auto txp = _qtxs.pop();
+	    auto tx = Transaction::create_from_string(txp.second);
+	    _localdb->append_transaction(txp.first, txp.second);
+
+	    {
+	      auto idx = tx->_order1;
+	      if(_orders.count(idx))
+		{
+		  _orders[idx]->_matched = true;
+		  _orders[idx]->_txidx = tx->_idx;
+		  _localdb->append_order(idx, _orders[idx]->string());
+		  _orders.erase(idx);
+		}
+	    }
+	    
+	    {
+	      auto idx = tx->_order2;
+	      if(_orders.count(idx))
+		{
+		  _orders[idx]->_matched = true;
+		  _orders[idx]->_txidx = tx->_idx;
+		  _localdb->append_order(idx, _orders[idx]->string());
+		  _orders.erase(idx);
+		}
+	    }
 	  }
 
+	while(!_qtxFails.empty())
+	  {
+	    auto tx = Transaction::create_from_string(_qtxFails.pop());
+	    
+	    auto idx = tx->_order1;
+	    if(_orders.count(idx) > 0 && _orders[idx]->_txidx != -1)
+	      {
+		_orders[idx]->_matched = false;
+		insert_order(_orders[idx]);
+	      }
+	    
+	    idx = tx->_order2;
+	    if(_orders.count(idx) > 0 && _orders[idx]->_txidx != -1)
+	      {
+		_orders[idx]->_matched = false;
+		insert_order(_orders[idx]);
+	      }
+	  }
+	
 	if(_buyerOrderBook.count() == 0 || _sellerOrderBook.count() == 0)
 	  {
 	    if(_buyerOrderBook.count() == 0)
@@ -253,7 +325,7 @@ namespace exchange {
 	  }
       }
 
-    LOG(INFO, "MatchEngine::run exit!\n");
+    LOG(INFO, "MatchEngine::run exit!");
   }
 
   int MatchEngine::insert_order(OrderPtr order)
@@ -394,9 +466,8 @@ namespace exchange {
     auto ptx = std::make_shared<Transaction>(txidx++, sellerOrder, buyerOrder, rate, std::min(sellerOrder->_num, buyerOrder->_num));
 
     LOG(INFO, "new transacton: %s", ptx->string().c_str());
-    
-    _qout->push(ptx);
-      
+
+    _remotedb->append_transaction(ptx->string());
   }
   
   int MatchEngine::handle_orders(OrderPtr a, OrderPtr b)
