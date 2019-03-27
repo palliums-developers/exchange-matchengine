@@ -43,6 +43,19 @@ template<class Container, class Element>
   
 // -------------------------------------------------------
 
+std::string string_join(const std::vector<std::string>& v, const std::string & s);
+std::vector<std::string> string_split(const std::string & str, const std::string & s);
+std::string map2json(const std::map<std::string, std::string> & v);
+std::map<std::string, std::string> json2map(const std::string & json);
+std::string trim_space(std::string str);
+std::string trim_quote(std::string str);
+std::vector<std::string> json_split(std::string str);
+std::vector<std::string> json_split_kv(std::string str);
+std::map<std::string, std::string> json_get_object(std::string str);
+std::vector<std::string> json_get_array(std::string str);
+
+// -------------------------------------------------------
+
 namespace utils {
   
   template<class T>

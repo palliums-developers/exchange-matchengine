@@ -17,6 +17,7 @@
 #include <string.h>
 #include <time.h>
 #include <sys/time.h>
+#include <cctype>
 
 #include "utilities.h"
 
@@ -105,3 +106,214 @@ void log2(int level, const char* file, int line, const char* func, const char *f
   printf("\n");
 }
 
+std::string string_join(const std::vector<std::string>& v, const std::string & s)
+{
+  std::string str;
+  
+  for(int i=0; i<v.size(); ++i)
+    {
+      if(i > 0)
+	str += s;
+      str += v[i];
+    }
+
+  return str;
+}
+
+std::vector<std::string> string_split(const std::string & str, const std::string & s)
+{
+  std::vector<std::string> v;
+  size_t start = 0;
+  
+  while(start < str.length())
+    {
+      auto pos = str.find(s, start);
+      if(pos == std::string::npos)
+	break;
+      v.push_back(str.substr(start, pos-start));
+      start = pos + s.length();
+    }
+  
+  v.push_back(str.substr(start, str.length()-start));
+  
+  return v;
+}
+
+std::string map2json(const std::map<std::string, std::string> & v)
+{
+  std::string str("{");
+  int i = 0;
+  for(auto & a : v)
+    {
+      if(i++ > 0)
+	str += ",";
+      str += a.first + ":" + a.second;
+    }
+  str += "}";
+  return str;
+}
+
+std::map<std::string, std::string> json2map(const std::string & json)
+{
+  std::map<std::string, std::string> m;
+  
+  if(json.length() < 2)
+    return m;
+  
+  auto str = json.substr(1, json.length()-2);
+  
+  auto v = string_split(str, ",");
+  
+  for(auto & a : v)
+    {
+      auto p = string_split(a, ":");
+      if(p.size() != 2)
+	continue;
+      m[p[0]] = p[1];
+    }
+
+  return m;
+}
+
+std::string trim_space(std::string str)
+{
+  int i, j;
+  const char* p = str.c_str();
+  int n = str.length();
+  for(i=0; i<n; ++i)
+    if(0 == std::isspace(p[i]))
+      break;
+  for(j=n-1; j>=0; --i)
+    if(0 == std::isspace(p[j]))
+      break;
+  if(j>=i)
+    return str.substr(i, j-i+1);
+  return "";
+}
+
+std::string trim_quote(std::string str)
+{
+  str = trim_space(str);
+  
+  if(str.length() >= 2)
+    {
+      if(str[0] == '\'' && str[str.length()-1] == '\'')
+	return str.substr(1, str.length()-2);
+      if(str[0] == '"' && str[str.length()-1] == '"')
+	return str.substr(1, str.length()-2);
+    }
+  return str;
+}
+
+std::vector<std::string> json_split(std::string str)
+{
+  int i, s;
+  i = s = 0;
+
+  std::vector<std::string> v;
+  
+  bool inquote = false;
+  char quote;
+  int brackets = 0;
+  
+  str = trim_space(str);
+  
+  const char* p = str.c_str();
+  auto n = str.length();
+  
+  for(i=0; i<n; ++i)
+    {
+      if(inquote)
+	{
+	  if(p[i] == quote && p[i-1] != '\\')
+	    inquote = false;
+	  continue;
+	}
+      
+      if(p[i] == '[' || p[i] == '{')
+	{
+	  brackets++;
+	  continue;
+	}
+      if(p[i] == ']' || p[i] == '}')
+	{
+	  brackets--;
+	  continue;
+	}
+      
+      if(brackets > 0)
+	continue;
+      if(p[i] != ',')
+	continue;
+
+      if(i > s)
+	v.push_back(trim_quote(str.substr(i, i-s)));
+      
+      s = i+1;
+    }
+
+  if(i > s)
+    v.push_back(trim_quote(str.substr(i, i-s)));
+  
+  if(inquote || brackets > 0)
+    {
+      LOG(WARNING, "invalid json: %s", str.c_str());
+      return std::vector<std::string>();
+    }
+
+  return v;
+}
+
+std::vector<std::string> json_split_kv(std::string str)
+{
+  std::vector<std::string> v;
+  auto pos = str.find(':');
+  if(pos == std::string::npos) {
+    LOG(WARNING, "invalid json key value pair: %s", str.c_str());
+    return v;
+  }
+  v.push_back(trim_quote(str.substr(0, pos)));
+  v.push_back(trim_quote(str.substr(pos+1, str.length()-(pos+1))));
+  return v;
+}
+
+std::map<std::string, std::string> json_get_object(std::string str)
+{
+  std::map<std::string, std::string> m;
+
+  str = trim_space(str);
+  
+  if(str.length() < 2 || str[0] != '{' || str[str.length()-1] != '}')
+    {
+      LOG(WARNING, "invalid json object: %s", str.c_str());
+      return m;
+    }
+
+  str = str.substr(1, str.length()-2);
+  
+  auto v = json_split(str);
+
+  for(auto item : v)
+    {
+      auto kv = json_split_kv(item);
+      if(kv.size() == 2)
+	m[kv[0]] = kv[1];
+    }
+  
+  return m;
+}
+
+std::vector<std::string> json_get_array(std::string str)
+{
+  str = trim_space(str);
+  
+  if(str.length() < 2 || str[0] != '[' || str[str.length()-1] != ']')
+    {
+      LOG(WARNING, "invalid json array: %s", str.c_str());
+      return std::vector<std::string>();
+    }
+  
+  str = str.substr(1, str.length()-2);
+  
+  return json_split(str);
+}
