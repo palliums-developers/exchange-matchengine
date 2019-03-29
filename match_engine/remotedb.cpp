@@ -199,49 +199,103 @@ bool RemoteDB::do_select(const char* query, std::vector<std::string> keys, std::
   return true;
 }
 
+void RemoteDB::load()
+{
+  {
+    auto v = get_transactions(_startTxIdx);
+
+    if(!v.empty())
+      LOG(INFO, "remotedb load found %u transactions", v.size());
+	
+    for(auto & a : v)
+      {
+	auto tx = map2json(a);
+	_qtxs->push(std::pair<long, std::string>(_startTxIdx++, tx));
+	    
+	LOG(INFO, "load a transaction: %ld, %s", _startTxIdx-1, tx.c_str());
+      }
+  }
+  
+  {
+    auto v = get_orders(_startOrderIdx);
+
+    if(!v.empty())
+      LOG(INFO, "remotedb load found %u orders", v.size());
+	
+    for(auto & a : v)
+      {
+	auto order = map2json(a);
+	_qorders->push(std::pair<long, std::string>(_startOrderIdx++, order));
+	    
+	LOG(INFO, "load a order: %ld, %s", _startOrderIdx-1, order.c_str());
+      }
+  }
+}
+
 void RemoteDB::run(volatile bool* alive)
 {
   LOG(INFO, "remotedb start running!");
   
   while(*alive)
     {
+      bool active = false;
       {
 	auto v = get_orders(_startOrderIdx);
+
+	if(!v.empty())
+	  LOG(INFO, "remotedb found %u orders", v.size());
+	
 	for(auto & a : v)
 	  {
+	    active = true;
+	    
 	    auto order = map2json(a);
 	    _qorders->push(std::pair<long, std::string>(_startOrderIdx++, order));
 	    
 	    LOG(INFO, "got a order: %ld, %s", _startOrderIdx-1, order.c_str());
 	  }
 	
-	if(!v.empty())
-	  LOG(INFO, "remotedb found %u orders", v.size());
       }
       
       {
 	auto v = get_transactions(_startTxIdx);
+
+	if(!v.empty())
+	  LOG(INFO, "remotedb found %u transactions", v.size());
+	
 	for(auto & a : v)
 	  {
+	    active = true;
+	    
 	    auto tx = map2json(a);
 	    _qtxs->push(std::pair<long, std::string>(_startTxIdx++, tx));
 	    
 	    LOG(INFO, "got a transaction: %ld, %s", _startTxIdx-1, tx.c_str());
 	  }
 	
-	if(!v.empty())
-	  LOG(INFO, "remotedb found %u transactions", v.size());
       }
 
+      if(!_qtxins.empty())
+	LOG(INFO, "remotedb found %u transaction requests", _qtxins.size());
+      
       long idx = _startTxIdx;
       while(!_qtxins.empty())
 	{
+	  active = true;
+	  
 	  auto tx = _qtxins.pop();
 	  if(false == append_transaction(json2map(tx), idx++))
-	     _qtxFails->push(tx);
+	    {
+	      _qtxFails->push(tx);
+	      dot("!");
+	    }
 	}
-      
-      sleep(1);
+
+      if(!active)
+	{
+	  sleep(1);
+	  dot(".");
+	}
     }
   
   LOG(INFO, "remotedb exit!");

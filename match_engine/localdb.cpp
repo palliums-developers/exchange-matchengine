@@ -31,51 +31,89 @@ LocalDB::LocalDB(const char* path)
   rocksdb::Status status = rocksdb::DB::Open(options, path, &_db);
   if (!status.ok())
     std::cerr << "open db failed: " << status.ToString() << std::endl;
+  else
+    {
+      _orderCheckpoint = get_long("o-checkpoint");
+      _txCheckpoint = get_long("t-checkpoint");
+      _orderRemove = get_long("o-remove");
+      _txRemove = get_long("t-remove");
+      _unspentOrderCheckpoint = get_long("u-checkpoint");
+    }
 }
 
 int LocalDB::load()
 {
-  {
-    std::string value;
-    _db->Get(rocksdb::ReadOptions(), std::string("o-checkpoint"), &value);
-    _orderCheckpoint = std::atol(value.c_str());
-  }
+  long i = std::min(_orderCheckpoint, _unspentOrderCheckpoint);
 
-  {
-    std::string value;
-    _db->Get(rocksdb::ReadOptions(), std::string("t-checkpoint"), &value);
-    _txCheckpoint = std::atol(value.c_str());
-  }
-  
-  {
-    std::string value;
-    _db->Get(rocksdb::ReadOptions(), std::string("o-remove"), &value);
-    _orderRemove = std::atol(value.c_str());
-  }
-
-  {
-    std::string value;
-    _db->Get(rocksdb::ReadOptions(), std::string("t-remove"), &value);
-    _txRemove = std::atol(value.c_str());
-  }
-  
-  long i = _orderCheckpoint;
+  LOG(INFO, "localdb start load from idx %ld", i);
   
   for(;;)
     {
-      char key[80];
-      sprintf(key, "o%08ld", i++);
-      std::string order;
-      auto s = _db->Get(rocksdb::ReadOptions(), std::string(key), &order);
-      if (s.ok())
+      auto order = get_order(i++);
+      if(order.empty())
+	break;
+
+      LOG(INFO, "localdb load a order %s", order.c_str());
+      
+      if(_isOrderAlive(order))
 	{
 	  _orderHandler(order);
-	  continue;
 	}
-      break;
     }
+
+  // i = 0;
+  
+  // for(;;)
+  //   {
+  //     auto order = get_unspent_order(i++);
+  //     if(order.empty())
+  // 	break;
+  //     _orderHandler(order);
+  //   }
   
   return 0;
+}
+
+long LocalDB::get_long(const std::string & key)
+{
+  std::string value;
+  _db->Get(rocksdb::ReadOptions(), key, &value);
+  return std::atol(value.c_str());
+}
+
+std::string LocalDB::get_unspent_order(long uidx)
+{
+  auto idx = get_unspent_order_idx(uidx);
+  
+  if(idx < 0)
+    return "";
+
+  return get_order(idx);
+}
+
+long LocalDB::get_unspent_order_idx(long idx)
+{
+  char key[80];
+  sprintf(key, "u%08ld", idx);
+  std::string orderidx;
+  auto s = _db->Get(rocksdb::ReadOptions(), std::string(key), &orderidx);
+  if(s.ok())
+    return std::atol(orderidx.c_str());
+  return -1;
+}
+
+std::string LocalDB::order_key(long idx)
+{
+  char key[80];
+  sprintf(key, "o%08ld", idx);
+  return std::string(key);
+}
+
+std::string LocalDB::transaction_key(long idx)
+{
+  char key[80];
+  sprintf(key, "t%08ld", idx);
+  return std::string(key);
 }
 
 std::string LocalDB::get_order(long idx)
@@ -85,6 +123,29 @@ std::string LocalDB::get_order(long idx)
   std::string order;
   auto s = _db->Get(rocksdb::ReadOptions(), std::string(key), &order);
   return order;
+}
+
+std::string LocalDB::get_transaction(long idx)
+{
+  char key[80];
+  sprintf(key, "t%08ld", idx);
+  std::string tx;
+  auto s = _db->Get(rocksdb::ReadOptions(), std::string(key), &tx);
+  return tx;
+}
+
+void LocalDB::set_order(long idx, std::string order)
+{
+  char key[80];
+  sprintf(key, "o%08ld", idx);
+  _db->Put(rocksdb::WriteOptions(), std::string(key), order);
+}
+
+void LocalDB::set_transaction(long idx, std::string tx)
+{
+  char key[80];
+  sprintf(key, "t%08ld", idx);
+  _db->Put(rocksdb::WriteOptions(), std::string(key), tx);
 }
 
 void LocalDB::run(volatile bool* alive)
@@ -104,62 +165,74 @@ void LocalDB::run(volatile bool* alive)
       while(!_qorders.empty())
 	{
 	  auto pair = _qorders.pop();
-	  char key[80];
-	  sprintf(key, "o%08ld", pair.first);
-	  s = _db->Put(rocksdb::WriteOptions(), std::string(key), pair.second);
+	  set_order(pair.first, pair.second);
 	}
 
       while(!_qtxs.empty())
 	{
 	  auto pair = _qtxs.pop();
-	  char key[80];
-	  sprintf(key, "t%08ld", pair.first);
-	  s = _db->Put(rocksdb::WriteOptions(), std::string(key), pair.second);
+	  set_transaction(pair.first, pair.second);
 	}
       
-      if(now != last && (now-last) >= 300)
+      if(now != last && (now-last) >= 30)
 	{
 	  last = now;
 
 	  printf("db checkpoint\n");
-	  
+
 	  long i = _orderCheckpoint;
 	  
 	  for(;;)
 	    {
-	      char key[80];
-	      sprintf(key, "o%08ld", i++);
-	      std::string order;
-	      auto s = _db->Get(rocksdb::ReadOptions(), std::string(key), &order);
-	      if (s.ok() && !_isOrderAlive(order))
+	      auto order = get_order(i++);
+
+	      if(!order.empty())
 		continue;
 	      
 	      i--;
 	      
 	      if(i > _orderCheckpoint)
 		{
-		  s = _db->Put(rocksdb::WriteOptions(), std::string("o-checkpoint"), std::to_string(i));
+		  _db->Put(rocksdb::WriteOptions(), std::string("o-checkpoint"), std::to_string(i));
 		  _orderCheckpoint = i;
 		}
 	      break;
 	    }
 
-	  i = _txCheckpoint;
-	  
+	  i = _unspentOrderCheckpoint;
+
 	  for(;;)
 	    {
-	      char key[80];
-	      sprintf(key, "t%08ld", i++);
-	      std::string tx;
-	      auto s = _db->Get(rocksdb::ReadOptions(), std::string(key), &tx);
-	      if (s.ok())
+	      auto order = get_order(i++);
+
+	      if(!order.empty() && !_isOrderAlive(order))
 		continue;
 	      
 	      i--;
 	      
+	      if(i > _unspentOrderCheckpoint)
+		{
+		  _db->Put(rocksdb::WriteOptions(), std::string("u-checkpoint"), std::to_string(i));
+		  _unspentOrderCheckpoint = i;
+		}
+	      break;
+	    }
+	  
+	  
+	  i = _txCheckpoint;
+	  
+	  for(;;)
+	    {
+	      auto tx = get_transaction(i++);
+
+	      if(!tx.empty())
+		continue;
+		
+	      i--;
+	      
 	      if(i > _txCheckpoint)
 		{
-		  s = _db->Put(rocksdb::WriteOptions(), std::string("t-checkpoint"), std::to_string(i));
+		  _db->Put(rocksdb::WriteOptions(), std::string("t-checkpoint"), std::to_string(i));
 		  _txCheckpoint = i;
 		}
 	      break;
@@ -169,21 +242,19 @@ void LocalDB::run(volatile bool* alive)
 
 	  for(;;)
 	    {
-	      char key[80];
-	      sprintf(key, "o%08ld", i++);
-	      std::string order;
-	      auto s = _db->Get(rocksdb::ReadOptions(), std::string(key), &order);
-	      if (s.ok() && _isOrderTimeout4remove(order))
+	      auto order = get_order(i++);
+	      
+	      if(!order.empty() && _isOrderTimeout4remove(order))
 		{
-		  _db->Delete(rocksdb::WriteOptions(), std::string(key));
+		  _db->Delete(rocksdb::WriteOptions(), order_key(i-1));
 		  continue;
 		}
-	      
+
 	      i--;
 	      
 	      if(i > _orderRemove)
 		{
-		  s = _db->Put(rocksdb::WriteOptions(), std::string("o-remove"), std::to_string(i));
+		  _db->Put(rocksdb::WriteOptions(), std::string("o-remove"), std::to_string(i));
 		  _orderRemove = i;
 		}
 	      break;
@@ -193,13 +264,11 @@ void LocalDB::run(volatile bool* alive)
 
 	  for(;;)
 	    {
-	      char key[80];
-	      sprintf(key, "t%08ld", i++);
-	      std::string tx;
-	      auto s = _db->Get(rocksdb::ReadOptions(), std::string(key), &tx);
-	      if (s.ok() && _isTxTimeout4remove(tx))
+	      auto tx = get_transaction(i++);
+
+	      if (!tx.empty() && _isTxTimeout4remove(tx))
 		{
-		  _db->Delete(rocksdb::WriteOptions(), std::string(key));
+		  _db->Delete(rocksdb::WriteOptions(), transaction_key(i-1));
 		  continue;
 		}
 	      
@@ -207,7 +276,7 @@ void LocalDB::run(volatile bool* alive)
 	      
 	      if(i > _txRemove)
 		{
-		  s = _db->Put(rocksdb::WriteOptions(), std::string("t-remove"), std::to_string(i));
+		  _db->Put(rocksdb::WriteOptions(), std::string("t-remove"), std::to_string(i));
 		  _txRemove = i;
 		}
 	      break;

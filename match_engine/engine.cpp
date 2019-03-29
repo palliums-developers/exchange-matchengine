@@ -110,15 +110,19 @@ namespace exchange {
     printf("retry4minNumQueue: %lu\n", _retry4minNumQueue.size());
   }
 
-  bool MatchEngine::start_localdb(volatile bool* alive)
+  bool MatchEngine::create_localdb()
   {
     _localdb = new LocalDB("testdb");
 
     auto orderHandler = [&](std::string a)
       {
+	auto now = uint32_t(time(NULL));
 	auto order = Order::create_from_string(a);
-	if(order->is_order_alive())
-	  insert_order(order);
+	if(order->is_order_alive() && order->_deadline > now)
+	  {
+	    _orders[order->_idx] = order;
+	    insert_order(order);
+	  }
 	return 0;
       };
     
@@ -144,24 +148,12 @@ namespace exchange {
     
     _localdb->set_handlers(orderHandler, isOrderAlive, isOrderTimeout4remove, isTxTimeout4remove);
     
-    auto ret = _localdb->load();
-
-    if(ret != 0)
-      {
-	LOG(ERROR, "localdb load failed: %d", ret);
-	return false;
-      }
-
     _localdb->get_checkpoints(&_orderStartIdx, &_txStartIdx);
-    
-    std::thread localdb_thrd([&]{ _localdb->run(alive); });
-    
-    localdb_thrd.detach();
     
     return true;
   }
 
-  bool MatchEngine::start_remotedb(volatile bool* alive)
+  bool MatchEngine::create_remotedb()
   {
      _remotedb = new RemoteDB();
 
@@ -172,20 +164,73 @@ namespace exchange {
      if(!_remotedb->connect())
        return false;
      
-     std::thread remotedb_thrd([&]{ _remotedb->run(alive); });
-    
-     remotedb_thrd.detach();
-
      return true;
+  }
+
+  void MatchEngine::handle_missed_order_transactions()
+  {
+    while(!_qorders.empty())
+      {
+	auto orderp = _qorders.pop();
+	LOG(INFO, "order is loaded...: %s", orderp.second.c_str());
+
+	auto order = _localdb->get_order(orderp.first);
+	
+	if(order.empty())
+	  _localdb->set_order(orderp.first, orderp.second);
+      }
+    
+    while(!_qtxs.empty())
+      {
+	auto txp = _qtxs.pop();
+	LOG(INFO, "transaction is loaded...: %s", txp.second.c_str());
+	
+	auto tx = Transaction::create_from_string(txp.second);
+	_localdb->set_transaction(txp.first, txp.second);
+
+	{
+	  auto idx = tx->_order1;
+	  auto orderstr = _localdb->get_order(idx);
+	  if(!orderstr.empty())
+	    {
+	      auto order = Order::create_from_string(orderstr);
+	      order->_matched = true;
+	      order->_txidx = txp.first;
+	      _localdb->set_order(idx, order->string());
+	    }
+	}
+	    
+	{
+	  auto idx = tx->_order2;
+	  auto orderstr = _localdb->get_order(idx);
+	  if(!orderstr.empty())
+	    {
+	      auto order = Order::create_from_string(orderstr);
+	      order->_matched = true;
+	      order->_txidx = txp.first;
+	      _localdb->set_order(idx, order->string());
+	    }
+	}
+      }
   }
   
   void MatchEngine::run(volatile bool* alive)
   {
-    if(!start_localdb(alive))
+    if(!create_localdb())
       return;
 
-    if(!start_remotedb(alive))
+    if(!create_remotedb())
       return;
+    
+    _remotedb->load();
+
+    handle_missed_order_transactions();
+    
+    _localdb->load();
+
+    std::thread localdb_thrd([&]{ _localdb->run(alive); });
+    
+    std::thread remotedb_thrd([&]{ _remotedb->run(alive); });
     
     LOG(INFO, "MatchEngine::run start!");
     
@@ -206,7 +251,7 @@ namespace exchange {
 	      continue;
 	    }
 	
-	    if(order->_deadline >= now)
+	    if(order->_deadline > now)
 	      break;
 	
 	    order->_timeout = true;
@@ -224,10 +269,13 @@ namespace exchange {
 	    LOG(INFO, "order is coming...: %s", orderp.second.c_str());
 	    
 	    auto order = Order::create_from_string(orderp.second);
-	    insert_order(order);
-	    _orders[order->_idx] = order;
-	    
-	    _localdb->append_order(orderp.first, orderp.second);
+
+	    if(order->is_order_alive() && order->_deadline > now && _orders.count(order->_idx) == 0)
+	      {
+		insert_order(order);
+		_orders[order->_idx] = order;
+		_localdb->append_order(orderp.first, orderp.second);
+	      }
 	  }
 	
 	while(!_qtxs.empty())
@@ -261,7 +309,17 @@ namespace exchange {
 
 	while(!_qtxFails.empty())
 	  {
-	    auto tx = Transaction::create_from_string(_qtxFails.pop());
+	    auto txstr = _qtxFails.peek();
+
+	    if(txstr.empty())
+	      break;
+	    
+	    auto tx = Transaction::create_from_string(txstr);
+
+	    if((tx->_timeStamp - now) < 8)
+	      break;
+
+	    _qtxFails.pop();
 	    
 	    auto idx = tx->_order1;
 	    if(_orders.count(idx) > 0 && _orders[idx]->_txidx != -1)
@@ -324,6 +382,9 @@ namespace exchange {
 	      LOG(INFO, "order gcnt: %d, buyers:%lu, sellers:%lu", Order::gcnt.load(), _buyerOrderBook.count(), _sellerOrderBook.count());
 	  }
       }
+
+    localdb_thrd.join();
+    remotedb_thrd.join();
 
     LOG(INFO, "MatchEngine::run exit!");
   }

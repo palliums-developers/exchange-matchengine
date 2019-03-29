@@ -82,6 +82,28 @@ namespace utils {
       std::unique_lock<std::mutex> lk(_mtx);
       return _v.empty();
     }
+
+    T peek()
+    {
+      std::unique_lock<std::mutex> lk(_mtx);
+      return _v.empty() ? T() : _v.front();
+    }
+    
+    T try_pop()
+    {
+      std::unique_lock<std::mutex> lk(_mtx);
+      if(_v.empty())
+	return T();
+      auto t = _v.front();
+      _v.pop_front();
+      return t;
+    }
+
+    int size()
+    {
+      std::unique_lock<std::mutex> lk(_mtx);
+      return _v.size();
+    }
     
   private:
     std::mutex _mtx;

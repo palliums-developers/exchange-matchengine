@@ -45,10 +45,10 @@ namespace exchange {
       gcnt++;
     }
     ~Order(){
-      if(!_matched && !_timeout) {
-	LOG(ERROR, "order is deleted wrongly: %s", string().c_str());
-	dump();
-      }
+      /* if(!_matched && !_timeout) { */
+      /* 	LOG(ERROR, "order is deleted wrongly: %s", string().c_str()); */
+      /* 	dump(); */
+      /* } */
       gcnt--;
     }
 
@@ -108,6 +108,8 @@ namespace exchange {
     bool _matched = false;
     bool _timeout = false;
     long _txidx = -1;
+
+    //int _unspentOrderIdx = -1;
   };
 
   struct comparebynum
@@ -251,10 +253,12 @@ namespace exchange {
 
     //private:
 
-    bool start_localdb(volatile bool* alive);
+    bool create_localdb();
 
-    bool start_remotedb(volatile bool* alive);
+    bool create_remotedb();
 
+    void handle_missed_order_transactions();
+    
     double market_rate()
     {
       return _marketRate;

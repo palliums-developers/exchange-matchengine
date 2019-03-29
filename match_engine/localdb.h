@@ -14,8 +14,17 @@ struct LocalDB
     *txidx = _txCheckpoint;
   }
 
-  std::string get_order(long idx);
+  long get_long(const std::string & key);
   
+  std::string get_unspent_order(long uidx);
+  long get_unspent_order_idx(long idx);
+  std::string order_key(long idx);
+  std::string transaction_key(long idx);
+  std::string get_transaction(long idx);
+  void set_transaction(long idx, std::string tx);
+  std::string get_order(long idx);
+  void set_order(long idx, std::string order);
+
   int append_order(long idx, std::string order)
   {
     _qorders.push(std::pair<long, std::string>(idx, order));
@@ -64,7 +73,7 @@ private:
   long _txRemove = 0;
 
   long _txCheckpoint = 0;
-  
+  long _unspentOrderCheckpoint = 0;
   rocksdb::DB* _db = nullptr;
 };
 

@@ -14,6 +14,7 @@ struct RemoteDB
   }
   
   bool connect();
+  void load();
   
   std::vector<std::map<std::string, std::string>>
     get_orders(long idx);
