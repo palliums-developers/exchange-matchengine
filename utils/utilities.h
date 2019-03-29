@@ -1,14 +1,6 @@
 #ifndef __UTILITIES_HPP__
 #define __UTILITIES_HPP__
 
-template<class T> void dot(const T & t)
-{
-  std::cout << t << std::flush;
-}
-
-std::string timestamp_2_string(uint32_t stamp);
-
-
 // -------------------------------------------------------
 
 enum {
@@ -43,6 +35,13 @@ template<class Container, class Element>
   
 // -------------------------------------------------------
 
+template<class T> void dot(const T & t)
+{
+  std::cout << t << std::flush;
+}
+
+std::string timestamp_2_string(uint32_t stamp);
+
 std::string string_join(const std::vector<std::string>& v, const std::string & s);
 std::vector<std::string> string_split(const std::string & str, const std::string & s);
 std::string map2json(const std::map<std::string, std::string> & v);
@@ -53,6 +52,56 @@ std::vector<std::string> json_split(std::string str);
 std::vector<std::string> json_split_kv(std::string str);
 std::map<std::string, std::string> json_get_object(std::string str);
 std::vector<std::string> json_get_array(std::string str);
+
+// -------------------------------------------------------
+
+struct Config
+{
+  static Config* instance()
+  {
+    static Config a; return &a;
+  }
+
+  bool parse(const char* path);
+
+  bool check(std::string key)
+  {
+    if(_kvs.count(key) == 0)
+      {
+	LOG(WARNING, "can not find key in config: %s", key.c_str());
+	return false;
+      }
+    return true;
+  }
+  
+  std::string get(std::string key)
+  {
+    if(!check(key)) return "";
+    return _kvs[key];
+  }
+
+  int get_int(std::string key)
+  {
+    if(!check(key)) return -1;
+    return atoi(_kvs[key].c_str());
+  }
+
+  long get_long(std::string key)
+  {
+    if(!check(key)) return -1;
+    return atol(_kvs[key].c_str());
+  }
+
+  double get_double(std::string key)
+  {
+    if(!check(key)) return -1;
+    return atof(_kvs[key].c_str());
+  }
+  
+private:
+  
+  std::map<std::string, std::string> _kvs;
+};
 
 // -------------------------------------------------------
 

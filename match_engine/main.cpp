@@ -31,6 +31,8 @@ int g_log_level = INFO;
 
 int main()
 {
+  Config::instance()->parse("./config");
+  
   volatile bool alive = true;
   exchange::MatchEngine engine;
   

@@ -135,6 +135,9 @@ std::vector<std::string> string_split(const std::string & str, const std::string
     }
   
   v.push_back(str.substr(start, str.length()-start));
+
+  for(auto & a: v)
+    a = trim_space(a);
   
   return v;
 }
@@ -183,7 +186,7 @@ std::string trim_space(std::string str)
   for(i=0; i<n; ++i)
     if(0 == std::isspace(p[i]))
       break;
-  for(j=n-1; j>=0; --i)
+  for(j=n-1; j>=0; --j)
     if(0 == std::isspace(p[j]))
       break;
   if(j>=i)
@@ -316,4 +319,54 @@ std::vector<std::string> json_get_array(std::string str)
   str = str.substr(1, str.length()-2);
   
   return json_split(str);
+}
+
+bool Config::parse(const char* path)
+{
+  FILE* fh = fopen(path, "r");
+  if(fh == NULL)
+    {
+      LOG(ERROR, "read config file failed: %s", path);
+      return false;
+    }
+
+  for(;;)
+    {
+      char buf[512];
+      auto p = fgets(buf, sizeof(buf), fh);
+	
+      if(p == NULL)
+	break;
+
+      auto str = trim_space(buf);
+
+      if(str.empty())
+	continue;
+      
+      auto v = string_split(str, "=");
+	
+      if(v.size() != 2)
+	{
+	  LOG(WARNING, "invalid config line: %s", buf);
+	  continue;
+	}
+
+      auto key = v[0];
+      auto val = v[1];
+      key = trim_space(key);
+      val = trim_space(val);
+
+      if(key.empty() || val.empty())
+	{
+	  LOG(WARNING, "invalid config line: %s", buf);
+	  continue;
+	}
+
+      _kvs[key] = val;
+    }
+    
+  fclose(fh);
+
+  LOG(INFO, "config parse success");
+  return true;
 }

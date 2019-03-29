@@ -115,7 +115,13 @@ bool RemoteDB::append_transaction(const std::map<std::string, std::string> & v, 
   
 bool RemoteDB::do_connect()
 {
-  auto mysql = mysql_real_connect(_mysql, "47.106.208.207", "root", "1234qwer", "test", 0, NULL, 0);
+  auto ip = Config::instance()->get("remotedb_ip");
+  auto usr = Config::instance()->get("remotedb_usr");
+  auto pwd = Config::instance()->get("remotedb_pwd");
+  auto dbname = Config::instance()->get("remotedb_dbname");
+  
+  //auto mysql = mysql_real_connect(_mysql, "47.106.208.207", "root", "1234qwer", "test", 0, NULL, 0);
+  auto mysql = mysql_real_connect(_mysql, ip.c_str(), usr.c_str(), pwd.c_str(), dbname.c_str(), 0, NULL, 0);
   if(NULL == mysql)
     {
       print_mysql_error();

@@ -112,7 +112,7 @@ namespace exchange {
 
   bool MatchEngine::create_localdb()
   {
-    _localdb = new LocalDB("testdb");
+    _localdb = new LocalDB("localdb");
 
     auto orderHandler = [&](std::string a)
       {
