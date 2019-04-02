@@ -26,6 +26,7 @@
 
 #include "localdb.h"
 #include "remotedb.h"
+#include "btcmarketprice.h"
 
 #include "engine.h"
 
@@ -216,6 +217,13 @@ namespace exchange {
   
   void MatchEngine::run(volatile bool* alive)
   {
+    _btcPriceUpdater = new BtcPriceUpdater();
+    
+    if(!_btcPriceUpdater->load())
+      return;
+
+    _marketRate = ((double)1.0)/_btcPriceUpdater->get_btc_price_by_usd();
+    
     if(!create_localdb())
       return;
 
@@ -231,7 +239,9 @@ namespace exchange {
     std::thread localdb_thrd([&]{ _localdb->run(alive); });
     
     std::thread remotedb_thrd([&]{ _remotedb->run(alive); });
-    
+
+    std::thread btcPriceUpdater_thrd([&]{ _btcPriceUpdater->run(alive); });
+
     LOG(INFO, "MatchEngine::run start!");
     
     while(*alive)
@@ -371,6 +381,10 @@ namespace exchange {
 	    last = now;
 	    
 	    dot(".");
+
+	    auto rate = _btcPriceUpdater->get_btc_price_by_usd();
+	    if(rate > 0)
+	      _marketRate = ((double)1.0)/rate;
 	    
 	    _sellerOrderBook.remove_cached_invalid_order();
 	    _buyerOrderBook.remove_cached_invalid_order();
@@ -385,7 +399,8 @@ namespace exchange {
 
     localdb_thrd.join();
     remotedb_thrd.join();
-
+    btcPriceUpdater_thrd.join();
+    
     LOG(INFO, "MatchEngine::run exit!");
   }
 
@@ -411,6 +426,8 @@ namespace exchange {
   
   void MatchEngine::update_market_rate(double rate)
   {
+    return;
+    
     static uint64_t totalcnt = 0;
     int cnt = 10;
     

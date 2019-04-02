@@ -3,6 +3,7 @@
 
 struct LocalDB;
 struct RemoteDB;
+struct BtcPriceUpdater;
 
 namespace exchange {
   
@@ -321,7 +322,8 @@ namespace exchange {
 
     LocalDB* _localdb = nullptr;
     RemoteDB* _remotedb = nullptr;
-
+    BtcPriceUpdater* _btcPriceUpdater = nullptr;
+    
     utils::Queue<std::pair<long, std::string>> _qorders;
     utils::Queue<std::pair<long, std::string>> _qtxs;
     utils::Queue<std::string> _qtxFails;

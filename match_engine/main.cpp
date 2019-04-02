@@ -28,8 +28,19 @@
 
 int g_log_level = INFO;
 
+#include "btcmarketprice.h"
 
 int main()
+{
+  volatile bool alive = true;
+  
+  BtcPriceUpdater b;
+  b.run(&alive);
+  
+  return 0;
+}
+
+int main3()
 {
   Config::instance()->parse("./config");
   
