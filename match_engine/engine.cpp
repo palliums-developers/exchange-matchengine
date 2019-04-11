@@ -18,6 +18,7 @@
 #include <string.h>
 #include <time.h>
 #include <sys/time.h>
+#include <math.h>
 
 #include <rocksdb/db.h>
 #include <mariadb/mysql.h>
@@ -223,7 +224,8 @@ namespace exchange {
       return;
 
     _marketRate = ((double)1.0)/_btcPriceUpdater->get_btc_price_by_usd();
-    
+    _marketRate = round(_marketRate * 100000000) / 100000000;
+      
     if(!create_localdb())
       return;
 
@@ -345,23 +347,34 @@ namespace exchange {
 		insert_order(_orders[idx]);
 	      }
 	  }
-	
-	if(_buyerOrderBook.count() == 0 || _sellerOrderBook.count() == 0)
+
+	if(_buyerOrderBook.count() == 0)
+	  _buyerOrderBook.clear_cache();
+	if(_sellerOrderBook.count() == 0)
+	  _sellerOrderBook.clear_cache();
+	if(_buyerOrderBook2.count() == 0)
+	  _buyerOrderBook2.clear_cache();
+	if(_sellerOrderBook2.count() == 0)
+	  _sellerOrderBook2.clear_cache();
+	if((_buyerOrderBook.count() == 0 || _sellerOrderBook.count() == 0)
+	   && (_buyerOrderBook2.count() == 0 || _sellerOrderBook2.count() == 0))
 	  {
-	    if(_buyerOrderBook.count() == 0)
-	      _buyerOrderBook.clear_cache();
-	    if(_sellerOrderBook.count() == 0)
-	      _sellerOrderBook.clear_cache();
 	    usleep(100*1000);
 	    continue;
 	  }
-	  
+	
 	static int cnt = 0;
 	int ret;
-	if(cnt++%2)
+	
+	if(cnt % 4 == 0)
 	  ret = do_match(_sellerOrderBook, _buyerOrderBook);
-	else
+	if(cnt % 4 == 1)
 	  ret = do_match(_buyerOrderBook, _sellerOrderBook);
+	if(cnt % 4 == 2)
+	  ret = do_match(_sellerOrderBook2, _buyerOrderBook2);
+	if(cnt % 4 == 3)
+	  ret = do_match(_buyerOrderBook2, _sellerOrderBook2);
+	cnt++;
 
 	if(ret != 0) 
 	  LOG(DEBUG, "do_match return with %d", ret);
@@ -384,16 +397,22 @@ namespace exchange {
 
 	    auto rate = _btcPriceUpdater->get_btc_price_by_usd();
 	    if(rate > 0)
-	      _marketRate = ((double)1.0)/rate;
-	    
+	      {
+		_marketRate = ((double)1.0)/rate;
+		_marketRate = round(_marketRate * 100000000) / 100000000;
+	      }
+
 	    _sellerOrderBook.remove_cached_invalid_order();
 	    _buyerOrderBook.remove_cached_invalid_order();
+	    _sellerOrderBook2.remove_cached_invalid_order();
+	    _buyerOrderBook2.remove_cached_invalid_order();
 	    
 	    std::function<bool(OrderPtr)> func = [](OrderPtr order){ return order->_matched; };
 	    remove_if_ex(_timeoutQueue, func);
 
 	    if(Order::gcnt.load() > 0)
-	      LOG(INFO, "order gcnt: %d, buyers:%lu, sellers:%lu", Order::gcnt.load(), _buyerOrderBook.count(), _sellerOrderBook.count());
+	      LOG(INFO, "order gcnt: %d, buyers:%lu, sellers:%lu, buyers:%lu, sellers:%lu",
+		  Order::gcnt.load(), _buyerOrderBook.count(), _sellerOrderBook.count(), _buyerOrderBook2.count(), _sellerOrderBook2.count());
 	  }
       }
 
@@ -417,9 +436,9 @@ namespace exchange {
     _timeoutQueue.insert(order);
     
     if(is_seller(order->_from, order->_to))
-      return _sellerOrderBook.insert(order);
+      return get_seller_order_book(order->_from, order->_to).insert(order);
     else
-      return _buyerOrderBook.insert(order);
+      return get_buyer_order_book(order->_from, order->_to).insert(order);
     
     return ret;
   }
@@ -449,8 +468,8 @@ namespace exchange {
   
   bool MatchEngine::is_order_rate_match(OrderPtr a, OrderPtr b)
   {
-    auto sellerOrder = a->_to == TOKEN_BTC ? a : b;
-    auto buyerOrder  = a->_to != TOKEN_BTC ? a : b;
+    auto sellerOrder = a->_from == TOKEN_USDT ? a : b;
+    auto buyerOrder  = a->_from != TOKEN_USDT ? a : b;
       
     if(sellerOrder->_type == ORDER_TYPE_DELEGATE_BY_MARKET_PRICE)
       sellerOrder->_rate = _marketRate;
@@ -462,16 +481,16 @@ namespace exchange {
   
   bool MatchEngine::check_order_minimal_num(OrderPtr a, OrderPtr b)
   {
-    auto sellerOrder = a->_to == TOKEN_BTC ? a : b;
-    auto buyerOrder  = a->_to != TOKEN_BTC ? a : b;
+    auto sellerOrder = a->_from == TOKEN_USDT ? a : b;
+    auto buyerOrder  = a->_from != TOKEN_USDT ? a : b;
       
     auto ret = true;
     auto num = std::min(sellerOrder->_num, buyerOrder->_num);
 
     if(sellerOrder->_minNum > num || buyerOrder->_minNum > num)
       {
-	_sellerOrderBook._retry4minNumQueue.push_back(sellerOrder);
-	_buyerOrderBook._retry4minNumQueue.push_back(buyerOrder);
+	get_seller_order_book(sellerOrder->_from, sellerOrder->_to)._retry4minNumQueue.push_back(sellerOrder);
+	get_buyer_order_book(buyerOrder->_from, buyerOrder->_to)._retry4minNumQueue.push_back(buyerOrder);
 	ret = false;
       }
       
@@ -480,8 +499,8 @@ namespace exchange {
 
   void MatchEngine::match_handler(OrderPtr a, OrderPtr b)
   {
-    auto sellerOrder = a->_to == TOKEN_BTC ? a : b;
-    auto buyerOrder  = a->_to != TOKEN_BTC ? a : b;
+    auto sellerOrder = a->_from == TOKEN_USDT ? a : b;
+    auto buyerOrder  = a->_from != TOKEN_USDT ? a : b;
 
     if(sellerOrder->_type == ORDER_TYPE_DELEGATE_BY_MARKET_PRICE)
       sellerOrder->_rate = _marketRate;

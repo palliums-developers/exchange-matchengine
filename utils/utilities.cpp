@@ -223,7 +223,7 @@ std::vector<std::string> json_split(std::string str)
   
   const char* p = str.c_str();
   auto n = str.length();
-  
+
   for(i=0; i<n; ++i)
     {
       if(inquote)
@@ -232,12 +232,20 @@ std::vector<std::string> json_split(std::string str)
 	    inquote = false;
 	  continue;
 	}
+
+      if(p[i] == '\'' || p[i] == '"')
+	{
+	  inquote = true;
+	  quote = p[i];
+	  continue;
+	}
       
       if(p[i] == '[' || p[i] == '{')
 	{
 	  brackets++;
 	  continue;
 	}
+      
       if(p[i] == ']' || p[i] == '}')
 	{
 	  brackets--;
@@ -250,13 +258,13 @@ std::vector<std::string> json_split(std::string str)
 	continue;
 
       if(i > s)
-	v.push_back(trim_quote(str.substr(i, i-s)));
-      
+	v.push_back(trim_quote(str.substr(s, i-s)));
+
       s = i+1;
     }
 
   if(i > s)
-    v.push_back(trim_quote(str.substr(i, i-s)));
+    v.push_back(trim_quote(str.substr(s, i-s)));
   
   if(inquote || brackets > 0)
     {
@@ -285,7 +293,7 @@ std::map<std::string, std::string> json_get_object(std::string str)
   std::map<std::string, std::string> m;
 
   str = trim_space(str);
-  
+
   if(str.length() < 2 || str[0] != '{' || str[str.length()-1] != '}')
     {
       LOG(WARNING, "invalid json object: %s", str.c_str());
@@ -370,3 +378,65 @@ bool Config::parse(const char* path)
   LOG(INFO, "config parse success");
   return true;
 }
+
+unsigned long get_file_size(const char *path)
+{
+  unsigned long filesize = -1;
+  FILE *fp;
+  fp = fopen(path, "r");
+  if(fp == NULL)
+    return filesize;
+  fseek(fp, 0L, SEEK_END);
+  filesize = ftell(fp);
+  fclose(fp);
+  return filesize;
+}
+
+std::string get_file_content(const char* path)
+{
+  std::string str;
+  
+  char* buf = NULL;
+  FILE* fp = NULL;
+  int cnt;
+
+  auto size = get_file_size(path);
+
+  if(size <= 0)
+    goto LERROR;
+  
+  buf = (char*)malloc(size+1);
+
+  if(buf == NULL)
+    goto LERROR;
+
+  fp = fopen(path, "r");
+
+  if(fp == NULL)
+    goto LERROR;
+
+  cnt = fread(buf, 1, size, fp);
+
+  if(cnt <= 0 || cnt != size)
+    goto LERROR;
+
+  buf[cnt] = 0x00;
+
+  str = buf;
+  
+  free(buf);
+  fclose(fp);
+  
+  return str;
+  
+ LERROR:
+  
+  if(buf != NULL)
+    free(buf);
+  
+  if(fp != NULL)
+    fclose(fp);
+  
+  return "";
+}
+

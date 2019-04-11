@@ -32,22 +32,36 @@ int g_log_level = INFO;
 
 int main()
 {
-  volatile bool alive = true;
-  
-  BtcPriceUpdater b;
-  b.run(&alive);
-  
-  return 0;
-}
-
-int main3()
-{
   Config::instance()->parse("./config");
   
   volatile bool alive = true;
   exchange::MatchEngine engine;
   
   engine.run(&alive);
+  
+  return 0;
+}
+
+#include <math.h>
+int main4()
+{
+  double a = ((double)1.0)/4211.23;
+  
+  //double a = 0.0123456789;
+  std::cout.precision(20);
+  std::cout << a << "\n";
+  a = round(a * 100000000) / 100000000;
+  std::cout << a << "\n";
+  printf("%.8f\n", a);
+  return 0;
+}
+
+int main3()
+{
+  volatile bool alive = true;
+  
+  BtcPriceUpdater b;
+  b.run(&alive);
   
   return 0;
 }
@@ -240,3 +254,20 @@ int main1()
 }
 
 // cmake --build . --config Release
+// ./bitcoin-cli -rpcconnect=192.168.1.253 -rpcport=18332 -rpcuser=123 -rpcpassword=123 getbalance
+// bitcoind -regtest -txindex -daemon
+// bitcoin-cli -regtest generate 101
+
+// ~/.bitcoin/bitcoin.conf
+// regtest=1
+// rpcbind=127.0.0.1
+// rpcallowip=127.0.0.1
+// rpcuser=test
+// rpcpassword=test
+// server=1
+// daemon=1
+// txindex=1
+
+// 2NCoxjoGCNXL4dsWhcY5xbp728HMhKFf8rE
+// 2MxiqpNvDEY3ZFspR9yAEa2HmkeUd6WxGX6
+// 74c7f1e8ee77c92bc28567d86b61e7f58ae7baf3947623643cfdcec5e28b0783

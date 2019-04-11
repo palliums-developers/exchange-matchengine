@@ -53,6 +53,9 @@ std::vector<std::string> json_split_kv(std::string str);
 std::map<std::string, std::string> json_get_object(std::string str);
 std::vector<std::string> json_get_array(std::string str);
 
+unsigned long get_file_size(const char *path);
+std::string get_file_content(const char* path);
+
 // -------------------------------------------------------
 
 struct Config

@@ -10,6 +10,7 @@ namespace exchange {
   enum {
     TOKEN_BTC = 0,
     TOKEN_USDT,
+    TOKEN_MC, // mortgage contract
     TOKEN_MAX,
   };
 
@@ -267,7 +268,17 @@ namespace exchange {
 
     bool is_seller(int from, int to)
     {
-      return to == TOKEN_BTC;
+      return from == TOKEN_USDT;
+    }
+
+    OrderBook<OrderRateSet1> & get_seller_order_book(int from, int to)
+    {
+      return (from == TOKEN_BTC || to == TOKEN_BTC) ? _sellerOrderBook : _sellerOrderBook2;
+    }
+
+    OrderBook<OrderRateSet2> & get_buyer_order_book(int from, int to)
+    {
+      return (from == TOKEN_BTC || to == TOKEN_BTC) ? _buyerOrderBook : _buyerOrderBook2;
     }
     
     int insert_order(OrderPtr order);
@@ -317,6 +328,9 @@ namespace exchange {
   
     OrderBook<OrderRateSet1> _sellerOrderBook{true};
     OrderBook<OrderRateSet2> _buyerOrderBook{false};
+
+    OrderBook<OrderRateSet1> _sellerOrderBook2{true};
+    OrderBook<OrderRateSet2> _buyerOrderBook2{false};
 
     std::multiset<OrderPtr, comparebydeadline> _timeoutQueue;
 
