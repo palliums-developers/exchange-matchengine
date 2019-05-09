@@ -1,16 +1,15 @@
 var fs = require('fs');
 var util = require('util');
-
-var RpcClient = require('bitcoind-rpc');
-var util = require('util');
-const Client = require('bitcoin-core');
-const client = new Client({ network: 'regtest', port: 18443, username: '__cookie__', password: '6377ad51031c201505abc5df6ff1df22e5d4a3d29b04ff5d5e7c0f395684b42a' });
+const crypto = require('crypto');
 
 const btclib = require('bitcoinjs-lib')
 
-const crypto = require('crypto');
+const Client = require('bitcoin-core');
+const client = new Client({ network: 'regtest', port: 18443, username: '__cookie__', password: '1868a127c7f39d63c7089965a2c1bc941c934bcbb5eb065759b060299821968f' });
 
-//const bip65 = require('bip65')
+//var RpcClient = require('bitcoind-rpc');
+
+
 //------------------------------------------------------
 
 async function sleep(n) {
@@ -22,6 +21,228 @@ async function sleep(n) {
 //------------------------------------------------------
 
 var cnetwork = btclib.networks.regtest;
+
+const txfee = 50000;
+
+//------------------------------------------------------
+
+function foundTxVout(tx, addr)
+{
+    for(var i in tx['vout']) {
+	if(addr == tx['vout'][i]['scriptPubKey']['addresses'][0]) {
+	    return tx['vout'][i]['n'];
+	}
+    }
+    console.log("foundTxVout failed");
+    return 0;
+}
+
+function sk2ecpair(sk) {
+    var skb = Buffer.from(sk, 'hex');
+    return btclib.ECPair.fromPrivateKey(skb, {network: cnetwork});
+}
+
+function hashtimelockcontract (hashx, locktime, to160, from160) {
+    //console.log('locktime: ', locktime);
+    
+    let redeemScript = btclib.script.compile([
+        btclib.opcodes.OP_IF,
+        btclib.opcodes.OP_SHA256,
+        hashx,
+        btclib.opcodes.OP_EQUALVERIFY,
+        btclib.opcodes.OP_DUP,
+        btclib.opcodes.OP_HASH160,
+
+        to160,//btclib.crypto.hash160(storeman.publicKey),
+        btclib.opcodes.OP_ELSE,
+	btclib.script.number.encode(locktime),
+        btclib.opcodes.OP_CHECKLOCKTIMEVERIFY,
+        btclib.opcodes.OP_DROP,
+        btclib.opcodes.OP_DUP,
+        btclib.opcodes.OP_HASH160,
+
+        from160,
+        btclib.opcodes.OP_ENDIF,
+	
+        btclib.opcodes.OP_EQUALVERIFY,
+        btclib.opcodes.OP_CHECKSIG
+    ])
+
+    let addressPay = btclib.payments.p2sh({
+        redeem: {output: redeemScript, network: cnetwork},
+        network: cnetwork
+    })
+    
+    let address = addressPay.address
+
+    return {
+        'p2sh': address,
+        'hashx': hashx,
+        'locktime': locktime,
+        'redeemScript': redeemScript
+    }
+}
+
+function createTransaction(sk, inCoins, addr, outamt) {
+    
+    const alice = sk2ecpair(sk);
+    const txb = new btclib.TransactionBuilder(cnetwork);
+
+    const { address } = btclib.payments.p2pkh({ pubkey: alice.publicKey, network:cnetwork });
+    
+    var inamt = 0;
+    for(var i in inCoins) {
+	inamt += inCoins[i].amount;
+    }
+    
+    var changeamt = inamt-outamt-txfee;
+    
+    txb.setVersion(1);
+    
+    for(var i in inCoins) {
+	txb.addInput(inCoins[i].txid, inCoins[i].vout); 	
+    }
+    
+    txb.addOutput(addr, outamt);
+    
+    if(changeamt > 1000) {
+	txb.addOutput(address, changeamt);
+    }
+    
+    for(var i in inCoins) {
+	txb.sign(parseInt(i), alice);
+    }
+    
+    return txb.build();
+}
+
+function createHTLCLockTransaction(from, to, coins, inamt, outamt, hashx, locktimeSeconds) {
+
+    var frompair = sk2ecpair(from);
+    
+    var to160 = btclib.crypto.hash160(Buffer.from(to, 'hex'));
+    var from160 = btclib.crypto.hash160(frompair.publicKey);
+
+    var now = parseInt(Date.now()/1000);
+    var locktime = now + locktimeSeconds;
+    var htlc = hashtimelockcontract (hashx, locktime, to160, from160);
+    
+    var tx = createTransaction(from, coins, htlc.p2sh, outamt);
+    
+    //console.log('tx:\n', tx.toHex());
+    return { 'htlc': htlc, 'tx': tx };
+}
+
+function createHTLCRedeemTransaction(x, redeemScript, utxo, from, to, amount) {
+    
+    var txb = new btclib.TransactionBuilder(cnetwork);
+    txb.setVersion(1);
+    txb.addInput(utxo.txid, utxo.vout);
+    
+    txb.addOutput(to, amount-txfee);
+
+    var frompair = sk2ecpair(from);
+    
+    let tx = txb.buildIncomplete();
+    let sigHash = tx.hashForSignature(0, redeemScript, btclib.Transaction.SIGHASH_ALL);
+    
+    let redeemScriptSig = btclib.payments.p2sh({
+        redeem: {
+            input: btclib.script.compile([
+                btclib.script.signature.encode(frompair.sign(sigHash), btclib.Transaction.SIGHASH_ALL),
+                frompair.publicKey,
+                x,
+                btclib.opcodes.OP_TRUE
+            ]),
+            output: redeemScript,
+        },
+        network: cnetwork
+    }).input;
+    
+    tx.setInputScript(0, redeemScriptSig);
+
+    return tx;
+}
+
+function createHTLCRevokeTransaction(locktime, redeemScript, utxo, from, to, amount) {
+
+    //console.log('revoke time: ', locktime);
+    
+    var txb = new btclib.TransactionBuilder(cnetwork);
+    txb.setLockTime(locktime);
+    
+    txb.setVersion(1);
+    txb.addInput(utxo.txid, utxo.vout, 0xfffffffe);
+    
+    txb.addOutput(to, amount-txfee);
+
+    var frompair = sk2ecpair(from);
+    
+    let tx = txb.buildIncomplete();
+    let sigHash = tx.hashForSignature(0, redeemScript, btclib.Transaction.SIGHASH_ALL);
+    
+    let redeemScriptSig = btclib.payments.p2sh({
+        redeem: {
+            input: btclib.script.compile([
+                btclib.script.signature.encode(frompair.sign(sigHash), btclib.Transaction.SIGHASH_ALL),
+                frompair.publicKey,
+                btclib.opcodes.OP_FALSE
+            ]),
+            output: redeemScript,
+        },
+        network: cnetwork
+    }).input;
+    
+    tx.setInputScript(0, redeemScriptSig);
+
+    //console.log(tx);
+    return tx;
+}
+
+async function createAccountAndRecharge(amount) {
+    
+    const keyPair = btclib.ECPair.makeRandom({network: cnetwork});
+    var pk = keyPair.publicKey.toString('hex');
+    var sk = keyPair.privateKey.toString('hex');
+    const { address } = btclib.payments.p2pkh({ pubkey: keyPair.publicKey, network:cnetwork });
+
+    var txid = await client.sendToAddress(address, amount);
+    
+    var tx = await client.getRawTransaction(txid, true);
+    
+    var n = foundTxVout(tx, address);
+    
+    return {
+	'sk': sk,
+	'pk': pk,
+	'addr': address,
+	'utxo': { 'txid': txid, 'vout': n, 'amount': amount*100000000 }
+    };
+}
+
+//------------------------------------------------------
+
+class Utxo {
+    
+    static fromJson(obj) {
+	return new Utxo(obj.txid, obj.vout, obj.owner, obj.amount);
+    }
+    
+    constructor(txid, vout, owner, amount) {
+	this.txid = txid;
+	this.vout = vout;
+	this.owner = owner;
+	this.amount = amount;
+    }
+    
+    id() {
+	return this.txid+this.vout;
+    }
+    
+    print() {
+	console.log("utxo: %s %d %s %d", this.txid, this.vout, this.owner, this.amount);
+    }
+}
 
 class Account {
     
@@ -116,7 +337,7 @@ class Wallet {
     
     send2address(from, to, amount) {
 	var dst = this.getAccount(to);
-	var amt = amount + 50000;
+	var amt = amount + txfee;
 	var ret = this.accounts[from].selectCoins(amt);
 	if(ret.amount < amt) {
 	    console.log('Insufficient funds');
@@ -136,35 +357,6 @@ class Wallet {
 	return tx.toHex();
     }
     
-    send2addressByHTLC(from, to, amount, x) {
-	var amt = amount + 50000;
-	var ret = this.accounts[from].selectCoins(amt);
-	if(ret.amount < amt) {
-	    console.log('Insufficient funds');
-	    return false;
-	}
-
-	var frompair = sk2ecpair(from);
-	
-	var hashx = btclib.crypto.sha256(Buffer.from(x, 'hex')).toString('hex');
-	var to160 = btclib.crypto.hash160(Buffer.from(to, 'hex'));
-	var from160 = btclib.crypto.hash160(frompair.publicKey);
-
-	var now = parseInt(Date.now()/1000);
-	var locktime = now + 60;
-	var htlc = hashtimelockcontract (hashx, locktime, to160, from160);
-	
-	var coins = ret.utxos;
-	var tx = createTransaction(from, coins, htlc.p2sh, amount);
-	
-	if(tx.outs.length > 1) {
-	    this.accounts[from].addUtxo(new Utxo(tx.getId(), 1, from, ret.amount-amt));
-	}
-
-	console.log('tx:\n', tx.toHex());
-	return { 'htlc': htlc, 'txhex': tx.toHex() };
-    }
-    
     print() {
 	console.log('wallet:');
 	for(var i in this.accounts) {
@@ -173,206 +365,87 @@ class Wallet {
     }
 }
 
-class Utxo {
-    
-    static fromJson(obj) {
-	return new Utxo(obj.txid, obj.vout, obj.owner, obj.amount);
-    }
-    
-    constructor(txid, vout, owner, amount) {
-	this.txid = txid;
-	this.vout = vout;
-	this.owner = owner;
-	this.amount = amount;
-    }
-    
-    id() {
-	return this.txid+this.vout;
-    }
-    
-    print() {
-	console.log("utxo: %s %d %s %d", this.txid, this.vout, this.owner, this.amount);
-    }
+async function createAccount(amount) {
+    var c1 = await createAccountAndRecharge(amount);
+    var alice = new Account(c1.pk, c1.sk, c1.addr);
+    alice.addUtxo(new Utxo(c1.utxo.txid, c1.utxo.vout, c1.sk, c1.utxo.amount));
+    return alice;
 }
 
-function foundTxVout(tx, addr)
-{
-    for(var i in tx['vout']) {
-	if(addr == tx['vout'][i]['scriptPubKey']['addresses'][0]) {
-	    return tx['vout'][i]['n'];
-	}
-    }
-    console.log("foundTxVout failed");
-    return 0;
-}
-
-async function createAccount() {
-    const keyPair = btclib.ECPair.makeRandom({network: cnetwork});
-    var pk = keyPair.publicKey.toString('hex');
-    var sk = keyPair.privateKey.toString('hex');
-    console.log('sk:', sk);
-    console.log('pk:', pk);
-    const { address } = btclib.payments.p2pkh({ pubkey: keyPair.publicKey, network:cnetwork });
-    console.log("addr:", address);
-
-    var amount = 0.1;
-    var txid = await client.sendToAddress(address, amount);
-
-    var tx = await client.getRawTransaction(txid, true);
-    //console.log("tx:\n", JSON.stringify(tx, null, 4));
-
-    var n = foundTxVout(tx, address);
-    
-    var account = new Account(pk, sk, address);
-    account.addUtxo(new Utxo(txid, n, sk, amount*100000000));
-    return account;
-}
-
-function createTransaction(sk, inCoins, addr, outamt) {
-    const alice = sk2ecpair(sk);
-    const txb = new btclib.TransactionBuilder(cnetwork);
-
-    const { address } = btclib.payments.p2pkh({ pubkey: alice.publicKey, network:cnetwork });
-    
-    var inamt = 0;
-    for(var i in inCoins) {
-	inamt += inCoins[i].amount;
-    }
-    
-    var changeamt = inamt-outamt-50000;
-    
-    txb.setVersion(1);
-    
-    for(var i in inCoins) {
-	txb.addInput(inCoins[i].txid, inCoins[i].vout); 	
-    }
-    
-    txb.addOutput(addr, outamt);
-    
-    if(changeamt > 1000) {
-	txb.addOutput(address, changeamt);
-    }
-    
-    for(var i in inCoins) {
-	txb.sign(parseInt(i), alice);
-    }
-    
-    return txb.build();
-}
-
-function hashtimelockcontract (hashx, redeemLockTimeStamp, destHash160Addr, revokerHash160Addr) {
-    let redeemScript = btclib.script.compile([
-        btclib.opcodes.OP_IF,
-        btclib.opcodes.OP_SHA256,
-        Buffer.from(hashx, 'hex'),
-        btclib.opcodes.OP_EQUALVERIFY,
-        btclib.opcodes.OP_DUP,
-        btclib.opcodes.OP_HASH160,
-
-        Buffer.from(destHash160Addr, 'hex'),//btclib.crypto.hash160(storeman.publicKey),
-        btclib.opcodes.OP_ELSE,
-        btclib.script.number.encode(redeemLockTimeStamp),
-        btclib.opcodes.OP_CHECKLOCKTIMEVERIFY,
-        btclib.opcodes.OP_DROP,
-        btclib.opcodes.OP_DUP,
-        btclib.opcodes.OP_HASH160,
-
-        Buffer.from(revokerHash160Addr, 'hex'),
-        btclib.opcodes.OP_ENDIF,
-	
-        btclib.opcodes.OP_EQUALVERIFY,
-        btclib.opcodes.OP_CHECKSIG
-    ])
-
-    let addressPay = btclib.payments.p2sh({
-        redeem: {output: redeemScript, network: cnetwork},
-        network: cnetwork
-    })
-    
-    let address = addressPay.address
-
-    return {
-        'p2sh': address,
-        'hashx': hashx,
-        'redeemLockTimeStamp': redeemLockTimeStamp,
-        'redeemScript': redeemScript
+async function doMining() {
+    var i = 0;
+    for(;;) {
+	var ret = await client.generateToAddress(1, '2N1BmKAmeZcoMced7bHYaW1c9MhAR8WFmjf');
+	console.log('mining: ', i++, ret);
+	await sleep(1);
     }
 }
-
-function sk2ecpair(sk) {
-    var skb = Buffer.from(sk, 'hex');
-    return btclib.ECPair.fromPrivateKey(skb, {network: cnetwork});
-}
-
-function ecpairTest() {
-    var pk = '03a15d9642880e1ba6e25baf84e8c00f74090ec2aa4ea6ceeb1d99a7e1061145ff';
-    var sk = '2786a71e5586f45f54653d6a9b1afd904b3ee09409bd41ae56da313ebb0d77f8';
-    var skb = Buffer.from(sk, 'hex');
-    var pair = btclib.ECPair.fromPrivateKey(skb);
-    var pk1 = pair.publicKey.toString('hex');
-    var sk1 = pair.privateKey.toString('hex');
-    console.log('pk1:', pk1);
-    console.log('sk1:', sk1);
-}
-
-function createRedeemHTLCTransaction(x, htlc, txid, from, to) {
-    var txb = new btclib.TransactionBuilder(cnetwork);
-    txb.setVersion(1);
-    txb.addInput(txid, 0);
-    
-    txb.addOutput(to, 888);
-
-    var frompair = sk2ecpair(from);
-    
-    let tx = txb.buildIncomplete();
-    let sigHash = tx.hashForSignature(0, htlc.redeemScript, btclib.Transaction.SIGHASH_ALL);
-    
-    let redeemScriptSig = btclib.payments.p2sh({
-        redeem: {
-            input: btclib.script.compile([
-                btclib.script.signature.encode(frompair.sign(sigHash), btclib.Transaction.SIGHASH_ALL),
-                frompair.publicKey,
-                Buffer.from(x, 'hex'),
-                btclib.opcodes.OP_TRUE
-            ]),
-            output: redeemScript,
-        },
-        network: cnetwork
-    }).input;
-    
-    tx.setInputScript(0, redeemScriptSig);
-
-    return tx;
-}
+//------------------------------------------------------
 
 async function main() {
+
+    doMining();
     
-    var alice = await createAccount();
-    var bob = await createAccount();
-    var john = await createAccount();
+    var alice = await createAccount(0.1);
+    var bob = await createAccount(0.1);
 
     var wallet = new Wallet();
     wallet.addAccount(alice);
     wallet.addAccount(bob);
     
-    console.log(JSON.stringify(wallet, null, 4));
-
-    //var txhex = wallet.send2address(alice.id(), bob.addr, 8000);
-    var x = Buffer.from(crypto.randomBytes(32))
-    var ret = wallet.send2addressByHTLC(alice.id(), bob.pk, 8000, x.toString('hex'));
-
-    var hex = await client.sendRawTransaction(ret.txhex);
-    console.log('sendRawTransaction:', hex);
+    var amount = 180000;
     
-    console.log(JSON.stringify(wallet, null, 4));
-
+    var x = Buffer.from(crypto.randomBytes(32));
+    var hashx = btclib.crypto.sha256(x);
+    
+    var coinsinfo = alice.selectCoins(amount);
+    var coins = coinsinfo.utxos;
+    var inamt = coinsinfo.amount;
+    var locktime = 10;
+    
+    var ret = createHTLCLockTransaction(alice.id(), bob.pk, coins, inamt, amount, hashx, locktime);
+    
     var htlc = ret.htlc;
-    console.log(htlc);
+    var tx = ret.tx;
+    
+    var hex = await client.sendRawTransaction(tx.toHex());
+    console.log('sendRawTransaction lock:', hex);
 
-    createRedeemHTLCTransaction(x.toString('hex'), htlc, txid, bob.id(), bob.addr);
+    var txstr = await client.getRawTransaction(hex, true);
+    console.log(JSON.stringify(txstr, null, 4));
     
+    var utxo = {'txid': tx.getId(), 'vout': 0 };
+
+    //var redeemScript = await client.decodeScript(htlc.redeemScript.toString('hex'));
+    //console.log('redeem script: \n', redeemScript);
+    
+    var doredeem = true;
+
+    if(doredeem) {
+	var txredeem = createHTLCRedeemTransaction(x, htlc.redeemScript, utxo, bob.id(), bob.addr, amount);
+	var hexredeem = await client.sendRawTransaction(txredeem.toHex());
+	console.log('sendRawTransaction redeem:', hexredeem);
+	txstr = await client.getRawTransaction(hexredeem, true);
+	console.log(JSON.stringify(txstr, null, 4));
+    } else {
+	// do revoke
+	console.log('sleep...');
+	await sleep(30);
+	console.log('wakeup...');
+	var txrevoke = createHTLCRevokeTransaction(htlc.locktime, htlc.redeemScript, utxo, alice.id(), alice.addr, amount);
+	var hexrevoke = await client.sendRawTransaction(txrevoke.toHex());
+	console.log('sendRawTransaction revoke:', hexrevoke);
+	txstr = await client.getRawTransaction(hexrevoke, true);
+	console.log(JSON.stringify(txstr, null, 4));
+    }
     return;
-    
+}
+
+main();
+
+
+// function test()
+// {
     // var sk = 'ae7eb07bcfcba45838e2b3c4d3ae4743bfc0cb995b33ac378d4f329979b8a947';
     // var txid = 'fa99ef6908552104000dc93c194c484cca89aafef2736a4ea253472aacea1593';
     // var vout = 0;
@@ -441,11 +514,8 @@ async function main() {
 
     // var tx = await client.getRawTransaction(txid, true);
     // console.log(JSON.stringify(tx, null, 4));
-}
-
-main();
-
-
+    //}
+    
 // var Block = btclib.Block;
 
 // var blockhex = '0000002059401153d3d7bff6787b3e0b21f9f8deee3cd17f065a3fd3b5a0b7cab20c34229b5df6c2b129a06a14555be5603775830309cd7ce1c838fda8a3a91388fe7803e172a45cffff7f200000000001020000000001010000000000000000000000000000000000000000000000000000000000000000ffffffff0401640101ffffffff0200f2052a0100000017a914d69b630409eb86c2334257ec815088a5bea90440870000000000000000266a24aa21a9ede2f61c3f71d1defd3fa999dfa36953755c690689799962b48bebd836974e8cf90120000000000000000000000000000000000000000000000000000000000000000000000000';
@@ -609,6 +679,69 @@ main();
 // }
 
 // main1();
+
+// function ecpairTest() {
+//     var pk = '03a15d9642880e1ba6e25baf84e8c00f74090ec2aa4ea6ceeb1d99a7e1061145ff';
+//     var sk = '2786a71e5586f45f54653d6a9b1afd904b3ee09409bd41ae56da313ebb0d77f8';
+//     var skb = Buffer.from(sk, 'hex');
+//     var pair = btclib.ECPair.fromPrivateKey(skb);
+//     var pk1 = pair.publicKey.toString('hex');
+//     var sk1 = pair.privateKey.toString('hex');
+//     console.log('pk1:', pk1);
+//     console.log('sk1:', sk1);
+// }
+
+// async function createAccount() {
+//     const keyPair = btclib.ECPair.makeRandom({network: cnetwork});
+//     var pk = keyPair.publicKey.toString('hex');
+//     var sk = keyPair.privateKey.toString('hex');
+//     console.log('sk:', sk);
+//     console.log('pk:', pk);
+//     const { address } = btclib.payments.p2pkh({ pubkey: keyPair.publicKey, network:cnetwork });
+//     console.log("addr:", address);
+
+//     var amount = 0.1;
+//     var txid = await client.sendToAddress(address, amount);
+
+//     var tx = await client.getRawTransaction(txid, true);
+//     //console.log("tx:\n", JSON.stringify(tx, null, 4));
+
+//     var n = foundTxVout(tx, address);
+    
+//     var account = new Account(pk, sk, address);
+//     account.addUtxo(new Utxo(txid, n, sk, amount*100000000));
+//     return account;
+// }
+
+
+    // send2addressByHTLC(from, to, amount, hashx) {
+    // 	var amt = amount + txfee;
+    // 	var ret = this.accounts[from].selectCoins(amt);
+    // 	if(ret.amount < amt) {
+    // 	    console.log('Insufficient funds');
+    // 	    return false;
+    // 	}
+
+    // 	var frompair = sk2ecpair(from);
+	
+    // 	var to160 = btclib.crypto.hash160(Buffer.from(to, 'hex'));
+    // 	var from160 = btclib.crypto.hash160(frompair.publicKey);
+
+    // 	var now = parseInt(Date.now()/1000);
+    // 	var locktime = now + 10;
+    // 	var htlc = hashtimelockcontract (hashx, locktime, to160, from160);
+	
+    // 	var coins = ret.utxos;
+    // 	var tx = createTransaction(from, coins, htlc.p2sh, amount);
+	
+    // 	if(tx.outs.length > 1) {
+    // 	    this.accounts[from].addUtxo(new Utxo(tx.getId(), 1, from, ret.amount-amt));
+    // 	}
+
+    // 	console.log('tx:\n', tx.toHex());
+    // 	return { 'htlc': htlc, 'tx': tx };
+    // }
+    
 
 //-----------------------------------------------------------------
 
