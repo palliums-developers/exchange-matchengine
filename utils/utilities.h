@@ -18,7 +18,8 @@ std::string red_text(const char* text);
 std::string blue_text(const char* text);
 
 void log(int level, const char* file, int line, const char* func, const char *format, ...);
-#define LOG(lvl, ...) log((lvl), __FILE__, __LINE__, __func__, __VA_ARGS__)
+void log2(int level, const char* file, int line, const char* func, const char *format, ...);
+#define LOG(lvl, ...) log2((lvl), __FILE__, __LINE__, __func__, __VA_ARGS__)
 
 // -------------------------------------------------------
 
@@ -128,6 +129,17 @@ namespace utils {
       auto t = _v.front();
       _v.pop_front();
       return t;
+    }
+    T timed_pop()
+    {
+      std::unique_lock<std::mutex> lk(_mtx);
+      if(_cv.wait_for(lk, 1000ms, [this]{ return !_v.empty(); }))
+	{
+	  auto t = _v.front();
+	  _v.pop_front();
+	  return t;
+	}
+      return T();
     }
     bool empty()
     {

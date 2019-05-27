@@ -17,6 +17,9 @@
 #include <string.h>
 #include <time.h>
 #include <sys/time.h>
+#include <chrono>
+
+using namespace std::chrono_literals;
 
 #include <mariadb/mysql.h>
 
@@ -34,7 +37,7 @@ bool RemoteDB::connect()
 
   {
     auto query = "select COLUMN_NAME from information_schema.COLUMNS where table_name = 'financial_management_projects'";
-    if(!do_query(query, &vv))
+    if(do_query(query, &vv))
       return false;
     for(auto & v : vv)
       _projectKeys.push_back(v[0]);
@@ -42,7 +45,7 @@ bool RemoteDB::connect()
 
   {
     auto query = "select COLUMN_NAME from information_schema.COLUMNS where table_name = 'financial_management_users'";
-    if(!do_query(query, &vv))
+    if(do_query(query, &vv))
       return false;
     for(auto & v : vv)
       _userKeys.push_back(v[0]);
@@ -50,12 +53,14 @@ bool RemoteDB::connect()
   
   {
     auto query = "select COLUMN_NAME from information_schema.COLUMNS where table_name = 'financial_management_orders'";
-    if(!do_query(query, &vv))
+    if(do_query(query, &vv))
       return false;
     for(auto & v : vv)
       _orderKeys.push_back(v[0]);
   }
-    
+
+  LOG(INFO, "remotedb connect success...");
+  
   return true;
 }
 
@@ -76,7 +81,7 @@ std::shared_ptr<Project> RemoteDB::get_project_by_no(std::string no)
 {
   std::vector<std::map<std::string, std::string>> vv;
   char query[256];
-  snprintf(query, sizeof(query), "SELECT * FROM financial_management_projects WHERE no=%s", no.c_str());
+  snprintf(query, sizeof(query), "SELECT * FROM financial_management_projects WHERE no='%s'", no.c_str());
   do_select(query, _projectKeys, &vv);
 
   std::shared_ptr<Project> o;
@@ -102,7 +107,7 @@ std::shared_ptr<User> RemoteDB::get_user_by_publickey(std::string publickey)
 {
   std::vector<std::map<std::string, std::string>> vv;
   char query[256];
-  snprintf(query, sizeof(query), "SELECT * FROM financial_management_users WHERE publickey=%s", publickey.c_str());
+  snprintf(query, sizeof(query), "SELECT * FROM financial_management_users WHERE publickey='%s'", publickey.c_str());
   do_select(query, _userKeys, &vv);
   
   std::shared_ptr<User> o;
@@ -130,8 +135,8 @@ void zip_map(const std::map<std::string, std::string> & v, std::string & keys, s
   std::vector<std::string> vs;
   for(auto & a : v)
     {
-      ks.push_back(a.first);
-      vs.push_back(a.second);
+      ks.push_back("`" + a.first + "`");
+      vs.push_back("'" + a.second + "'");
     }
   keys = string_join(ks, ",");
   vals = string_join(vs, ",");
@@ -144,11 +149,11 @@ int RemoteDB::add_user(std::shared_ptr<User> o)
   std::string keys;
   std::string vals;
   zip_map(v, keys, vals);
-  
+
   char query[1024];
   snprintf(query, sizeof(query), "INSERT INTO financial_management_users (%s) VALUES (%s)", keys.c_str(), vals.c_str());
-  printf("%s\n", query);
-  
+  //printf("%s\n", query);
+
   return do_query(query, NULL);
 }
 
@@ -162,7 +167,7 @@ int RemoteDB::add_order(std::shared_ptr<Order> o)
   
   char query[1024];
   snprintf(query, sizeof(query), "INSERT INTO financial_management_orders (%s) VALUES (%s)", keys.c_str(), vals.c_str());
-  printf("%s\n", query);
+  //printf("%s\n", query);
   
   return do_query(query, NULL);
 }
@@ -239,14 +244,14 @@ int RemoteDB::update_order_status(long orderid, int status)
 int RemoteDB::update_order_txid(long orderid, std::string txid, std::string investment_return_addr)
 {
   char query[1024];
-  snprintf(query, sizeof(query), "UPDATE financial_management_orders SET payment_txid=%s, investment_return_addr=%s WHERE id=%ld", txid.c_str(), investment_return_addr.c_str(), orderid);
+  snprintf(query, sizeof(query), "UPDATE financial_management_orders SET payment_txid='%s', investment_return_addr='%s' WHERE id=%ld", txid.c_str(), investment_return_addr.c_str(), orderid);
   return do_query(query, NULL);
 }
 
 int RemoteDB::update_collections(long userid, std::string collections)
 {
   char query[1024];
-  snprintf(query, sizeof(query), "UPDATE financial_management_users SET collections=%s WHERE id=%ld", collections.c_str(), userid);
+  snprintf(query, sizeof(query), "UPDATE financial_management_users SET collections='%s' WHERE id=%ld", collections.c_str(), userid);
   return do_query(query, NULL);
 }
 
@@ -256,6 +261,8 @@ bool RemoteDB::do_connect()
   auto usr = Config::instance()->get("remotedb_usr");
   auto pwd = Config::instance()->get("remotedb_pwd");
   auto dbname = Config::instance()->get("remotedb_dbname");
+
+  LOG(INFO, "start to connect mariadb...");
   
   //auto mysql = mysql_real_connect(_mysql, "47.106.208.207", "root", "1234qwer", "test", 0, NULL, 0);
   auto mysql = mysql_real_connect(_mysql, ip.c_str(), usr.c_str(), pwd.c_str(), dbname.c_str(), 0, NULL, 0);
@@ -265,6 +272,8 @@ bool RemoteDB::do_connect()
       return false;
     }
 
+  LOG(INFO, "connect mariadb success...");
+  
   _connected = true;
     
   return true;

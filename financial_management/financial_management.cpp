@@ -11,12 +11,24 @@
 #include <thread>
 #include <atomic>
 #include <condition_variable>
+#include <initializer_list>
 
 #include <unistd.h>
 #include <stdarg.h>
 #include <string.h>
 #include <time.h>
 #include <sys/time.h>
+#include <chrono>
+
+using namespace std::chrono_literals;
+
+
+#include <netinet/in.h>
+#include <sys/types.h> 
+#include <sys/socket.h>
+#include <stdio.h>     
+#include <stdlib.h>    
+#include <string.h>
 
 #include <mariadb/mysql.h>
 
@@ -25,11 +37,24 @@
 #include "remotedb.h"
 #include "financial_management.h"
 
+void write_file(const std::string & str)
+{
+  static auto fh = fopen("a.txt", "a");
+  if(fh)
+    {
+      fwrite(str.c_str(), 1, str.length(), fh);
+      fwrite("\n\n", 1, 2, fh);
+      fflush(fh);
+      //fclose(fh);
+    }
+}
+
 std::string json(const char* name, const std::string & value, bool last)
 {
   std::string str;
   str = str + "\"" + name + "\":\"" + value + "\"";
   if(!last) str += ",";
+  return str;
 }
   
 template<class T>
@@ -38,12 +63,13 @@ std::string json(const char* name, const T & value, bool last)
   std::string str;
   str = str + "\"" + name + "\":" + std::to_string(value);
   if(!last) str += ",";
+  return str;
 }
 
 int extract_request(const std::string & req, std::string & command, std::map<std::string, std::string> & paras, int & msn)
 {
   auto v = json_get_object(req);
-  
+
   if(0 == v.count("command"))
     return 1;
   command = v["command"];
@@ -71,9 +97,9 @@ std::string gen_rsp(const std::string & command, int msn, int ret, const std::ve
   return str;
 }
 
-int Project::create(std::map<std::string, std::string> & kvs, std::shared_ptr<Project> & o)
+std::shared_ptr<Project> Project::create(std::map<std::string, std::string> & kvs)
 {
-  o = std::make_shared<Project>();
+  auto o = std::make_shared<Project>();
     
   if(kvs.count("id"))
     o->_id = atol(kvs["id"].c_str());
@@ -110,29 +136,34 @@ int Project::create(std::map<std::string, std::string> & kvs, std::shared_ptr<Pr
   if(kvs.count("product_description"))
     o->_product_description = kvs["product_description"];
     
-  if(o->_no.empty())
-    return ERROR_INVALID_PROJECT_NO;
-  if(o->_annualized_return_rate <= 0)
-    return ERROR_INVALID_ANNUALIZED_RETURN_RATE;
-  if(o->_investment_period <=0 || o->_investment_period > 365*10)
-    return ERROR_INVALID_INVESTMENT_PERIOD;
-  if(o->_min_invest_amount <= 0)
-    return ERROR_INVALID_MIN_INVEST_AMOUNT;
-  if(o->_max_invest_amount <= 0)
-    return ERROR_INVALID_MAX_INVEST_AMOUNT;
-  if(o->_total_crowdfunding_amount <= 0)
-    return ERROR_INVALID_TOTAL_CROWDFUNDING_AMOUNT;
-  if(o->_booking_starting_time <= 0)
-    return ERROR_INVALID_BOOKING_STARTING_TIME;
-  if(o->_crowdfunding_ending_time <= 0)
-    return ERROR_INVALID_CROWDFUNDING_ENDING_TIME;
-  if(o->_interest_type < 0 || o->_interest_type >= INTEREST_TYPE_CNT)
-    return ERROR_INVALID_INTEREST_TYPE;
-  if(o->_borrower_info < 0 || o->_borrower_info >= BORROWER_INFO_CNT)
-    return ERROR_INVALID_BORROWER_INFO;
-  if(o->_crowdfunding_address.empty())
-    return ERROR_INVALID_CROWDFUNDING_ADDRESS;
+  return o;
+}
 
+int Project::check_valid()
+{
+  if(_no.empty())
+    return ERROR_INVALID_PROJECT_NO;
+  if(_annualized_return_rate <= 0)
+    return ERROR_INVALID_ANNUALIZED_RETURN_RATE;
+  if(_investment_period <=0 || _investment_period > 365*10)
+    return ERROR_INVALID_INVESTMENT_PERIOD;
+  if(_min_invest_amount <= 0)
+    return ERROR_INVALID_MIN_INVEST_AMOUNT;
+  if(_max_invest_amount <= 0)
+    return ERROR_INVALID_MAX_INVEST_AMOUNT;
+  if(_total_crowdfunding_amount <= 0)
+    return ERROR_INVALID_TOTAL_CROWDFUNDING_AMOUNT;
+  if(_booking_starting_time <= 0)
+    return ERROR_INVALID_BOOKING_STARTING_TIME;
+  if(_crowdfunding_ending_time <= 0)
+    return ERROR_INVALID_CROWDFUNDING_ENDING_TIME;
+  if(_interest_type < 0 || _interest_type >= INTEREST_TYPE_CNT)
+    return ERROR_INVALID_INTEREST_TYPE;
+  if(_borrower_info < 0 || _borrower_info >= BORROWER_INFO_CNT)
+    return ERROR_INVALID_BORROWER_INFO;
+  if(_crowdfunding_address.empty())
+    return ERROR_INVALID_CROWDFUNDING_ADDRESS;
+  
   return 0;
 }
 
@@ -183,9 +214,9 @@ std::string Project::to_json()
 }
 
 
-int Order::create(std::map<std::string, std::string> & kvs, std::shared_ptr<Order> & o)
+std::shared_ptr<Order> Order::create(std::map<std::string, std::string> & kvs)
 {
-  o = std::make_shared<Order>();
+  auto o = std::make_shared<Order>();
     
   if(kvs.count("id"))
     o->_id = atol(kvs["id"].c_str());
@@ -205,19 +236,24 @@ int Order::create(std::map<std::string, std::string> & kvs, std::shared_ptr<Orde
     o->_accumulated_gain = atof(kvs["accumulated_gain"].c_str());
   if(kvs.count("status"))
     o->_status = atoi(kvs["status"].c_str());
-    
-  if(o->_project_id < 0)
+
+  if(kvs.count("booking_timestamp"))
+    o->_booking_timestamp = atoi(kvs["booking_timestamp"].c_str());
+  else
+    o->_booking_timestamp = (int)uint32_t(time(NULL));
+  
+  return o;
+}
+
+int Order::check_valid()
+{
+  if(_project_id < 0)
     return ERROR_INVALID_PROJECT_ID;
-  if(o->_user_id < 0)
+  if(_user_id < 0)
     return ERROR_INVALID_USER_ID;
-  if(o->_booking_amount <= 0)
+  if(_booking_amount <= 0)
     return ERROR_INVALID_BOOKING_AMOUNT;
-  //if(o->_investment_return_addr.empty())
-  //  return ERROR_INVALID_INVESTMENT_RETURN_ADDR;
-    
-  auto now = uint32_t(time(NULL));
-  o->_booking_timestamp = (int)now;
-    
+  
   return 0;
 }
 
@@ -249,15 +285,17 @@ std::string Order::to_json()
   str += json("payment_timestamp", _payment_timestamp, false);
   str += json("investment_return_addr", _investment_return_addr, false);
   str += json("accumulated_gain", _accumulated_gain, false);
+  str += json("project_no", _project_no, false);
+  str += json("user_publickey", _user_publickey, false);
   str += json("status", _status, true);
   str += "}";
   return str;
 }
 
 
-int User::create(std::map<std::string, std::string> & kvs, std::shared_ptr<User> & o)
+std::shared_ptr<User> User::create(std::map<std::string, std::string> & kvs)
 {
-  o = std::make_shared<User>();
+  auto o = std::make_shared<User>();
     
   if(kvs.count("id"))
     o->_id = atol(kvs["id"].c_str());
@@ -269,7 +307,12 @@ int User::create(std::map<std::string, std::string> & kvs, std::shared_ptr<User>
   if(kvs.count("collections"))
     o->_collections = kvs["collections"];
     
-  if(o->_publickey.empty())
+  return o;
+}
+
+int User::check_valid()
+{
+  if(_publickey.empty())
     return ERROR_INVALID_PUBLICKEY;
     
   return 0;
@@ -296,22 +339,18 @@ std::string User::to_json()
   return str;
 }
 
-
-int FinancialManagement::add_project(std::map<std::string, std::string> & kvs)
+int FinancialManagement::add_project(std::shared_ptr<Project> project)
 {
+  if(project->_id != _projectcnt)
+    return ERROR_ADD_EXISTING_PROJECT;
+  
   long id = _projectcnt;
   long ida = _projectcnt % maxcnt;
-      
-  //auto kvs = json2map(jsonstr);
-  kvs["id"] = std::to_string(id);
-  std::shared_ptr<Project> project;
+
+  project->_id = id;
     
-  auto ret = Project::create(kvs, project);
-  if(ret != 0)
-    return ret;
-    
-  auto no = kvs["no"];
-    
+  auto no = project->_no;
+  
   if(_cache_project_no2id.count(no))
     return ERROR_ADD_EXISTING_PROJECT;
 
@@ -320,7 +359,6 @@ int FinancialManagement::add_project(std::map<std::string, std::string> & kvs)
   /*   return ret; */
     
   _cache_project_no2id[no] = id;
-
 
   if(_projects[ida])
     _cache_project_no2id.erase(_projects[ida]->_no);
@@ -344,12 +382,9 @@ int FinancialManagement::add_user(std::string publickey)
   kvs["id"] = std::to_string(id);
   kvs["publickey"] = publickey;
     
-  std::shared_ptr<User> user;
-  auto ret = User::create(kvs, user);
-  if(ret != 0)
-    return ret;
+  auto user = User::create(kvs);
     
-  ret = _remotedb->add_user(user);
+  auto ret = _remotedb->add_user(user);
   if(ret != 0)
     return ret;
 
@@ -365,86 +400,69 @@ int FinancialManagement::add_user(std::string publickey)
   
 int FinancialManagement::add_order(std::map<std::string, std::string> & kvs)
 {
+  auto now = (int)uint32_t(time(NULL));
+
   long id = _ordercnt;
   long ida = _ordercnt % maxcnt;
-    
+
   kvs["id"] = std::to_string(id);
-  std::shared_ptr<Order> order;
-  auto ret = Order::create(kvs, order);
-  if(ret != 0)
-    return ret;
+
+  auto order = Order::create(kvs);
     
   auto no = kvs["project_no"];
   auto publickey = kvs["user_publickey"];
+  double amount = atof(kvs["booking_amount"].c_str());
 
-  long projectid = -1;
-  std::shared_ptr<Project> project;
-  if(_cache_project_no2id.count(no))
-    projectid = _cache_project_no2id[no];
-  else
-    {
-      project = _remotedb->get_project_by_no(no);
-      if(project)
-	projectid = project->_id;
-    }
-  if(projectid < 0)
-    return ERROR_ADD_ORDER_WITH_WRONG_PROJECT_NO;
+  auto project = get_project_by_no(no);
   if(!project)
-    project = _projects[projectid%maxcnt];
-  if(!project || project->_id != projectid)
-    return ERROR_ADD_ORDER_WITH_WRONG_PROJECT_NO;
-
+    return ERROR_NOT_EXIST_PROJECT_NO;
+  
   if(project->_status == PROJECT_STATUS_CROWDFUND_SUCCESS)
     return ERROR_ADD_ORDER_CROWDFUNDING_FULL;
+  
   if(project->_received_crowdfunding >= project->_total_crowdfunding_amount)
     return ERROR_ADD_ORDER_CROWDFUNDING_FULL;
     
-  auto now = (int)uint32_t(time(NULL));
   if(now < project->_booking_starting_time)
     return ERROR_ADD_ORDER_CROWDFUNDING_NOT_START;
-    
+  
   if(now > (project->_crowdfunding_ending_time - 7200))
     return ERROR_ADD_ORDER_CROWDFUNDING_FINISHED;
 
-  double amount = atof(kvs["booking_amount"].c_str());
-    
   if(amount < project->_min_invest_amount)
     return ERROR_ADD_ORDER_TOO_LOW_AMOUNT;
+  
   if(amount > project->_max_invest_amount)
     return ERROR_ADD_ORDER_TOO_HIGH_AMOUNT;
 
   if(amount > (project->_total_crowdfunding_amount - project->_booked_crowdfunding))
     return ERROR_ADD_ORDER_CROWDFUNDING_BOOK_FULL;
-    
-  long userid = -1;
-  if(_cache_user_publickey2id.count(publickey))
-    userid = _cache_user_publickey2id[publickey];
-  else
-    {
-      auto user = _remotedb->get_user_by_publickey(publickey);
-      if(user)
-	userid = user->_id;
-    }
-  if(userid < 0)
+
+  auto user = get_user_by_publickey(publickey);
+  if(!user)
     {
       add_user(publickey);
-      userid = _cache_user_publickey2id[publickey];
+      user = get_user_by_publickey(publickey);
     }
-    
-  kvs["project_id"] = std::to_string(projectid);
-  kvs["user_id"] = std::to_string(userid);
-
-  ret = _remotedb->add_order(order);
+  
+  order->_project_id = project->_id;
+  order->_user_id = user->_id;
+  order->_project_no = no;
+  order->_user_publickey = publickey;
+  
+  auto ret = _remotedb->add_order(order);
   if(ret != 0)
     return ret;
 
-  _users[userid%maxcnt]->_orders.push_back(id);
-  _projects[projectid%maxcnt]->_orders.push_back(id);
-    
+  user->_orders.push_back(id);
+  project->_orders.push_back(id);
+  
   _orders[ida] = order;
 
   project->_booked_crowdfunding += amount;
+  
   _ordercnt++;
+  
   return 0;    
 }
 
@@ -522,6 +540,8 @@ int FinancialManagement::update_order_txid(long orderid, std::string project_no,
   if(ret != 0)
     return ret;
 
+  _remotedb->update_order_status(orderid, ORDER_STATUS_PAYED_AUDITING);
+  
   order->_payment_txid = txid;
   order->_status = ORDER_STATUS_PAYED_AUDITING;
   order->_investment_return_addr = investment_return_addr;
@@ -735,7 +755,7 @@ void FinancialManagement::start()
     return;
   started = true;
     
-  volatile bool alive = true;
+  static volatile bool alive = true;
   std::thread thrd(&FinancialManagement::run, this, &alive);
   thrd.detach();
 }
@@ -820,10 +840,16 @@ bool FinancialManagement::load()
 	    _orders[a->_id%maxcnt] = a;
 	    auto user = _users[a->_user_id%maxcnt];
 	    if(user && user->_id == a->_user_id)
-	      user->_orders.push_back(a->_id);
+	      {
+		user->_orders.push_back(a->_id);
+		a->_user_publickey = user->_publickey;
+	      }
 	    auto project = _projects[a->_project_id%maxcnt];
 	    if(project && project->_id == a->_project_id)
-	      project->_orders.push_back(a->_id);
+	      {
+		project->_orders.push_back(a->_id);
+		a->_project_no = project->_no;
+	      }
 	    last = a;
 	  }
       }
@@ -834,23 +860,153 @@ bool FinancialManagement::load()
 	_orders[a->_id%maxcnt] = a;
 	auto user = _users[a->_user_id%maxcnt];
 	if(user && user->_id == a->_user_id)
-	  user->_orders.push_back(a->_id);
+	  {
+	    user->_orders.push_back(a->_id);
+	    a->_user_publickey = user->_publickey;
+	  }
 	auto project = _projects[a->_project_id%maxcnt];
 	if(project && project->_id == a->_project_id)
-	  project->_orders.push_back(a->_id);
+	  {
+	    project->_orders.push_back(a->_id);
+	    a->_project_no = project->_no;
+	  }
 	last = a;
       }
       
     if(last)
       _ordercnt = last->_id+1;
   }
+
+  LOG(INFO, "load success: %ld, %ld, %ld", _projectcnt, _ordercnt, _usercnt);
+
+  return true;
+}
+
+void FinancialManagement::start_server()
+{
+  std::thread thrd(&FinancialManagement::server_proc, this, &_qreq, &_qrsp);
+  thrd.detach();
+}
+
+void FinancialManagement::server_proc(utils::Queue<std::string>* qreq, utils::Queue<std::string>* qrsp)
+{
+  struct sockaddr_in server_addr;
+  bzero(&server_addr,sizeof(server_addr)); 
+  server_addr.sin_family = AF_INET;
+  server_addr.sin_addr.s_addr = htons(INADDR_ANY);
+  server_addr.sin_port = htons(60001);
+ 
+  int server_socket = socket(PF_INET,SOCK_STREAM,0);
+  if( server_socket < 0)
+    {
+      printf("Create Socket Failed!");
+      exit(1);
+    }
     
+  { 
+    int opt =1;
+    setsockopt(server_socket,SOL_SOCKET,SO_REUSEADDR,&opt,sizeof(opt));
+  }
+     
+  if(bind(server_socket,(struct sockaddr*)&server_addr,sizeof(server_addr)))
+    {
+      printf("Server Bind Port : %d Failed!", 60001); 
+      exit(1);
+    }
+ 
+  if(listen(server_socket, 20) )
+    {
+      printf("Server Listen Failed!"); 
+      exit(1);
+    }
+
+  int new_server_socket = 0;
+
+  char buffer[4096];
+  buffer[4096-1] = 0x00;
+    
+  int idx = 0;
+
+  int msgcnt = 0;
+  
+  while (1) 
+    {
+      if(new_server_socket > 0)
+	{
+	  msgcnt = 0;
+	  idx = 0;
+	  close(new_server_socket);
+	  sleep(3);
+	}
+      
+      struct sockaddr_in client_addr;
+      socklen_t length = sizeof(client_addr);
+
+      LOG(INFO, "server start accept...");
+      
+      new_server_socket = accept(server_socket,(struct sockaddr*)&client_addr,&length);
+	
+      if(new_server_socket < 0)
+	{
+	  printf("Server Accept Failed!\n");
+	  continue;
+	}
+
+      LOG(INFO, "a client is coming...");
+
+      for(;;)
+	{
+	  auto cnt = recv(new_server_socket,&buffer[idx],4096-1-idx,0);
+	  if (cnt <= 0)
+	    {
+	      printf("Server Recieve Data Failed!\n");
+	      break;
+	    }
+
+	  idx += cnt;
+
+	  char* p = buffer;
+	  buffer[idx] = 0x00;
+	
+	  while(p < &buffer[idx])
+	    {
+	      auto e = strchr(p, '\n');
+	      if(e == NULL)
+		break;
+	      *e = 0x00;
+	      qreq->push(p);
+	      msgcnt++;
+	      p = e+1;
+	    }
+
+	  int left = idx-(p-&buffer[0]);
+	  if(left > 0 && p != &buffer[0])
+	    memmove(buffer, p, left);
+	  idx = left;
+
+	  while(msgcnt > 0)
+	    {
+	      auto rsp = qrsp->pop();
+	      rsp += "\n";
+	      auto cnt = send(new_server_socket, rsp.c_str(), rsp.length(),0);
+	      if(cnt != rsp.length())
+		{
+		  LOG(WARNING, "send to client failed, will close the socket...");
+		  close(new_server_socket);
+		  break;
+		}
+	      msgcnt--;
+	    }
+	}
+    }
+    
+  close(server_socket);  
 }
 
 void FinancialManagement::handle_order_heap()
 {
   auto now = (int)uint32_t(time(NULL));
-
+  
   for(;;)
     {
       if(_order_heap.empty())
@@ -884,7 +1040,34 @@ void FinancialManagement::handle_order_heap()
       _order_heap.erase(iter);
     }
 }
+
+void FinancialManagement::watch_new_project(int now)
+{
+  static int last = 0;
+  if(now-last < 8)
+    return;
   
+  last = now;
+
+  auto cnt = _remotedb->get_projects_cnt();
+  
+  if(cnt > _projectcnt)
+    {
+      LOG(INFO, "found %ld new projects", cnt-_projectcnt);
+      
+      auto projects = _remotedb->get_projects_by_limit(_projectcnt, cnt-_projectcnt);
+      
+      for(auto project : projects)
+	{
+	  auto ret = add_project(project);
+	  if(ret != 0)
+	    LOG(WARNING, "add_project failed: %d, project_id:%ld", ret, project->_id);
+	  else
+	    LOG(INFO, "found new project... \n%s", project->to_json().c_str());
+	}
+    }
+}
+
 void FinancialManagement::run(volatile bool * alive)
 {
   _remotedb = new RemoteDB();
@@ -897,14 +1080,40 @@ void FinancialManagement::run(volatile bool * alive)
     }
   
   load();
-    
+
+  start_server();
+  
   while(*alive)
     {
+      auto now = (int)uint32_t(time(NULL));
+
+      dot("+");
+      
       handle_order_heap();
-      auto req = _qreq.pop();
+      
+      dot("-");
+      
+      watch_new_project(now);
+      
+      dot("*");
+      
+      auto req = _qreq.timed_pop();
+      if(req.empty())
+	continue;
+      
+      dot("/");
+      
+      write_file(req);
       auto rsp = handle_request(req);
+      LOG(INFO, "rsp: %s", rsp.c_str());
+      write_file(rsp);
       _qrsp.push(rsp);
+
+      dot("%");
+      
     }
+  
+  LOG(INFO, "run exit...");
 }
 
 void FinancialManagement::push_request(std::string req)
@@ -917,8 +1126,21 @@ std::string FinancialManagement::pop_response()
   return _qrsp.pop();
 }
 
+bool check_paras(const std::map<std::string, std::string> & paras, std::initializer_list<const char*> v)
+{
+  for(auto p = v.begin(); p != v.end(); p++)
+    if(0 == paras.count(*p))
+      {
+	LOG(WARNING, "check_paras failed: %s", *p);
+	return false;
+      }
+  return true;
+}
+
 std::string FinancialManagement::handle_request(std::string req)
 {
+  LOG(INFO, "into handle_request:\n%s", req.c_str());
+  
   std::string rsp;
   
   std::string command;
@@ -926,12 +1148,20 @@ std::string FinancialManagement::handle_request(std::string req)
   int msn;
 
   std::vector<std::string> v;
+
+  auto ret = extract_request(req, command, paras, msn);
+
+  if(0 != ret)
+    {
+      LOG(WARNING, "extract_request failed: %d", ret);
+      return gen_rsp(command, msn, ERROR_INVALID_JSON, v);
+    }
   
-  if(0 != extract_request(req, command, paras, msn))
-    return gen_rsp(command, msn, ERROR_INVALID_JSON, v);
-    
   if(command == "get_product_info")
     {
+      if(!check_paras(paras, {"product_no"}))
+	return gen_rsp(command, msn, ERROR_INVALID_PARAS, v);
+      
       auto a = get_project_by_no(paras["product_no"]);
       if(a)
 	v.push_back(a->to_json());
@@ -940,6 +1170,9 @@ std::string FinancialManagement::handle_request(std::string req)
     
   if(command == "get_product_list")
     {
+      if(!check_paras(paras, {"start_time", "end_time"}))
+	return gen_rsp(command, msn, ERROR_INVALID_PARAS, v);
+      
       int start = atoi(paras["start_time"].c_str());
       int end = atoi(paras["end_time"].c_str());
       std::string str;
@@ -953,29 +1186,40 @@ std::string FinancialManagement::handle_request(std::string req)
 		str += ";";
 	      str += project->_no;
 	    }
-	  v.push_back("{\"products\":\"" + str + "\"}");
 	}
+      v.push_back("{\"products\":\"" + str + "\"}");
       return gen_rsp(command, msn, 0, v);
     }
 
   if(command == "booking")
     {
+      if(!check_paras(paras, {"product_no", "user_publickey", "amount"}))
+	return gen_rsp(command, msn, ERROR_INVALID_PARAS, v);
+      
       std::map<std::string, std::string> kvs;
       kvs["project_no"] = paras["product_no"];
       kvs["user_publickey"] = paras["user_publickey"];
       kvs["booking_amount"] = paras["amount"];
       auto ret = add_order(kvs);
+      if(ret == 0)
+	v.push_back("{\"order_id\":" + kvs["id"] + "}");
       return gen_rsp(command, msn, ret, v);
     }
 
   if(command == "cancel_order")
     {
+      if(!check_paras(paras, {"product_no", "user_publickey", "order_id"}))
+	return gen_rsp(command, msn, ERROR_INVALID_PARAS, v);
+      
       auto ret = cancel_order(paras["product_no"], paras["user_publickey"], atol(paras["order_id"].c_str()));
       return gen_rsp(command, msn, ret, v);
     }
 
   if(command == "update_order_txid")
     {
+      if(!check_paras(paras, {"product_no", "user_publickey", "order_id", "txid", "investment_return_addr"}))
+	return gen_rsp(command, msn, ERROR_INVALID_PARAS, v);
+      
       auto ret = update_order_txid(
 				   atol(paras["order_id"].c_str()),
 				   paras["product_no"],
@@ -988,6 +1232,9 @@ std::string FinancialManagement::handle_request(std::string req)
 
   if(command == "order_txid_confirm")
     {
+      if(!check_paras(paras, {"order_id", "txid", "success"}))
+	return gen_rsp(command, msn, ERROR_INVALID_PARAS, v);
+      
       auto ret = order_txid_confirm(
 				    atol(paras["order_id"].c_str()),
 				    paras["txid"],
@@ -998,6 +1245,9 @@ std::string FinancialManagement::handle_request(std::string req)
 
   if(command == "payment_refund_success")
     {
+      if(!check_paras(paras, {"order_id", "txid"}))
+	return gen_rsp(command, msn, ERROR_INVALID_PARAS, v);
+      
       auto ret = payment_refund_success(
 					atol(paras["order_id"].c_str()),
 					paras["txid"]
@@ -1007,24 +1257,103 @@ std::string FinancialManagement::handle_request(std::string req)
         
   if(command == "collect")
     {
+      if(!check_paras(paras, {"user_publickey", "product_no"}))
+	return gen_rsp(command, msn, ERROR_INVALID_PARAS, v);
+      
       auto ret = collect(paras["user_publickey"], paras["product_no"]);
       return gen_rsp(command, msn, ret, v);	
     }
 
   if(command == "cancel_collection")
     {
+      if(!check_paras(paras, {"user_publickey", "product_no"}))
+	return gen_rsp(command, msn, ERROR_INVALID_PARAS, v);
+      
       auto ret = cancel_collection(paras["user_publickey"], paras["product_no"]);
       return gen_rsp(command, msn, ret, v);	
     }
     
   if(command == "get_user_collections")
     {
+      if(!check_paras(paras, {"user_publickey"}))
+	return gen_rsp(command, msn, ERROR_INVALID_PARAS, v);
+      
       std::string collections;
       auto ret = get_user_collections(paras["user_publickey"], collections);
       v.push_back("{\"collections\":\"" + collections + "\"}");
       return gen_rsp(command, msn, ret, v);	
     }
 
+  if(command == "get_order")
+    {
+      if(!check_paras(paras, {"order_id"}))
+	return gen_rsp(command, msn, ERROR_INVALID_PARAS, v);
+      auto order = get_order(atol(paras["order_id"].c_str()));
+      if(!order)
+	return gen_rsp(command, msn, ERROR_NOT_EXIST_ORDER, v);	
+      v.push_back(order->to_json());
+      return gen_rsp(command, msn, 0, v);	
+    }
+
+  if(command == "get_user")
+    {
+      if(!check_paras(paras, {"user_publickey"}))
+	return gen_rsp(command, msn, ERROR_INVALID_PARAS, v);
+      auto user = get_user_by_publickey(paras["user_publickey"]);
+      if(!user)
+	return gen_rsp(command, msn, ERROR_NOT_EXIST_USER_PUBLICKEY, v);	
+      v.push_back(user->to_json());
+      return gen_rsp(command, msn, 0, v);	
+    }
+
+  if(command == "get_orders")
+    {
+      if(!check_paras(paras, {"product_no", "user_publickey", "status", "offset", "limit"}))
+	return gen_rsp(command, msn, ERROR_INVALID_PARAS, v);
+      
+      long offset = atol(paras["offset"].c_str());
+      int limit = atoi(paras["limit"].c_str());
+      int status = atoi(paras["status"].c_str());
+      long idx = 0;
+
+      std::vector<long> * orders = NULL;
+      
+      if(paras["product_no"] == "all")
+	{
+	  auto user = get_user_by_publickey(paras["user_publickey"]);
+	  if(!user)
+	    return gen_rsp(command, msn, ERROR_NOT_EXIST_USER_PUBLICKEY, v);
+	  orders = &user->_orders;
+	}
+      if(paras["user_publickey"] == "all")
+	{
+	  auto project = get_project_by_no(paras["product_no"]);
+	  if(!project)
+	    return gen_rsp(command, msn, ERROR_NOT_EXIST_PROJECT_NO, v);
+	  orders = &project->_orders;
+	}
+      
+      if(orders == NULL)
+	return gen_rsp(command, msn, ERROR_INVALID_PARAS, v);
+      
+      for(auto a : *orders)
+	{
+	  auto order = get_order(a);
+	  if(!order)
+	    continue;
+	  if(status != 999 && order->_status != status)
+	    continue;
+	  if(idx++ < offset)
+	    continue;
+	  v.push_back(order->to_json());
+	  limit--;
+	  if(limit <= 0)
+	    break;
+	}
+      
+      return gen_rsp(command, msn, 0, v);
+    }
+  
   return gen_rsp(command, msn, ERROR_INVALID_COMMAND, v);
 }
 
@@ -1032,8 +1361,19 @@ std::string FinancialManagement::handle_request(std::string req)
 const char* query(const char* req)
 {
   static FinancialManagement a;
-  a.start();
+  
+  static bool first = true;
+  if(first)
+    {
+      first = false;
+      Config::instance()->parse("./config");
+      a.start();
+    }
+
+  static std::string rsp;
+  
   a.push_request(req);
-  auto rsp = a.pop_response();
+  rsp = a.pop_response();
+  
   return rsp.c_str();
 }

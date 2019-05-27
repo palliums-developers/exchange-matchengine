@@ -51,6 +51,7 @@ enum
 
     ERROR_INVALID_JSON = 3601,
     ERROR_INVALID_COMMAND = 3602,
+    ERROR_INVALID_PARAS = 3603,
     
   };
 
@@ -92,18 +93,13 @@ class RemoteDB;
 
 struct Project
 {
-  static std::shared_ptr<Project> create(std::map<std::string, std::string> & kvs)
-  {
-    std::shared_ptr<Project> o;
-    auto ret = create(kvs, o);
-    return o;
-  }
-  
-  static int create(std::map<std::string, std::string> & kvs, std::shared_ptr<Project> & o);
+  static std::shared_ptr<Project> create(std::map<std::string, std::string> & kvs);
 
   std::map<std::string, std::string> to_map();
   
   std::string to_json();
+
+  int check_valid();
   
   long         _id;
   std::string  _no;
@@ -128,18 +124,13 @@ struct Project
 
 struct Order
 {
-  static std::shared_ptr<Order> create(std::map<std::string, std::string> & kvs)
-  {
-    std::shared_ptr<Order> o;
-    auto ret = create(kvs, o);
-    return o;
-  }
+  static std::shared_ptr<Order> create(std::map<std::string, std::string> & kvs);
   
-  static int create(std::map<std::string, std::string> & kvs, std::shared_ptr<Order> & o);
-
   std::map<std::string, std::string> to_map();
 
   std::string to_json();
+  
+  int check_valid();
   
   long        _id;
   long        _project_id = -1;
@@ -150,23 +141,21 @@ struct Order
   int         _payment_timestamp = 0;
   std::string _investment_return_addr;
   double      _accumulated_gain = 0;
-  int         _status = 0;  
+  int         _status = 0;
+
+  std::string _project_no;
+  std::string _user_publickey;
 };
 
 struct User
 {
-  static std::shared_ptr<User> create(std::map<std::string, std::string> & kvs)
-  {
-    std::shared_ptr<User> o;
-    auto ret = create(kvs, o);
-    return o;
-  }
+  static std::shared_ptr<User> create(std::map<std::string, std::string> & kvs);
   
-  static int create(std::map<std::string, std::string> & kvs, std::shared_ptr<User> & o);
-
   std::map<std::string, std::string> to_map();
 
   std::string to_json();
+
+  int check_valid();
   
   long        _id;
   std::string _publickey;
@@ -185,7 +174,7 @@ struct FinancialManagement
     _orders.resize(maxcnt);
   }
   
-  int add_project(std::map<std::string, std::string> & kvs);
+  int add_project(std::shared_ptr<Project> project);
   int add_user(std::string publickey);
   int add_order(std::map<std::string, std::string> & kvs);
   
@@ -209,7 +198,11 @@ struct FinancialManagement
   void start();
   bool load();
   
+  void start_server();
+  void server_proc(utils::Queue<std::string>* qreq, utils::Queue<std::string>* qrsp);
+  
   void handle_order_heap();
+  void watch_new_project(int);
   
   void run(volatile bool * alive);
   

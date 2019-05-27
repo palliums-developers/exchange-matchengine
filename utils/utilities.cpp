@@ -18,6 +18,9 @@
 #include <time.h>
 #include <sys/time.h>
 #include <cctype>
+#include <chrono>
+
+using namespace std::chrono_literals;
 
 #include "utilities.h"
 
@@ -95,7 +98,7 @@ void log2(int level, const char* file, int line, const char* func, const char *f
   std::string task = blue_text("match-engine");
   
   char str[512];
-  sprintf(str, "%s %s %s:%d %s %s\n", timestamp_2_string(now).c_str(), lvlstr.c_str(), file, line, func, task.c_str());
+  sprintf(str, "\n%s %s %s:%d %s %s\n", timestamp_2_string(now).c_str(), lvlstr.c_str(), file, line, func, task.c_str());
   printf("%s", str);
   
   va_list args;
@@ -258,13 +261,13 @@ std::vector<std::string> json_split(std::string str)
 	continue;
 
       if(i > s)
-	v.push_back(trim_quote(str.substr(s, i-s)));
+	v.push_back(str.substr(s, i-s));
 
       s = i+1;
     }
 
   if(i > s)
-    v.push_back(trim_quote(str.substr(s, i-s)));
+    v.push_back(str.substr(s, i-s));
   
   if(inquote || brackets > 0)
     {
