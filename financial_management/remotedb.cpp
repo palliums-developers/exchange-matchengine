@@ -241,10 +241,24 @@ int RemoteDB::update_order_status(long orderid, int status)
   return do_query(query, NULL);
 }
 
-int RemoteDB::update_order_txid(long orderid, std::string txid, std::string investment_return_addr)
+int RemoteDB::update_project_status(long projectid, int status)
 {
   char query[1024];
-  snprintf(query, sizeof(query), "UPDATE financial_management_orders SET payment_txid='%s', investment_return_addr='%s' WHERE id=%ld", txid.c_str(), investment_return_addr.c_str(), orderid);
+  snprintf(query, sizeof(query), "UPDATE financial_management_projects SET status=%d WHERE id=%ld", status, projectid);
+  return do_query(query, NULL);
+}
+
+int RemoteDB::update_order_txid(long orderid, std::string txid, std::string investment_return_addr, int payment_timestamp)
+{
+  char query[1024];
+  snprintf(query, sizeof(query), "UPDATE financial_management_orders SET payment_txid='%s', investment_return_addr='%s', payment_timestamp=%d WHERE id=%ld", txid.c_str(), investment_return_addr.c_str(), payment_timestamp, orderid);
+  return do_query(query, NULL);
+}
+
+int RemoteDB::update_order_confirm_timestamp(long orderid, int now)
+{
+  char query[1024];
+  snprintf(query, sizeof(query), "UPDATE financial_management_orders SET audited_timestamp=%d WHERE id=%ld", now, orderid);
   return do_query(query, NULL);
 }
 

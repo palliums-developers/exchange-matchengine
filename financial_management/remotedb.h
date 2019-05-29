@@ -40,7 +40,10 @@ struct RemoteDB
   std::vector<std::shared_ptr<Order>>   get_orders_by_limit(long start, long cnt);
 
   int update_order_status(long orderid, int status);
-  int update_order_txid(long orderid, std::string txid, std::string investment_return_addr);
+  int update_order_txid(long orderid, std::string txid, std::string investment_return_addr, int payment_timestamp);
+  int update_order_confirm_timestamp(long orderid, int now);
+  int update_project_status(long projectid, int status);
+  
   int update_collections(long userid, std::string collections);
   
 private:

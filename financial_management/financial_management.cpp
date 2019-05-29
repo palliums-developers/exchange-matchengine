@@ -267,6 +267,7 @@ std::map<std::string, std::string> Order::to_map()
   v["booking_amount"] = std::to_string(_booking_amount);
   v["payment_txid"] = _payment_txid;
   v["payment_timestamp"] = std::to_string(_payment_timestamp);
+  v["audited_timestamp"] = std::to_string(_audited_timestamp);
   v["investment_return_addr"] = _investment_return_addr;
   v["accumulated_gain"] = std::to_string(_accumulated_gain);
   v["status"] = std::to_string(_status);
@@ -283,6 +284,7 @@ std::string Order::to_json()
   str += json("booking_amount", _booking_amount, false);
   str += json("payment_txid", _payment_txid, false);
   str += json("payment_timestamp", _payment_timestamp, false);
+  str += json("audited_timestamp", _audited_timestamp, false);
   str += json("investment_return_addr", _investment_return_addr, false);
   str += json("accumulated_gain", _accumulated_gain, false);
   str += json("project_no", _project_no, false);
@@ -522,7 +524,7 @@ int FinancialManagement::cancel_order(std::string project_no, std::string public
   return 0;
 }
 
-int FinancialManagement::update_order_txid(long orderid, std::string project_no, std::string publickey, std::string txid, std::string investment_return_addr)
+int FinancialManagement::update_order_txid(long orderid, std::string project_no, std::string publickey, std::string txid, std::string investment_return_addr, int payment_timestamp)
 {
   auto order = get_order(orderid);
     
@@ -536,7 +538,7 @@ int FinancialManagement::update_order_txid(long orderid, std::string project_no,
   if(order->_status != ORDER_STATUS_BOOKING_SUCCESS)
     return ERROR_DUPLICATE_SET_TXID;
     
-  ret = _remotedb->update_order_txid(orderid, txid, investment_return_addr);
+  ret = _remotedb->update_order_txid(orderid, txid, investment_return_addr, payment_timestamp);
   if(ret != 0)
     return ret;
 
@@ -545,7 +547,7 @@ int FinancialManagement::update_order_txid(long orderid, std::string project_no,
   order->_payment_txid = txid;
   order->_status = ORDER_STATUS_PAYED_AUDITING;
   order->_investment_return_addr = investment_return_addr;
-    
+  order->_payment_timestamp = payment_timestamp;
   return 0;
 }
 
@@ -569,9 +571,11 @@ int FinancialManagement::order_txid_confirm(long orderid, std::string txid, std:
 
   auto status = order->_status;
 
+  auto now = (int)uint32_t(time(NULL));
+  order->_audited_timestamp = now;
+  
   if(success == "true")
     {
-      auto now = (int)uint32_t(time(NULL));
       if((now - order->_booking_timestamp) > 7200)
 	status = ORDER_STATUS_AUDIT_SUCCESS_TOO_LATE;
       else
@@ -589,6 +593,8 @@ int FinancialManagement::order_txid_confirm(long orderid, std::string txid, std:
   if(ret != 0)
     return ret;
 
+  _remotedb->update_order_confirm_timestamp(orderid, now);
+  
   order->_status = status;
   return 0;
 }
@@ -882,10 +888,51 @@ bool FinancialManagement::load()
   return true;
 }
 
+volatile bool client_connected = false;
+volatile int new_server_socket = 0;
+
 void FinancialManagement::start_server()
 {
   std::thread thrd(&FinancialManagement::server_proc, this, &_qreq, &_qrsp);
   thrd.detach();
+
+  std::thread thrdsend([this]{
+      
+      std::string lastfailrsp;
+      
+      for(;;)
+	{
+	  dot("*");
+	  
+	  std::string rsp;
+	  
+	  if(lastfailrsp.empty())
+	    rsp = _qrsp.pop() + "\n";
+	  else
+	    rsp = lastfailrsp;
+	  
+	  while(!client_connected)
+	    sleep(1);
+	  
+	  auto cnt = send(new_server_socket, rsp.c_str(), rsp.length(),0);
+	  
+	  if(cnt != rsp.length())
+	    {
+	      client_connected = false;
+	      close(new_server_socket);
+	      lastfailrsp = rsp;
+	      LOG(WARNING, "send to client failed, will close the socket...");
+	      continue;
+	    }
+
+	  lastfailrsp.clear();
+	    
+	  while(!client_connected)
+	    sleep(1);
+	}
+    });
+  
+  thrdsend.detach();
 }
 
 void FinancialManagement::server_proc(utils::Queue<std::string>* qreq, utils::Queue<std::string>* qrsp)
@@ -920,24 +967,17 @@ void FinancialManagement::server_proc(utils::Queue<std::string>* qreq, utils::Qu
       exit(1);
     }
 
-  int new_server_socket = 0;
-
-  char buffer[4096];
-  buffer[4096-1] = 0x00;
+  static const int buflen = 8192;
+  char buffer[buflen];
+  buffer[buflen-1] = 0x00;
     
   int idx = 0;
 
-  int msgcnt = 0;
-  
   while (1) 
     {
-      if(new_server_socket > 0)
-	{
-	  msgcnt = 0;
-	  idx = 0;
-	  close(new_server_socket);
-	  sleep(3);
-	}
+      sleep(1);
+
+      idx = 0;
       
       struct sockaddr_in client_addr;
       socklen_t length = sizeof(client_addr);
@@ -946,20 +986,25 @@ void FinancialManagement::server_proc(utils::Queue<std::string>* qreq, utils::Qu
       
       new_server_socket = accept(server_socket,(struct sockaddr*)&client_addr,&length);
 	
-      if(new_server_socket < 0)
+      if(new_server_socket <= 0)
 	{
-	  printf("Server Accept Failed!\n");
+	  LOG(WARNING, "Server Accept Failed %d!\n", new_server_socket);
 	  continue;
 	}
 
+      client_connected = true;
+      
       LOG(INFO, "a client is coming...");
 
       for(;;)
 	{
-	  auto cnt = recv(new_server_socket,&buffer[idx],4096-1-idx,0);
+	  dot("+");
+	  auto cnt = recv(new_server_socket,&buffer[idx],buflen-1-idx,0);
 	  if (cnt <= 0)
 	    {
-	      printf("Server Recieve Data Failed!\n");
+	      client_connected = false;
+	      close(new_server_socket);
+	      LOG(WARNING, "Server Recieve Data Failed!\n");
 	      break;
 	    }
 
@@ -975,7 +1020,6 @@ void FinancialManagement::server_proc(utils::Queue<std::string>* qreq, utils::Qu
 		break;
 	      *e = 0x00;
 	      qreq->push(p);
-	      msgcnt++;
 	      p = e+1;
 	    }
 
@@ -983,32 +1027,22 @@ void FinancialManagement::server_proc(utils::Queue<std::string>* qreq, utils::Qu
 	  if(left > 0 && p != &buffer[0])
 	    memmove(buffer, p, left);
 	  idx = left;
-
-	  while(msgcnt > 0)
-	    {
-	      auto rsp = qrsp->pop();
-	      rsp += "\n";
-	      auto cnt = send(new_server_socket, rsp.c_str(), rsp.length(),0);
-	      if(cnt != rsp.length())
-		{
-		  LOG(WARNING, "send to client failed, will close the socket...");
-		  close(new_server_socket);
-		  break;
-		}
-	      msgcnt--;
-	    }
 	}
     }
     
   close(server_socket);  
 }
 
-void FinancialManagement::handle_order_heap()
+#define TIMER(n) do{ static int last = 0; if(now-last < (n)) return; last = now; } while(0)
+
+void FinancialManagement::handle_order_heap(int now)
 {
-  auto now = (int)uint32_t(time(NULL));
+  TIMER(1);
   
   for(;;)
     {
+      dot("-");
+      
       if(_order_heap.empty())
 	break;
 	
@@ -1041,14 +1075,40 @@ void FinancialManagement::handle_order_heap()
     }
 }
 
+void FinancialManagement::update_project_status(int now)
+{
+  TIMER(8);
+  
+  for(long i=_projectcnt-1; i>=0; --i)
+    {
+      auto project = _projects[i%maxcnt];
+      if(!project)
+	break;
+      
+      auto oldstatus = project->_status;
+      
+      if(project->_status == PROJECT_STATUS_NOT_OPENED)
+	{
+	  if(now > project->_booking_starting_time)
+	    project->_status = PROJECT_STATUS_CROWDFUNDING;
+	}
+      else if(project->_status == PROJECT_STATUS_CROWDFUNDING)
+	{
+	  if(now > project->_crowdfunding_ending_time)
+	    project->_status = PROJECT_STATUS_CROWDFUND_FAILURE;
+	  if(project->_received_crowdfunding >= project->_total_crowdfunding_amount)
+	    project->_status = PROJECT_STATUS_CROWDFUND_SUCCESS;
+	}
+      
+      if(oldstatus != project->_status)
+	_remotedb->update_project_status(project->_id, project->_status);
+    }
+}
+
 void FinancialManagement::watch_new_project(int now)
 {
-  static int last = 0;
-  if(now-last < 8)
-    return;
+  TIMER(8);
   
-  last = now;
-
   auto cnt = _remotedb->get_projects_cnt();
   
   if(cnt > _projectcnt)
@@ -1074,6 +1134,7 @@ void FinancialManagement::run(volatile bool * alive)
   
   for(;;)
     {
+      dot("%");
       if(_remotedb->connect())
 	break;
       sleep(3);
@@ -1087,30 +1148,21 @@ void FinancialManagement::run(volatile bool * alive)
     {
       auto now = (int)uint32_t(time(NULL));
 
-      dot("+");
+      dot(".");
       
-      handle_order_heap();
-      
-      dot("-");
-      
+      handle_order_heap(now);
       watch_new_project(now);
-      
-      dot("*");
+      update_project_status(now);
       
       auto req = _qreq.timed_pop();
       if(req.empty())
 	continue;
-      
-      dot("/");
       
       write_file(req);
       auto rsp = handle_request(req);
       LOG(INFO, "rsp: %s", rsp.c_str());
       write_file(rsp);
       _qrsp.push(rsp);
-
-      dot("%");
-      
     }
   
   LOG(INFO, "run exit...");
@@ -1135,6 +1187,29 @@ bool check_paras(const std::map<std::string, std::string> & paras, std::initiali
 	return false;
       }
   return true;
+}
+
+bool status_match(int status1, int status2)
+{
+  if(status1 == 0)
+    {
+      if(status2 == ORDER_STATUS_BOOKING_SUCCESS) return true;
+      if(status2 == ORDER_STATUS_PAYED_AUDITING) return true;
+    }
+  if(status1 == 1)
+    {
+      if(status2 == ORDER_STATUS_AUDIT_SUCCESS) return true;
+    }
+  if(status1 == 2)
+    {
+      if(status2 == ORDER_STATUS_AUDIT_FAILURE) return true;
+      if(status2 == ORDER_STATUS_CANCELED) return true;
+      if(status2 == ORDER_STATUS_PAYMENT_REFUNDED) return true;
+      if(status2 == ORDER_STATUS_AUDIT_SUCCESS_TOO_LATE) return true;
+      if(status2 == ORDER_STATUS_AUDIT_TIMEOUT) return true;
+      if(status2 == ORDER_STATUS_BOOKING_TIMEOUT) return true;
+    }
+  return false;
 }
 
 std::string FinancialManagement::handle_request(std::string req)
@@ -1217,7 +1292,7 @@ std::string FinancialManagement::handle_request(std::string req)
 
   if(command == "update_order_txid")
     {
-      if(!check_paras(paras, {"product_no", "user_publickey", "order_id", "txid", "investment_return_addr"}))
+      if(!check_paras(paras, {"product_no", "user_publickey", "order_id", "txid", "investment_return_addr", "payment_timestamp"}))
 	return gen_rsp(command, msn, ERROR_INVALID_PARAS, v);
       
       auto ret = update_order_txid(
@@ -1225,7 +1300,8 @@ std::string FinancialManagement::handle_request(std::string req)
 				   paras["product_no"],
 				   paras["user_publickey"],
 				   paras["txid"],
-				   paras["investment_return_addr"]
+				   paras["investment_return_addr"],
+				   atoi(paras["payment_timestamp"].c_str())
 				   );
       return gen_rsp(command, msn, ret, v);
     }
@@ -1316,6 +1392,9 @@ std::string FinancialManagement::handle_request(std::string req)
       int status = atoi(paras["status"].c_str());
       long idx = 0;
 
+      if(!paras["user_publickey"].empty() && paras["user_publickey"] != "all")
+	add_user(paras["user_publickey"]);
+      
       std::vector<long> * orders = NULL;
       
       if(paras["product_no"] == "all")
@@ -1341,7 +1420,7 @@ std::string FinancialManagement::handle_request(std::string req)
 	  auto order = get_order(a);
 	  if(!order)
 	    continue;
-	  if(status != 999 && order->_status != status)
+	  if(status != 999 && !status_match(status, order->_status))
 	    continue;
 	  if(idx++ < offset)
 	    continue;
@@ -1360,20 +1439,23 @@ std::string FinancialManagement::handle_request(std::string req)
 
 const char* query(const char* req)
 {
-  static FinancialManagement a;
+  //a.push_request(req);
+  //return "";
   
-  static bool first = true;
-  if(first)
-    {
-      first = false;
-      Config::instance()->parse("./config");
-      a.start();
-    }
+  // static FinancialManagement a;
+  
+  // static bool first = true;
+  // if(first)
+  //   {
+  //     first = false;
+  //     Config::instance()->parse("./config");
+  //     a.start();
+  //   }
 
-  static std::string rsp;
+  // static std::string rsp;
   
-  a.push_request(req);
-  rsp = a.pop_response();
+  // a.push_request(req);
+  // rsp = a.pop_response();
   
-  return rsp.c_str();
+  // return rsp.c_str();
 }

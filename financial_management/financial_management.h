@@ -139,6 +139,7 @@ struct Order
   double      _booking_amount = 0;
   std::string _payment_txid;
   int         _payment_timestamp = 0;
+  int         _audited_timestamp = 0;
   std::string _investment_return_addr;
   double      _accumulated_gain = 0;
   int         _status = 0;
@@ -180,7 +181,7 @@ struct FinancialManagement
   
   int check_order(std::shared_ptr<Order> order, std::string project_no, std::string publickey);
   int cancel_order(std::string project_no, std::string publickey, long orderid);
-  int update_order_txid(long orderid, std::string project_no, std::string publickey, std::string txid, std::string investment_return_addr);
+  int update_order_txid(long orderid, std::string project_no, std::string publickey, std::string txid, std::string investment_return_addr, int payment_timestamp);
   int order_txid_confirm(long orderid, std::string txid, std::string success);
   int payment_refund_success(long orderid, std::string txid);
   
@@ -201,8 +202,9 @@ struct FinancialManagement
   void start_server();
   void server_proc(utils::Queue<std::string>* qreq, utils::Queue<std::string>* qrsp);
   
-  void handle_order_heap();
+  void handle_order_heap(int);
   void watch_new_project(int);
+  void update_project_status(int);
   
   void run(volatile bool * alive);
   
