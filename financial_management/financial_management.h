@@ -219,6 +219,8 @@ private:
   
   RemoteDB* _remotedb;
   
+  //std::unordered_map<std::string, long> _cache_project_no2id;
+  //std::unordered_map<std::string, long> _cache_user_publickey2id;
   std::unordered_map<std::string, long> _cache_project_no2id;
   std::unordered_map<std::string, long> _cache_user_publickey2id;
 
