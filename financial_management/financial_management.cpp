@@ -12,6 +12,7 @@
 #include <atomic>
 #include <condition_variable>
 #include <initializer_list>
+#include <memory>
 
 #include <unistd.h>
 #include <stdarg.h>
@@ -20,6 +21,8 @@
 #include <sys/time.h>
 #include <chrono>
 #include <unordered_map>
+
+#include <assert.h>
 
 using namespace std::chrono_literals;
 
@@ -37,6 +40,8 @@ using namespace std::chrono_literals;
 
 #include "remotedb.h"
 #include "financial_management.h"
+
+const char * linesplit = "@#$";
 
 void write_file(const std::string & str)
 {
@@ -464,6 +469,8 @@ int FinancialManagement::add_order(std::map<std::string, std::string> & kvs)
 
   project->_booked_crowdfunding += amount;
   
+  _order_txid_timeout_heap.emplace(order->_booking_timestamp, order);
+  
   _ordercnt++;
   
   return 0;    
@@ -549,6 +556,15 @@ int FinancialManagement::update_order_txid(long orderid, std::string project_no,
   order->_status = ORDER_STATUS_PAYED_AUDITING;
   order->_investment_return_addr = investment_return_addr;
   order->_payment_timestamp = payment_timestamp;
+
+  _order_confirm_timeout_heap.emplace(order->_booking_timestamp, order);
+
+  //lmf test
+  //if(orderid % 2 == 0)
+    {
+      order_txid_confirm(orderid, txid, "true");
+    }
+  
   return 0;
 }
 
@@ -767,6 +783,16 @@ void FinancialManagement::start()
   thrd.detach();
 }
 
+void FinancialManagement::update_order_status(std::shared_ptr<Order> order)
+{
+  if(!order)
+    return;
+  if(order->_status == ORDER_STATUS_BOOKING_SUCCESS)
+    _order_txid_timeout_heap.emplace(order->_booking_timestamp, order);
+  if(order->_status == ORDER_STATUS_PAYED_AUDITING)
+    _order_confirm_timeout_heap.emplace(order->_booking_timestamp, order);
+}
+
 bool FinancialManagement::load()
 {
   long onetime_to_load = 1000;
@@ -857,6 +883,7 @@ bool FinancialManagement::load()
 		project->_orders.push_back(a->_id);
 		a->_project_no = project->_no;
 	      }
+	    update_order_status(a);
 	    last = a;
 	  }
       }
@@ -877,6 +904,7 @@ bool FinancialManagement::load()
 	    project->_orders.push_back(a->_id);
 	    a->_project_no = project->_no;
 	  }
+	update_order_status(a);
 	last = a;
       }
       
@@ -889,149 +917,56 @@ bool FinancialManagement::load()
   return true;
 }
 
-volatile bool client_connected = false;
-volatile int new_server_socket = 0;
-
-void FinancialManagement::start_server()
+void FinancialManagement::start_epoll_server()
 {
-  std::thread thrd(&FinancialManagement::server_proc, this, &_qreq, &_qrsp);
+  std::thread thrd([this]{
+
+      auto qreqmsg = &_qreqmsg;
+      
+      auto creater = [&](int fd)
+	{
+	  LOG(INFO, "a client %d is comming....", fd);
+	  auto client = std::make_shared<Client>(fd);
+	  client->set_qmsg(qreqmsg);
+	  return client;
+	};
+      
+      SocketHelper::epoll_loop(60001, 1024, creater);
+
+      LOG(WARNING, "epoll loop exited!!!");
+      
+    });
+  
   thrd.detach();
 
   std::thread thrdsend([this]{
-      
-      std::string lastfailrsp;
       
       for(;;)
 	{
 	  dot("*");
 	  
-	  std::string rsp;
+	  auto msg = _qrspmsg.pop();
+	  auto rsp = msg->data() + linesplit;
+	  auto fd = msg->client()->get_fd();
+
+	  if(fd <= 0)
+	    continue;
+	  if(msg->client()->send_closed())
+	    continue;
 	  
-	  if(lastfailrsp.empty())
-	    rsp = _qrsp.pop() + "\n";
-	  else
-	    rsp = lastfailrsp;
-	  
-	  while(!client_connected)
-	    sleep(1);
-	  
-	  auto cnt = send(new_server_socket, rsp.c_str(), rsp.length(),0);
+	  auto cnt = send(fd, rsp.c_str(), rsp.length(),0);
 	  
 	  if(cnt != rsp.length())
 	    {
-	      client_connected = false;
-	      close(new_server_socket);
-	      lastfailrsp = rsp;
+	      close(fd);
+	      msg->client()->set_send_closed();
 	      LOG(WARNING, "send to client failed, will close the socket...");
 	      continue;
 	    }
-
-	  lastfailrsp.clear();
-	    
-	  while(!client_connected)
-	    sleep(1);
 	}
     });
   
-  thrdsend.detach();
-}
-
-void FinancialManagement::server_proc(utils::Queue<std::string>* qreq, utils::Queue<std::string>* qrsp)
-{
-  struct sockaddr_in server_addr;
-  bzero(&server_addr,sizeof(server_addr)); 
-  server_addr.sin_family = AF_INET;
-  server_addr.sin_addr.s_addr = htons(INADDR_ANY);
-  server_addr.sin_port = htons(60001);
- 
-  int server_socket = socket(PF_INET,SOCK_STREAM,0);
-  if( server_socket < 0)
-    {
-      printf("Create Socket Failed!");
-      exit(1);
-    }
-    
-  { 
-    int opt =1;
-    setsockopt(server_socket,SOL_SOCKET,SO_REUSEADDR,&opt,sizeof(opt));
-  }
-     
-  if(bind(server_socket,(struct sockaddr*)&server_addr,sizeof(server_addr)))
-    {
-      printf("Server Bind Port : %d Failed!", 60001); 
-      exit(1);
-    }
- 
-  if(listen(server_socket, 20) )
-    {
-      printf("Server Listen Failed!"); 
-      exit(1);
-    }
-
-  static const int buflen = 8192;
-  char buffer[buflen];
-  buffer[buflen-1] = 0x00;
-    
-  int idx = 0;
-
-  while (1) 
-    {
-      sleep(1);
-
-      idx = 0;
-      
-      struct sockaddr_in client_addr;
-      socklen_t length = sizeof(client_addr);
-
-      LOG(INFO, "server start accept...");
-      
-      new_server_socket = accept(server_socket,(struct sockaddr*)&client_addr,&length);
-	
-      if(new_server_socket <= 0)
-	{
-	  LOG(WARNING, "Server Accept Failed %d!\n", new_server_socket);
-	  continue;
-	}
-
-      client_connected = true;
-      
-      LOG(INFO, "a client is coming...");
-
-      for(;;)
-	{
-	  dot("+");
-	  auto cnt = recv(new_server_socket,&buffer[idx],buflen-1-idx,0);
-	  if (cnt <= 0)
-	    {
-	      client_connected = false;
-	      close(new_server_socket);
-	      LOG(WARNING, "Server Recieve Data Failed!\n");
-	      break;
-	    }
-
-	  idx += cnt;
-
-	  char* p = buffer;
-	  buffer[idx] = 0x00;
-	
-	  while(p < &buffer[idx])
-	    {
-	      auto e = strchr(p, '\n');
-	      if(e == NULL)
-		break;
-	      *e = 0x00;
-	      qreq->push(p);
-	      p = e+1;
-	    }
-
-	  int left = idx-(p-&buffer[0]);
-	  if(left > 0 && p != &buffer[0])
-	    memmove(buffer, p, left);
-	  idx = left;
-	}
-    }
-    
-  close(server_socket);  
+  thrdsend.detach();  
 }
 
 #define TIMER(n) do{ static int last = 0; if(now-last < (n)) return; last = now; } while(0)
@@ -1039,41 +974,77 @@ void FinancialManagement::server_proc(utils::Queue<std::string>* qreq, utils::Qu
 void FinancialManagement::handle_order_heap(int now)
 {
   TIMER(1);
+
+  dot("-");
+  
+  std::multimap<int, std::shared_ptr<Order>> * heap;
+
+  heap = &_order_txid_timeout_heap;
   
   for(;;)
     {
-      dot("-");
-      
-      if(_order_heap.empty())
+      if(heap->empty())
 	break;
 	
-      auto iter = _order_heap.begin();
+      auto iter = heap->begin();
       auto order = iter->second;
       auto booktime = order->_booking_timestamp;
 	
-      bool waiting = (order->_status == ORDER_STATUS_BOOKING_SUCCESS || order->_status == ORDER_STATUS_PAYED_AUDITING);
+      bool waiting = (order->_status == ORDER_STATUS_BOOKING_SUCCESS);
       auto timepassed = now - booktime;
 	
       if(!waiting)
 	{
-	  _order_heap.erase(iter);
+	  heap->erase(iter);
+	  continue;
+	}
+	
+      if(timepassed < 1800)
+	break;
+
+      order->_status = ORDER_STATUS_BOOKING_TIMEOUT;
+      _remotedb->update_order_status(order->_id, ORDER_STATUS_BOOKING_TIMEOUT);
+      
+      auto project = get_project(order->_project_id);
+      if(project)
+	project->_booked_crowdfunding -= order->_booking_amount;
+      
+      heap->erase(iter);
+    }
+
+  heap = &_order_confirm_timeout_heap;
+  
+  for(;;)
+    {
+      if(heap->empty())
+	break;
+	
+      auto iter = heap->begin();
+      auto order = iter->second;
+      auto booktime = order->_booking_timestamp;
+	
+      bool waiting = (order->_status == ORDER_STATUS_PAYED_AUDITING);
+      auto timepassed = now - booktime;
+	
+      if(!waiting)
+	{
+	  heap->erase(iter);
 	  continue;
 	}
 	
       if(timepassed < 7200)
 	break;
-	
-      if(order->_status == ORDER_STATUS_BOOKING_SUCCESS)
-	order->_status = ORDER_STATUS_BOOKING_TIMEOUT;
-      if(order->_status == ORDER_STATUS_PAYED_AUDITING)
-	order->_status = ORDER_STATUS_AUDIT_TIMEOUT;
+
+      order->_status = ORDER_STATUS_AUDIT_TIMEOUT;
+      _remotedb->update_order_status(order->_id, ORDER_STATUS_AUDIT_TIMEOUT);
 	
       auto project = get_project(order->_project_id);
       if(project)
 	project->_booked_crowdfunding -= order->_booking_amount;
 	
-      _order_heap.erase(iter);
+      heap->erase(iter);
     }
+  
 }
 
 void FinancialManagement::update_project_status(int now)
@@ -1143,7 +1114,7 @@ void FinancialManagement::run(volatile bool * alive)
   
   load();
 
-  start_server();
+  start_epoll_server();
   
   while(*alive)
     {
@@ -1154,16 +1125,30 @@ void FinancialManagement::run(volatile bool * alive)
       handle_order_heap(now);
       watch_new_project(now);
       update_project_status(now);
-      
-      auto req = _qreq.timed_pop();
-      if(req.empty())
+
+      auto msg = _qreqmsg.timed_pop();
+      if(!msg)
 	continue;
+
+      auto req = msg->data();
       
       write_file(req);
       auto rsp = handle_request(req);
       LOG(INFO, "rsp: %s", rsp.c_str());
       write_file(rsp);
-      _qrsp.push(rsp);
+
+      msg->set_data(rsp);
+      _qrspmsg.push(msg);
+      
+      // auto req = _qreq.timed_pop();
+      // if(req.empty())
+      // 	continue;
+
+      // write_file(req);
+      // auto rsp = handle_request(req);
+      // LOG(INFO, "rsp: %s", rsp.c_str());
+      // write_file(rsp);
+      // _qrsp.push(rsp);
     }
   
   LOG(INFO, "run exit...");
@@ -1460,3 +1445,150 @@ const char* query(const char* req)
   
   // return rsp.c_str();
 }
+
+
+// volatile bool client_connected = false;
+// volatile int new_server_socket = 0;
+
+// void FinancialManagement::start_server()
+// {
+//   std::thread thrd(&FinancialManagement::server_proc, this, &_qreq, &_qrsp);
+//   thrd.detach();
+
+//   std::thread thrdsend([this]{
+      
+//       std::string lastfailrsp;
+      
+//       for(;;)
+// 	{
+// 	  dot("*");
+	  
+// 	  std::string rsp;
+	  
+// 	  if(lastfailrsp.empty())
+// 	    rsp = _qrsp.pop() + linesplit;
+// 	  else
+// 	    rsp = lastfailrsp;
+	  
+// 	  while(!client_connected)
+// 	    sleep(1);
+	  
+// 	  auto cnt = send(new_server_socket, rsp.c_str(), rsp.length(),0);
+	  
+// 	  if(cnt != rsp.length())
+// 	    {
+// 	      client_connected = false;
+// 	      close(new_server_socket);
+// 	      lastfailrsp = rsp;
+// 	      LOG(WARNING, "send to client failed, will close the socket...");
+// 	      continue;
+// 	    }
+
+// 	  lastfailrsp.clear();
+	    
+// 	  while(!client_connected)
+// 	    sleep(1);
+// 	}
+//     });
+  
+//   thrdsend.detach();
+// }
+
+// void FinancialManagement::server_proc(utils::Queue<std::string>* qreq, utils::Queue<std::string>* qrsp)
+// {
+//   struct sockaddr_in server_addr;
+//   bzero(&server_addr,sizeof(server_addr)); 
+//   server_addr.sin_family = AF_INET;
+//   server_addr.sin_addr.s_addr = htons(INADDR_ANY);
+//   server_addr.sin_port = htons(60001);
+ 
+//   int server_socket = socket(PF_INET,SOCK_STREAM,0);
+//   if( server_socket < 0)
+//     {
+//       printf("Create Socket Failed!");
+//       exit(1);
+//     }
+    
+//   { 
+//     int opt =1;
+//     setsockopt(server_socket,SOL_SOCKET,SO_REUSEADDR,&opt,sizeof(opt));
+//   }
+     
+//   if(bind(server_socket,(struct sockaddr*)&server_addr,sizeof(server_addr)))
+//     {
+//       printf("Server Bind Port : %d Failed!", 60001); 
+//       exit(1);
+//     }
+ 
+//   if(listen(server_socket, 20) )
+//     {
+//       printf("Server Listen Failed!"); 
+//       exit(1);
+//     }
+
+//   static const int buflen = 8192;
+//   char buffer[buflen];
+//   buffer[buflen-1] = 0x00;
+    
+//   int idx = 0;
+
+//   while (1) 
+//     {
+//       sleep(1);
+
+//       idx = 0;
+      
+//       struct sockaddr_in client_addr;
+//       socklen_t length = sizeof(client_addr);
+
+//       LOG(INFO, "server start accept...");
+      
+//       new_server_socket = accept(server_socket,(struct sockaddr*)&client_addr,&length);
+	
+//       if(new_server_socket <= 0)
+// 	{
+// 	  LOG(WARNING, "Server Accept Failed %d!\n", new_server_socket);
+// 	  continue;
+// 	}
+
+//       client_connected = true;
+      
+//       LOG(INFO, "a client is coming...");
+
+//       for(;;)
+// 	{
+// 	  dot("+");
+// 	  auto cnt = recv(new_server_socket,&buffer[idx],buflen-1-idx,0);
+// 	  if (cnt <= 0)
+// 	    {
+// 	      client_connected = false;
+// 	      close(new_server_socket);
+// 	      LOG(WARNING, "Server Recieve Data Failed!\n");
+// 	      break;
+// 	    }
+
+// 	  idx += cnt;
+
+// 	  char* p = buffer;
+// 	  buffer[idx] = 0x00;
+	
+// 	  while(p < &buffer[idx])
+// 	    {
+// 	      auto e = strstr(p, linesplit);
+// 	      if(e == NULL)
+// 		break;
+// 	      *e = 0x00;
+// 	      qreq->push(p);
+// 	      p = e+strlen(linesplit);
+// 	    }
+
+// 	  int left = idx-(p-&buffer[0]);
+// 	  if(left > 0 && p != &buffer[0])
+// 	    memmove(buffer, p, left);
+// 	  idx = left;
+// 	}
+//     }
+    
+//   close(server_socket);  
+// }
+

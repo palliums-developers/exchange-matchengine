@@ -11,6 +11,7 @@
 #include <thread>
 #include <atomic>
 #include <condition_variable>
+#include <memory>
 
 #include <unistd.h>
 #include <stdarg.h>
@@ -19,6 +20,8 @@
 #include <sys/time.h>
 #include <chrono>
 #include <unordered_map>
+
+#include <assert.h>
 
 using namespace std::chrono_literals;
 

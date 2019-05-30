@@ -201,10 +201,12 @@ struct FinancialManagement
   
   void start_server();
   void server_proc(utils::Queue<std::string>* qreq, utils::Queue<std::string>* qrsp);
+  void start_epoll_server();
   
   void handle_order_heap(int);
   void watch_new_project(int);
   void update_project_status(int);
+  void update_order_status(std::shared_ptr<Order> order);
   
   void run(volatile bool * alive);
   
@@ -219,8 +221,6 @@ private:
   
   RemoteDB* _remotedb;
   
-  //std::unordered_map<std::string, long> _cache_project_no2id;
-  //std::unordered_map<std::string, long> _cache_user_publickey2id;
   std::unordered_map<std::string, long> _cache_project_no2id;
   std::unordered_map<std::string, long> _cache_user_publickey2id;
 
@@ -235,7 +235,11 @@ private:
   utils::Queue<std::string> _qreq;
   utils::Queue<std::string> _qrsp;
 
-  std::map<int, std::shared_ptr<Order>> _order_heap;
+  utils::Queue<std::shared_ptr<Message>> _qreqmsg;
+  utils::Queue<std::shared_ptr<Message>> _qrspmsg;
+  
+  std::multimap<int, std::shared_ptr<Order>> _order_txid_timeout_heap;
+  std::multimap<int, std::shared_ptr<Order>> _order_confirm_timeout_heap;
 };
 
 const char* query(const char* req);

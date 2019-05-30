@@ -11,6 +11,7 @@
 #include <thread>
 #include <atomic>
 #include <condition_variable>
+#include <memory>
 
 #include <unistd.h>
 #include <stdarg.h>
@@ -19,6 +20,25 @@
 #include <sys/time.h>
 #include <cctype>
 #include <chrono>
+#include <assert.h>
+
+#include <stdio.h>
+#include <stdlib.h>
+#include <fcntl.h>
+#include <errno.h>
+#include <signal.h>
+#include <iconv.h>
+#include <ctype.h>
+#include <dirent.h>
+#include <sys/types.h>
+#include <sys/socket.h>
+#include <sys/param.h> 
+#include <sys/ioctl.h>
+#include <sys/epoll.h>
+#include <netinet/in.h>
+#include <netinet/if_ether.h>
+#include <arpa/inet.h>
+#include <net/if.h> 
 
 using namespace std::chrono_literals;
 
@@ -442,4 +462,227 @@ std::string get_file_content(const char* path)
   
   return "";
 }
+
+//-----------------------------------------------------------------------------------------
+
+#if 1
+
+void SocketHelper::set_non_blocking(int sock)
+{
+  if(sock <= 0)
+    {
+      LOG(WARNING, "invalid sock @ set_non_blocking");
+      return;
+    }
+  
+  int opts;
+  opts=fcntl(sock,F_GETFL);
+  if(opts<0) 
+    perror("fcntl(sock,GETFL)");
+  
+  opts = opts|O_NONBLOCK;
+  if(fcntl(sock,F_SETFL,opts)<0) 
+    perror("fcntl(sock,SETFL,opts)");
+}
+
+int SocketHelper::accept(int sock)
+{
+  struct sockaddr_in clientaddr;
+  socklen_t length = sizeof(clientaddr);
+  
+  int connfd = ::accept(sock,(sockaddr *)&clientaddr, &length);
+  
+  if(connfd < 0)
+    {
+      perror("accept");
+      sleep(1); 
+    }
+
+  if(connfd == 0)
+    {
+      LOG(WARNING, "accept return 0");
+      sleep(1); 
+    }
+
+  return connfd;
+}
+
+int SocketHelper::listen(int port)
+{
+  int ret = 0;
+  int listenfd = 0;
+  struct sockaddr_in server_addr;
+  struct sockaddr_in client_addr;
+  int yes = 1;
+  
+  listenfd = ::socket(AF_INET, SOCK_STREAM, 0);
+
+  if(listenfd == -1)
+    {
+      perror("socket");
+      return 0;
+    }
+
+  ret  = ::setsockopt(listenfd, SOL_SOCKET, SO_REUSEADDR, &yes, sizeof(int));
+
+  if(ret == -1)
+    {
+      perror("setsockopt");
+      goto ERROR;
+    }
+  
+  server_addr.sin_family = AF_INET;
+  server_addr.sin_port = htons(port);
+  server_addr.sin_addr.s_addr = INADDR_ANY;
+  memset(server_addr.sin_zero, '\0', sizeof(server_addr.sin_zero));
+  
+  ret = ::bind(listenfd, (struct sockaddr *)&(server_addr), sizeof(server_addr));
+
+  if(ret == -1)
+    {
+      perror("bind");
+      goto ERROR;
+    }
+
+  ret = ::listen(listenfd, 10000);
+
+  if(ret == -1){
+      perror("listen");
+      goto ERROR;
+  }
+  
+  return listenfd;
+
+ ERROR:
+  
+  if(listenfd > 0)
+    ::close(listenfd);
+  
+  return 0;
+}
+
+int SocketHelper::epoll_create(int sock, struct epoll_event** epoll_events, int client_cnt)
+{
+  struct epoll_event ev;
+  struct epoll_event * events = (struct epoll_event *)malloc((client_cnt+1) * sizeof(struct epoll_event));
+  
+  if(events == NULL)
+    {
+      LOG(WARNING, "out of memory");
+      exit(1);
+    }
+  
+  int epfd = ::epoll_create(client_cnt+1);
+
+  if(epfd <= 0)
+    {
+      LOG(WARNING, "epoll_create: %s", strerror(errno));
+      exit(1);
+    }
+
+  ev.data.fd=sock;
+  ev.events=EPOLLIN;
+
+  int ret = ::epoll_ctl(epfd, EPOLL_CTL_ADD, sock, &ev);
+
+  if(0 != ret)
+    {
+      LOG(WARNING, "epoll_ctl: %s", strerror(errno));
+      exit(1);
+    }
+
+  *epoll_events = events;
+
+  return epfd;
+}
+
+int SocketHelper::epoll_wait(int epfd, struct epoll_event* events, int client_cnt)
+{
+  int nfds= ::epoll_wait(epfd, events, client_cnt+1, 1000);
+  if(nfds < 0)
+    LOG(WARNING, "epoll_wait: %s", strerror(errno));
+  return nfds;
+}
+
+void SocketHelper::epoll_add(int epfd, int connfd, void* ptr)
+{
+  struct epoll_event ev;
+
+  if(ptr)
+    ev.data.ptr = ptr;
+  else
+    ev.data.fd = connfd;
+  ev.events = EPOLLIN;
+
+  int ret = epoll_ctl(epfd,EPOLL_CTL_ADD,connfd,&ev);
+
+  if(ret < 0) 
+    LOG(WARNING, "epoll_ctl: %s", strerror(errno));
+  
+  return;
+}
+
+void SocketHelper::epoll_loop(int port, int client_cnt, std::function<std::shared_ptr<Client>(int)> client_creater)
+{
+  static std::map<Client*, std::shared_ptr<Client>> keeper;
+  
+  struct epoll_event * events = NULL;
+
+  auto sock = SocketHelper::listen(port);
+  
+  SocketHelper::set_non_blocking(sock);
+  
+  int epfd = SocketHelper::epoll_create(sock, &events, client_cnt);
+
+  LOG(INFO, "epoll_loop is ready for epoll_wait");
+  
+  for(;;)
+    {
+      int nfds =  SocketHelper::epoll_wait(epfd, events, client_cnt);
+    
+      for(int i=0; i<nfds; ++i)
+	{
+	  if(sock == events[i].data.fd)
+	    {
+	      int fd = SocketHelper::accept(sock);
+	      if(fd <= 0)
+		continue;
+	      
+	      SocketHelper::set_non_blocking(fd);
+	      auto client = client_creater(fd);
+	      SocketHelper::epoll_add(epfd, fd, (void*)client.get());
+	      keeper[client.get()] = client;
+	    }
+	  else
+	    {
+	      Client* client = (Client*)events[i].data.ptr;
+	      auto fd = client->get_fd();
+	      auto cnt = ::recv(fd, client->buf(), client->space(), 0);
+	      if(cnt > 0)
+		{
+		  client->recved(cnt);
+		}
+	      else
+		{
+		  client->set_fd(0);
+		  ::epoll_ctl(epfd, EPOLL_CTL_DEL, fd, 0);
+		  ::close(fd);
+		  keeper.erase(client);
+		  
+		  if(cnt == 0)
+		    LOG(WARNING, "client %s socket closed...", client->name().c_str());
+		  if(cnt <  0)
+		    LOG(WARNING, "client %s recv failed: %s", strerror(errno));
+		}
+	    }
+	}
+    }
+  
+  free(events);
+}
+
+#endif
+
+//-----------------------------------------------------------------------------------------
+
 

@@ -177,6 +177,129 @@ namespace utils {
   
 } // namespace utils
 
-// -------------------------------------------------------
+// ----------------------------------------------------------------------------
+
+class Client;
+class Message;
+class ClientManager;
+
+struct Client : std::enable_shared_from_this<Client>
+{
+  
+  Client(int fd)
+  {
+    static long client_count = 0;
+
+    _id = client_count++;
+    
+    _fd = fd;
+    _buf[sizeof(_buf)-1] = 0x00;
+
+    char str[80];
+    sprintf(str, "client_%08d", _id);
+    _name = str;
+  }
+  
+  int get_fd() { return _fd; }
+  void set_fd(int fd) { _fd = fd; }
+  std::string name() { return _name; }
+  int id() { return _id; }
+  char* buf() { return &_buf[_pos]; }
+  int space() { return sizeof(_buf) - _pos -1; }
+  void set_qmsg(utils::Queue<std::shared_ptr<Message>>* qmsg) { _qmsg = qmsg; }
+  bool send_closed() { return _send_closed; }
+  void set_send_closed() { _send_closed = true; }
+  
+  void recved(int cnt)
+  {
+    _pos += cnt;
+    
+    split();
+    
+    if(_msgs.empty())
+      return;
+
+    auto msg = _msgs.front();
+    _msgs.pop_front();
+
+    assert(_qmsg != NULL);
+    _qmsg->push(std::make_shared<Message>(shared_from_this(), msg));
+  }
+
+  void split()
+  {
+    const char* linesplit = "@#$";
+    
+    char* p = _buf;
+    _buf[_pos] = 0x00;
+    
+    while(p < &_buf[_pos])
+      {
+	auto e = strstr(p, linesplit);
+	if(e == NULL)
+	  break;
+	*e = 0x00;
+	_msgs.push_back(p);
+	p = e+strlen(linesplit);
+      }
+
+    int left = _pos-(p-&_buf[0]);
+    
+    if(left > 0 && p != &_buf[0])
+      memmove(_buf, p, left);
+    
+    _pos = left;
+  }
+
+  utils::Queue<std::shared_ptr<Message>>* _qmsg = NULL;
+  
+private:
+  
+  std::list<std::string> _msgs;
+  char _buf[8192];
+  int _pos = 0;
+  int _fd = 0;
+  int _id = 0;
+  std::string _name;
+  bool _send_closed = false;
+};
+
+struct Message
+{
+  Message(std::shared_ptr<Client> client, std::string data)
+  {
+    _client = client;
+    _data = data;
+  }
+  
+  std::shared_ptr<Client> client() { return _client; }
+  std::string data() { return _data; }
+  void set_data(std::string data) { _data = data; }
+
+private:
+  std::shared_ptr<Client> _client;
+  std::string _data;
+};
+
+struct ClientManager
+{
+  std::map<int, std::shared_ptr<Client>> _clients;
+};
+
+struct SocketHelper
+{
+  
+  static void set_non_blocking(int sock);
+  static int  accept(int sock);
+  static int  listen(int port);
+  
+  static int  epoll_create(int sock, struct epoll_event** epoll_events, int client_cnt);
+  static int  epoll_wait(int epfd, struct epoll_event* events, int client_cnt);
+  static void epoll_add(int epfd, int connfd, void* ptr);
+  static void epoll_loop(int port, int client_cnt, std::function<std::shared_ptr<Client>(int)> client_creater);
+
+};
+
+// ----------------------------------------------------------------------------
 
 #endif

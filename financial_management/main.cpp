@@ -11,6 +11,7 @@
 #include <thread>
 #include <atomic>
 #include <condition_variable>
+#include <memory>
 
 #include <unistd.h>
 #include <stdarg.h>
@@ -19,6 +20,7 @@
 #include <sys/time.h>
 #include <chrono>
 #include <unordered_map>
+#include <assert.h>
 
 using namespace std::chrono_literals;
 
@@ -56,24 +58,24 @@ int main()
   a.start();
   
   {
-    a.push_request("{\"command\": \"get_product_info\", \"seq\": 0, \"paras\": { \"product_no\": \"FM0001\"} }");
-    //a.push_request("{\"command\": \"get_product_list\", \"seq\": 1, \"paras\": { \"start_time\": 1558583587, \"end_time\": 1558588321} }");
-    a.push_request("{\"command\": \"get_product_list\", \"seq\": 1, \"paras\": { \"start_time\": 0, \"end_time\": 1559109332} }");
-    a.push_request("{\"command\": \"booking\", \"seq\": 2, \"paras\": { \"product_no\": \"FM0001\", \"user_publickey\":\"up001\", \"amount\":0.1, \"timestamp\": 1558322863 } }");
-    a.push_request("{\"command\": \"cancel_order\", \"seq\": 3, \"paras\": { \"product_no\": \"FM0001\", \"user_publickey\": \"up001\", \"order_id\": 10} }");
-    a.push_request("{\"command\": \"update_order_txid\", \"seq\": 4, \"paras\": { \"product_no\": \"FM0001\", \"user_publickey\": \"up001\", \"order_id\": 15, \"txid\":\"txid011\", \"investment_return_addr\":\"ira011\"} }");
-    a.push_request("{\"command\": \"order_txid_confirm\", \"seq\": 5, \"paras\": { \"txid\": \"txid011\", \"success\": \"true\", \"order_id\": 15} }");
-    a.push_request("{\"command\": \"order_txid_confirm\", \"seq\": 5, \"paras\": { \"txid\": \"txid011\", \"success\": \"false\", \"order_id\": 14} }");
-    a.push_request("{\"command\": \"payment_refund_success\", \"seq\": 7, \"paras\": { \"txid\": \"txid011\", \"order_id\": 15} }");
-    a.push_request("{\"command\": \"collect\", \"seq\": 3, \"paras\": { \"product_no\": \"FM0001\", \"user_publickey\": \"up001\"} }");
-    a.push_request("{\"command\": \"collect\", \"seq\": 3, \"paras\": { \"product_no\": \"FM0002\", \"user_publickey\": \"up001\"} }");
-    a.push_request("{\"command\": \"collect\", \"seq\": 3, \"paras\": { \"product_no\": \"FM0003\", \"user_publickey\": \"up001\"} }");
-    a.push_request("{\"command\": \"cancel_collection\", \"seq\": 3, \"paras\": { \"product_no\": \"FM0002\", \"user_publickey\": \"up001\"} }");
-    a.push_request("{\"command\": \"get_user_collections\", \"seq\": 3, \"paras\": { \"user_publickey\": \"up001\"} }");
-    a.push_request("{\"command\": \"get_order\", \"seq\": 7, \"paras\": { \"order_id\": 26} }");
-    a.push_request("{\"command\": \"get_user\", \"seq\": 7, \"paras\": { \"user_publickey\": \"up001\"} }");
+    // a.push_request("{\"command\": \"get_product_info\", \"seq\": 0, \"paras\": { \"product_no\": \"FM0001\"} }");
+    // //a.push_request("{\"command\": \"get_product_list\", \"seq\": 1, \"paras\": { \"start_time\": 1558583587, \"end_time\": 1558588321} }");
+    // a.push_request("{\"command\": \"get_product_list\", \"seq\": 1, \"paras\": { \"start_time\": 0, \"end_time\": 1559109332} }");
+    // a.push_request("{\"command\": \"booking\", \"seq\": 2, \"paras\": { \"product_no\": \"FM0001\", \"user_publickey\":\"up001\", \"amount\":0.1, \"timestamp\": 1558322863 } }");
+    // a.push_request("{\"command\": \"cancel_order\", \"seq\": 3, \"paras\": { \"product_no\": \"FM0001\", \"user_publickey\": \"up001\", \"order_id\": 10} }");
+    // a.push_request("{\"command\": \"update_order_txid\", \"seq\": 4, \"paras\": { \"product_no\": \"FM0001\", \"user_publickey\": \"up001\", \"order_id\": 15, \"txid\":\"txid011\", \"investment_return_addr\":\"ira011\"} }");
+    // a.push_request("{\"command\": \"order_txid_confirm\", \"seq\": 5, \"paras\": { \"txid\": \"txid011\", \"success\": \"true\", \"order_id\": 15} }");
+    // a.push_request("{\"command\": \"order_txid_confirm\", \"seq\": 5, \"paras\": { \"txid\": \"txid011\", \"success\": \"false\", \"order_id\": 14} }");
+    // a.push_request("{\"command\": \"payment_refund_success\", \"seq\": 7, \"paras\": { \"txid\": \"txid011\", \"order_id\": 15} }");
+    // a.push_request("{\"command\": \"collect\", \"seq\": 3, \"paras\": { \"product_no\": \"FM0001\", \"user_publickey\": \"up001\"} }");
+    // a.push_request("{\"command\": \"collect\", \"seq\": 3, \"paras\": { \"product_no\": \"FM0002\", \"user_publickey\": \"up001\"} }");
+    // a.push_request("{\"command\": \"collect\", \"seq\": 3, \"paras\": { \"product_no\": \"FM0003\", \"user_publickey\": \"up001\"} }");
+    // a.push_request("{\"command\": \"cancel_collection\", \"seq\": 3, \"paras\": { \"product_no\": \"FM0002\", \"user_publickey\": \"up001\"} }");
+    // a.push_request("{\"command\": \"get_user_collections\", \"seq\": 3, \"paras\": { \"user_publickey\": \"up001\"} }");
+    // a.push_request("{\"command\": \"get_order\", \"seq\": 7, \"paras\": { \"order_id\": 26} }");
+    // a.push_request("{\"command\": \"get_user\", \"seq\": 7, \"paras\": { \"user_publickey\": \"up001\"} }");
 
-    a.push_request("{\"command\": \"get_orders\", \"seq\": 7, \"paras\": { \"product_no\": \"FM0001\", \"user_publickey\": \"all\", \"status\": 0, \"offset\":0, \"limit\":10 } }");
+    // a.push_request("{\"command\": \"get_orders\", \"seq\": 7, \"paras\": { \"product_no\": \"FM0001\", \"user_publickey\": \"all\", \"status\": 0, \"offset\":0, \"limit\":10 } }");
     
   }
 
