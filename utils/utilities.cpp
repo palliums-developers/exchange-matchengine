@@ -667,18 +667,60 @@ void SocketHelper::epoll_loop(int port, int client_cnt, std::function<std::share
 		  client->set_fd(0);
 		  ::epoll_ctl(epfd, EPOLL_CTL_DEL, fd, 0);
 		  ::close(fd);
-		  keeper.erase(client);
-		  
 		  if(cnt == 0)
 		    LOG(WARNING, "client %s socket closed...", client->name().c_str());
 		  if(cnt <  0)
 		    LOG(WARNING, "client %s recv failed: %s", strerror(errno));
+
+		  keeper.erase(client);
 		}
 	    }
 	}
     }
   
   free(events);
+}
+
+int SocketHelper::connect(const char * serverip, const int serverport)
+{
+  int sock = 0;
+  struct sockaddr_in servaddr,cliaddr;
+  socklen_t socklen = sizeof(servaddr);
+
+  if((sock = ::socket(AF_INET,SOCK_STREAM,0)) < 0)
+    {
+      ::perror("socket");
+      return -1;
+    }
+
+  bzero(&cliaddr,sizeof(cliaddr));
+  cliaddr.sin_family = AF_INET;
+  cliaddr.sin_port = htons(0);
+  cliaddr.sin_addr.s_addr = htons(INADDR_ANY);
+
+  bzero(&servaddr,sizeof(servaddr));
+  servaddr.sin_family = AF_INET;
+  inet_aton(serverip, &servaddr.sin_addr);
+  servaddr.sin_port = htons(serverport);
+
+  if(::bind(sock,(struct sockaddr*)&cliaddr,sizeof(cliaddr)) < 0)
+    {
+      ::perror("bind");
+      ::close(sock);
+      return -1;
+    }
+
+  if(::connect(sock,(struct sockaddr*)&servaddr, socklen) < 0)
+    {
+      ::perror("connect");
+      ::close(sock);
+      return -1;
+    }
+
+  struct timeval timeout = {60, 0};
+  ::setsockopt(sock,SOL_SOCKET,SO_RCVTIMEO,(char*)&timeout,sizeof(struct timeval));
+  
+  return sock;
 }
 
 #endif

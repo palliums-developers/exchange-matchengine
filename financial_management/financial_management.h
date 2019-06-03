@@ -198,7 +198,11 @@ struct FinancialManagement
   
   void start();
   bool load();
-  
+
+  void load_project(std::shared_ptr<Project> a);
+  void load_user(std::shared_ptr<User> a);
+  void load_order(std::shared_ptr<Order> a);
+
   void start_server();
   void server_proc(utils::Queue<std::string>* qreq, utils::Queue<std::string>* qrsp);
   void start_epoll_server();
@@ -206,7 +210,7 @@ struct FinancialManagement
   void handle_order_heap(int);
   void watch_new_project(int);
   void update_project_status(int);
-  void update_order_status(std::shared_ptr<Order> order);
+  void print_status(int);
   
   void run(volatile bool * alive);
   

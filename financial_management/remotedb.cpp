@@ -252,6 +252,13 @@ int RemoteDB::update_project_status(long projectid, int status)
   return do_query(query, NULL);
 }
 
+int RemoteDB::update_project_received_crowdfunding(long projectid, double amount)
+{
+  char query[512];
+  snprintf(query, sizeof(query), "UPDATE financial_management_projects SET received_crowdfunding=%f WHERE id=%ld", amount, projectid);
+  return do_query(query, NULL);
+}
+
 int RemoteDB::update_order_txid(long orderid, std::string txid, std::string investment_return_addr, int payment_timestamp)
 {
   char query[1024];
@@ -404,7 +411,7 @@ std::vector<std::map<std::string, std::string>>
 RemoteDB::get_record_by_limit(const char* table, const std::vector<std::string> & keys, long start, long cnt)
 {
   char query[256];
-  snprintf(query, sizeof(query), "SELECT * FROM %s LIMIT %ld, %ld", table, start, cnt);
+  snprintf(query, sizeof(query), "SELECT * FROM %s WHERE id>=%ld AND id<%ld", table, start, start+cnt);
   
   std::vector<std::map<std::string, std::string>> vv;
   

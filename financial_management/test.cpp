@@ -19,6 +19,8 @@
 #include <sys/time.h>
 #include <chrono>
 
+#include <assert.h>
+
 using namespace std::chrono_literals;
 
 #include <sys/socket.h>
@@ -148,6 +150,21 @@ void create_table()
 	show_error(mysql);
     }
 
+  // add new project
+  if(1)
+    {
+      auto now = (int)uint32_t(time(NULL));
+      char query[256];
+      int idx = get_rows_count("financial_management_projects");
+      int cnt = 5;
+      for(int i=idx; i<(idx+cnt); ++i)
+	{
+	  snprintf(query, sizeof(query), "INSERT INTO financial_management_projects VALUES (%d, 'FM%04d', 'money%04d', %f, 30, 0.001, 0.1, 3, %d, %d, 0, 0, 0, 0, 'mousWBSN7Rsqi8qpmZp7C6VmRkBGPD5bFF', 'makemoney%04d')", i, i, i, 0.083+0.001*(i-idx), now+3, now+3+3600*24, i);
+	  if (mysql_real_query(mysql, query, strlen(query)))
+	    show_error(mysql);
+	}
+    }
+  
   if(0)
     {
       auto now = (int)uint32_t(time(NULL));
@@ -213,7 +230,7 @@ void create_table()
       }
     }
 
-  if(1)
+  if(0)
     {
       {
 	std::string line = "UPDATE bbb SET status = CASE id WHEN 211 THEN 4 WHEN 212 THEN 7 END WHERE id IN (300, 211, 212)";

@@ -20,9 +20,12 @@
 #include <time.h>
 #include <sys/time.h>
 #include <chrono>
+#include <ctime>
+#include <ratio>
 #include <unordered_map>
 
 #include <assert.h>
+#include <math.h>
 
 using namespace std::chrono_literals;
 
@@ -43,6 +46,31 @@ using namespace std::chrono_literals;
 
 const char * linesplit = "@#$";
 
+bool double_equal(double a, double b)
+{
+  return fabs(a-b) < 0.00001;
+}
+
+bool double_great(double a, double b)
+{
+  return a > b && !double_equal(a, b);
+}
+
+bool double_less(double a, double b)
+{
+  return a < b && !double_equal(a, b);
+}
+
+bool double_great_equal(double a, double b)
+{
+  return !double_less(a, b);
+}
+
+bool double_less_equal(double a, double b)
+{
+  return !double_great(a, b);
+}
+
 void write_file(const std::string & str)
 {
   static auto fh = fopen("a.txt", "a");
@@ -54,6 +82,32 @@ void write_file(const std::string & str)
       //fclose(fh);
     }
 }
+
+struct TimeElapsed
+{
+  TimeElapsed(const char* name)
+  {
+    start = std::chrono::system_clock::now();
+    this->name = name;
+  }
+  
+  ~TimeElapsed()
+  {
+    auto end   = std::chrono::system_clock::now();
+    auto duration = std::chrono::duration_cast<std::chrono::microseconds>(end - start);
+    int milliseconds = duration.count()/1000;
+
+    char buf[512];
+    sprintf(buf, "%s cost %d milliseconds", name, milliseconds);
+    write_file(buf);
+
+    if(milliseconds >= 100)
+      LOG(WARNING, buf);
+  }
+  
+  std::chrono::system_clock::time_point start;
+  const char* name;
+};
 
 std::string json(const char* name, const std::string & value, bool last)
 {
@@ -141,7 +195,10 @@ std::shared_ptr<Project> Project::create(std::map<std::string, std::string> & kv
     o->_crowdfunding_address = kvs["crowdfunding_address"];
   if(kvs.count("product_description"))
     o->_product_description = kvs["product_description"];
-    
+
+  if(kvs.count("status"))
+    o->_status = atoi(kvs["status"].c_str());
+  
   return o;
 }
 
@@ -428,7 +485,7 @@ int FinancialManagement::add_order(std::map<std::string, std::string> & kvs)
   if(project->_status == PROJECT_STATUS_CROWDFUND_SUCCESS)
     return ERROR_ADD_ORDER_CROWDFUNDING_FULL;
   
-  if(project->_received_crowdfunding >= project->_total_crowdfunding_amount)
+  if(double_great_equal(project->_received_crowdfunding, project->_total_crowdfunding_amount))
     return ERROR_ADD_ORDER_CROWDFUNDING_FULL;
     
   if(now < project->_booking_starting_time)
@@ -437,13 +494,13 @@ int FinancialManagement::add_order(std::map<std::string, std::string> & kvs)
   if(now > (project->_crowdfunding_ending_time - 7200))
     return ERROR_ADD_ORDER_CROWDFUNDING_FINISHED;
 
-  if(amount < project->_min_invest_amount)
+  if(double_less(amount, project->_min_invest_amount))
     return ERROR_ADD_ORDER_TOO_LOW_AMOUNT;
   
-  if(amount > project->_max_invest_amount)
+  if(double_great(amount, project->_max_invest_amount))
     return ERROR_ADD_ORDER_TOO_HIGH_AMOUNT;
 
-  if(amount > (project->_total_crowdfunding_amount - project->_booked_crowdfunding))
+  if(double_great(amount, (project->_total_crowdfunding_amount - project->_booked_crowdfunding)))
     return ERROR_ADD_ORDER_CROWDFUNDING_BOOK_FULL;
 
   auto user = get_user_by_publickey(publickey);
@@ -560,7 +617,7 @@ int FinancialManagement::update_order_txid(long orderid, std::string project_no,
   _order_confirm_timeout_heap.emplace(order->_booking_timestamp, order);
 
   //lmf test
-  //if(orderid % 2 == 0)
+  if(orderid % 2 == 0)
     {
       order_txid_confirm(orderid, txid, "true");
     }
@@ -783,18 +840,69 @@ void FinancialManagement::start()
   thrd.detach();
 }
 
-void FinancialManagement::update_order_status(std::shared_ptr<Order> order)
+void FinancialManagement::load_project(std::shared_ptr<Project> a)
 {
-  if(!order)
+  if(!a)
     return;
-  if(order->_status == ORDER_STATUS_BOOKING_SUCCESS)
-    _order_txid_timeout_heap.emplace(order->_booking_timestamp, order);
-  if(order->_status == ORDER_STATUS_PAYED_AUDITING)
-    _order_confirm_timeout_heap.emplace(order->_booking_timestamp, order);
+  _projects[a->_id%maxcnt] = a;
+  _cache_project_no2id[a->_no] = a->_id;
+}
+
+void FinancialManagement::load_user(std::shared_ptr<User> a)
+{
+  if(!a)
+    return;
+  _users[a->_id%maxcnt] = a;
+  _cache_user_publickey2id[a->_publickey] = a->_id;
+}
+
+void FinancialManagement::load_order(std::shared_ptr<Order> a)
+{
+  if(!a)
+    return;
+
+  _orders[a->_id%maxcnt] = a;
+  
+  auto user = _users[a->_user_id%maxcnt];
+  if(user && user->_id == a->_user_id)
+    {
+      user->_orders.push_back(a->_id);
+      a->_user_publickey = user->_publickey;
+    }
+  
+  auto project = _projects[a->_project_id%maxcnt];
+  if(project && project->_id == a->_project_id)
+    {
+      project->_orders.push_back(a->_id);
+      a->_project_no = project->_no;
+    }
+
+  if(a->_status == ORDER_STATUS_BOOKING_SUCCESS)
+    _order_txid_timeout_heap.emplace(a->_booking_timestamp, a);
+  if(a->_status == ORDER_STATUS_PAYED_AUDITING)
+    _order_confirm_timeout_heap.emplace(a->_booking_timestamp, a);
+
+  if(project && project->_status == PROJECT_STATUS_CROWDFUNDING)
+    {
+      switch(a->_status)
+	{
+	case ORDER_STATUS_BOOKING_SUCCESS:
+	case ORDER_STATUS_PAYED_AUDITING:
+	  project->_booked_crowdfunding += a->_booking_amount;
+	  break;
+	case ORDER_STATUS_AUDIT_SUCCESS:
+	  project->_received_crowdfunding += a->_booking_amount;
+	  break;
+	default:
+	  project->_booked_crowdfunding -= a->_booking_amount;
+	}
+    }
 }
 
 bool FinancialManagement::load()
 {
+  TimeElapsed te("load db");
+  
   long onetime_to_load = 1000;
     
   auto projectcnt = _remotedb->get_projects_cnt();
@@ -804,28 +912,20 @@ bool FinancialManagement::load()
   {
     auto & acnt = projectcnt;
     std::shared_ptr<Project> last;
-      
-    auto cnt = acnt/onetime_to_load;
-    auto left = acnt%onetime_to_load;
-    for(long i=0; i<cnt; ++i)
+    
+    long i = 0;
+    long cnt = 0;
+    while(cnt < acnt)
       {
 	auto v = _remotedb->get_projects_by_limit(i*onetime_to_load, onetime_to_load);
 	for(auto & a : v)
 	  {
-	    _projects[a->_id%maxcnt] = a;
-	    _cache_project_no2id[a->_no] = a->_id;
+	    load_project(a);
+	    cnt++;
 	    last = a;
 	  }
+	i++;
       }
-
-    auto v = _remotedb->get_projects_by_limit(cnt*onetime_to_load, left);
-    for(auto & a : v)
-      {
-	_projects[a->_id%maxcnt] = a;
-	_cache_project_no2id[a->_no] = a->_id;
-	last = a;
-      }
-      
     if(last)
       _projectcnt = last->_id+1;
   }
@@ -833,28 +933,21 @@ bool FinancialManagement::load()
   {
     auto & acnt = usercnt;
     std::shared_ptr<User> last;
-      
-    auto cnt = acnt/onetime_to_load;
-    auto left = acnt%onetime_to_load;
-    for(long i=0; i<cnt; ++i)
+
+    long i = 0;
+    long cnt = 0;
+    while(cnt < acnt)
       {
 	auto v = _remotedb->get_users_by_limit(i*onetime_to_load, onetime_to_load);
 	for(auto & a : v)
 	  {
-	    _users[a->_id%maxcnt] = a;
-	    _cache_user_publickey2id[a->_publickey] = a->_id;
+	    load_user(a);
+	    cnt++;
 	    last = a;
 	  }
+	i++;
       }
-
-    auto v = _remotedb->get_users_by_limit(cnt*onetime_to_load, left);
-    for(auto & a : v)
-      {
-	_users[a->_id%maxcnt] = a;
-	_cache_user_publickey2id[a->_publickey] = a->_id;
-	last = a;
-      }
-      
+    
     if(last)
       _usercnt = last->_id+1;
   }
@@ -862,52 +955,21 @@ bool FinancialManagement::load()
   {
     auto & acnt = ordercnt;
     std::shared_ptr<Order> last;
-      
-    auto cnt = acnt/onetime_to_load;
-    auto left = acnt%onetime_to_load;
-    for(long i=0; i<cnt; ++i)
+
+    long i = 0;
+    long cnt = 0;
+    while(cnt < acnt)
       {
 	auto v = _remotedb->get_orders_by_limit(i*onetime_to_load, onetime_to_load);
 	for(auto & a : v)
 	  {
-	    _orders[a->_id%maxcnt] = a;
-	    auto user = _users[a->_user_id%maxcnt];
-	    if(user && user->_id == a->_user_id)
-	      {
-		user->_orders.push_back(a->_id);
-		a->_user_publickey = user->_publickey;
-	      }
-	    auto project = _projects[a->_project_id%maxcnt];
-	    if(project && project->_id == a->_project_id)
-	      {
-		project->_orders.push_back(a->_id);
-		a->_project_no = project->_no;
-	      }
-	    update_order_status(a);
+	    load_order(a);
+	    cnt++;
 	    last = a;
 	  }
+	i++;
       }
-
-    auto v = _remotedb->get_orders_by_limit(cnt*onetime_to_load, left);
-    for(auto & a : v)
-      {
-	_orders[a->_id%maxcnt] = a;
-	auto user = _users[a->_user_id%maxcnt];
-	if(user && user->_id == a->_user_id)
-	  {
-	    user->_orders.push_back(a->_id);
-	    a->_user_publickey = user->_publickey;
-	  }
-	auto project = _projects[a->_project_id%maxcnt];
-	if(project && project->_id == a->_project_id)
-	  {
-	    project->_orders.push_back(a->_id);
-	    a->_project_no = project->_no;
-	  }
-	update_order_status(a);
-	last = a;
-      }
-      
+    
     if(last)
       _ordercnt = last->_id+1;
   }
@@ -971,12 +1033,23 @@ void FinancialManagement::start_epoll_server()
 
 #define TIMER(n) do{ static int last = 0; if(now-last < (n)) return; last = now; } while(0)
 
+void FinancialManagement::print_status(int now)
+{
+  TIMER(3);
+  
+  char buf[512];
+  sprintf(buf, "qreq:%d, qrsp:%d", _qreqmsg.size(), _qrspmsg.size());
+  write_file(buf);
+}
+
 void FinancialManagement::handle_order_heap(int now)
 {
-  TIMER(1);
+  TIMER(30);
 
   dot("-");
-  
+
+  TimeElapsed te("handle_order_heap");
+    
   std::multimap<int, std::shared_ptr<Order>> * heap;
 
   heap = &_order_txid_timeout_heap;
@@ -1049,7 +1122,9 @@ void FinancialManagement::handle_order_heap(int now)
 
 void FinancialManagement::update_project_status(int now)
 {
-  TIMER(8);
+  TIMER(30);
+
+  TimeElapsed te("update_project_status");
   
   for(long i=_projectcnt-1; i>=0; --i)
     {
@@ -1068,8 +1143,12 @@ void FinancialManagement::update_project_status(int now)
 	{
 	  if(now > project->_crowdfunding_ending_time)
 	    project->_status = PROJECT_STATUS_CROWDFUND_FAILURE;
-	  if(project->_received_crowdfunding >= project->_total_crowdfunding_amount)
+	  else if(double_great_equal(project->_received_crowdfunding, project->_total_crowdfunding_amount))
 	    project->_status = PROJECT_STATUS_CROWDFUND_SUCCESS;
+	  else
+	    {
+	      //_remotedb->update_project_received_crowdfunding(project->_id, project->_received_crowdfunding);
+	    }
 	}
       
       if(oldstatus != project->_status)
@@ -1079,7 +1158,9 @@ void FinancialManagement::update_project_status(int now)
 
 void FinancialManagement::watch_new_project(int now)
 {
-  TIMER(8);
+  TIMER(30);
+
+  TimeElapsed te("watch_new_project");
   
   auto cnt = _remotedb->get_projects_cnt();
   
@@ -1123,32 +1204,23 @@ void FinancialManagement::run(volatile bool * alive)
       dot(".");
       
       handle_order_heap(now);
-      watch_new_project(now);
-      update_project_status(now);
-
+      watch_new_project(now+3);
+      update_project_status(now+6);
+      print_status(now);
+      
       auto msg = _qreqmsg.timed_pop();
       if(!msg)
 	continue;
 
       auto req = msg->data();
       
-      write_file(req);
+      //write_file(req);
       auto rsp = handle_request(req);
       LOG(INFO, "rsp: %s", rsp.c_str());
-      write_file(rsp);
+      //write_file(rsp);
 
       msg->set_data(rsp);
       _qrspmsg.push(msg);
-      
-      // auto req = _qreq.timed_pop();
-      // if(req.empty())
-      // 	continue;
-
-      // write_file(req);
-      // auto rsp = handle_request(req);
-      // LOG(INFO, "rsp: %s", rsp.c_str());
-      // write_file(rsp);
-      // _qrsp.push(rsp);
     }
   
   LOG(INFO, "run exit...");
@@ -1400,10 +1472,10 @@ std::string FinancialManagement::handle_request(std::string req)
       
       if(orders == NULL)
 	return gen_rsp(command, msn, ERROR_INVALID_PARAS, v);
-      
-      for(auto a : *orders)
+
+      for(int i=orders->size()-1; i>=0 ; --i)
 	{
-	  auto order = get_order(a);
+	  auto order = get_order((*orders)[i]);
 	  if(!order)
 	    continue;
 	  if(status != 999 && !status_match(status, order->_status))

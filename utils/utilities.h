@@ -297,7 +297,8 @@ struct SocketHelper
   static int  epoll_wait(int epfd, struct epoll_event* events, int client_cnt);
   static void epoll_add(int epfd, int connfd, void* ptr);
   static void epoll_loop(int port, int client_cnt, std::function<std::shared_ptr<Client>(int)> client_creater);
-
+  static int  connect(const char * serverip, const int serverport);
+  
 };
 
 // ----------------------------------------------------------------------------

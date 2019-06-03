@@ -43,6 +43,7 @@ struct RemoteDB
   int update_order_txid(long orderid, std::string txid, std::string investment_return_addr, int payment_timestamp);
   int update_order_confirm_timestamp(long orderid, int now);
   int update_project_status(long projectid, int status);
+  int update_project_received_crowdfunding(long projectid, double amount);
   
   int update_collections(long userid, std::string collections);
   
