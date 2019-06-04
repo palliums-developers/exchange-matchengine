@@ -48,7 +48,8 @@ enum
     ERROR_CONFIRM_NOT_PAYED_TX = 3509,
     ERROR_REFUND_UNCONFIRMED_TX = 3510,
     ERROR_ORDER_TIMEOUT = 3511,
-
+    ERROR_PROJECT_NOT_CROWDFUND_SUCCESS = 3512,
+    
     ERROR_INVALID_JSON = 3601,
     ERROR_INVALID_COMMAND = 3602,
     ERROR_INVALID_PARAS = 3603,
@@ -90,6 +91,7 @@ enum
  };
 
 class RemoteDB;
+class Task;
 
 struct Project
 {
@@ -119,6 +121,10 @@ struct Project
   std::string  _crowdfunding_address;
   std::string  _product_description;
 
+  std::string  _projecter_publickey;
+  std::string  _financial_controller_publickey;
+  std::string  _crowdfunding_payment_txid;
+  
   std::vector<long> _orders;
 };
 
@@ -146,6 +152,9 @@ struct Order
 
   std::string _project_no;
   std::string _user_publickey;
+
+  std::string _oracle_publickey;
+  std::string _contract_address;
 };
 
 struct User
@@ -168,6 +177,7 @@ struct User
 
 struct FinancialManagement
 {
+  static FinancialManagement* get();
   FinancialManagement()
   {
     _projects.resize(maxcnt);
@@ -181,7 +191,7 @@ struct FinancialManagement
   
   int check_order(std::shared_ptr<Order> order, std::string project_no, std::string publickey);
   int cancel_order(std::string project_no, std::string publickey, long orderid);
-  int update_order_txid(long orderid, std::string project_no, std::string publickey, std::string txid, std::string investment_return_addr, int payment_timestamp);
+  int update_order_txid(long orderid, std::string project_no, std::string publickey, std::string txid, std::string investment_return_addr, int payment_timestamp, std::string oracle_publickey, std::string contract_address);
   int order_txid_confirm(long orderid, std::string txid, std::string success);
   int payment_refund_success(long orderid, std::string txid);
   
@@ -192,9 +202,17 @@ struct FinancialManagement
   int get_orders_by_user_publickey(std::string publickey, std::vector<std::shared_ptr<Order>> & orders);
   std::shared_ptr<User> get_user_by_publickey(std::string publickey);
   std::shared_ptr<Project> get_project_by_no(std::string no);
+
   std::shared_ptr<Project> get_project(long id);
   std::shared_ptr<User> get_user(long id);
   std::shared_ptr<Order> get_order(long id);
+
+  std::shared_ptr<Project> cache_get_project(long id);
+  std::shared_ptr<User> cache_get_user(long id);
+  std::shared_ptr<Order> cache_get_order(long id);
+
+  std::shared_ptr<Project> cache_get_project_by_no(std::string no);
+  std::shared_ptr<User> cache_get_user_by_publickey(std::string publickey);
   
   void start();
   bool load();
@@ -217,10 +235,18 @@ struct FinancialManagement
   void push_request(std::string req);
   std::string pop_response();
   
-  std::string handle_request(std::string req);
-  
-private:
-  
+  std::string handle_request(std::string req, std::shared_ptr<Client> client);
+
+  RemoteDB* remotedb() { return _remotedb; }
+
+  long _projectcnt = 0;
+  long _ordercnt = 0;
+  long _usercnt = 0;
+
+  std::vector<std::shared_ptr<Project>> _projects;
+  std::vector<std::shared_ptr<Order>>   _orders;
+  std::vector<std::shared_ptr<User>>    _users;
+
   static const long maxcnt = 1*1024*1024;
   
   RemoteDB* _remotedb;
@@ -228,14 +254,6 @@ private:
   std::unordered_map<std::string, long> _cache_project_no2id;
   std::unordered_map<std::string, long> _cache_user_publickey2id;
 
-  std::vector<std::shared_ptr<Project>> _projects;
-  std::vector<std::shared_ptr<Order>>   _orders;
-  std::vector<std::shared_ptr<User>>    _users;
-
-  long _projectcnt = 0;
-  long _ordercnt = 0;
-  long _usercnt = 0;
-  
   utils::Queue<std::string> _qreq;
   utils::Queue<std::string> _qrsp;
 
@@ -244,7 +262,88 @@ private:
   
   std::multimap<int, std::shared_ptr<Order>> _order_txid_timeout_heap;
   std::multimap<int, std::shared_ptr<Order>> _order_confirm_timeout_heap;
+
+  utils::Queue<std::shared_ptr<Task>> _qtasks;
+  
 };
+
+#if 1
+
+enum
+  {
+    TASK_TYPE_BOOKING = 0,
+  };
+
+enum
+  {
+    RETCODE_MSG_TRANSFERED = 1,
+  };
+
+enum
+  {
+    WAIT_REMOTEDB_START = 9000,
+    WAIT_REMOTEDB_GET_USER_BY_PUBLICKEY = 9001,
+    WAIT_REMOTEDB_GET_PROJECT_BY_NO = 9002,
+    WAIT_REMOTEDB_GET_ORDER = 9003,
+    WAIT_REMOTEDB_ADD_ORDER = 9004,
+    WAIT_REMOTEDB_COUNT,
+  };
+
+struct Task : std::enable_shared_from_this<Task>
+{
+  Task(int type, std::string name, std::map<std::string, std::string> kvs, std::shared_ptr<Client> client, int msn)
+  {
+    static int id = 0;
+    _id = id++;
+    _type = type;
+    _name = name;
+    _kvs = kvs;
+    _client = client;
+    _msn = msn;
+  }
+  virtual ~Task(){}
+  
+  FinancialManagement* fm()
+  {
+    return FinancialManagement::get();
+  }
+
+  bool step(int i)
+  {
+    return _step == i && ++_step;
+  }
+  
+  int work();
+
+  virtual int do_work() {}
+
+  std::map<std::string, std::string> _kvs;
+  std::string _name;
+  int _type = 0;
+  int _id = 0;
+
+  int _wait_command = 0;
+  int _ret = 0;
+  int _step = 0;
+  int _msn = 0;
+  std::vector<std::string> _v;
+
+  std::shared_ptr<Client> _client;
+  
+  std::shared_ptr<User> _user;
+  std::shared_ptr<Project> _project;
+  std::shared_ptr<Order> _order;
+};
+
+struct Booking: public Task
+{
+ Booking(std::map<std::string, std::string> kvs, std::shared_ptr<Client> client, int msn)
+   : Task(TASK_TYPE_BOOKING, "booking", kvs, client, msn) {}
+  virtual ~Booking(){}
+  int do_work();
+};
+
+#endif
 
 const char* query(const char* req);
 

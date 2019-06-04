@@ -57,7 +57,7 @@ int main()
     
     for(;;)
       {
-	sock = SocketHelper::connect("127.0.0.1", 60001);
+	sock = SocketHelper::connect("127.0.0.1", 60002);
 	if(sock > 0)
 	  break;
 	sleep(3);
@@ -84,7 +84,7 @@ int main()
 	      //sprintf(buf, book_pat, "FM0021", "mousWBSN7Rsqi8qpmZp7C6VmRkBGPD5bFF"); v.push_back(buf);
 	      char username[512];
 	      sprintf(username, "lmf_WbCdvY9c5iUDRSofhU8rFh5kW_%04d", (useridx++%200));
-	      sprintf(buf, book_pat, "FM0053", username); v.push_back(buf);
+	      sprintf(buf, book_pat, "FM0065", username); v.push_back(buf);
 	    }
 
 	  for(auto a : v)
@@ -109,7 +109,7 @@ int main()
 		}
 	    }
 	  //sleep(10000);
-	  usleep(50*1000);
+	  usleep(600000*1000);
 	}
     });
 

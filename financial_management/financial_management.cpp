@@ -73,7 +73,7 @@ bool double_less_equal(double a, double b)
 
 void write_file(const std::string & str)
 {
-  static auto fh = fopen("a.txt", "a");
+  static auto fh = fopen("a1.txt", "a");
   if(fh)
     {
       fwrite(str.c_str(), 1, str.length(), fh);
@@ -198,6 +198,13 @@ std::shared_ptr<Project> Project::create(std::map<std::string, std::string> & kv
 
   if(kvs.count("status"))
     o->_status = atoi(kvs["status"].c_str());
+
+  if(kvs.count("projecter_publickey"))
+    o->_projecter_publickey = kvs["projecter_publickey"];
+  if(kvs.count("financial_controller_publickey"))
+    o->_financial_controller_publickey = kvs["financial_controller_publickey"];
+  if(kvs.count("crowdfunding_payment_txid"))
+    o->_crowdfunding_payment_txid = kvs["crowdfunding_payment_txid"];
   
   return o;
 }
@@ -249,6 +256,11 @@ std::map<std::string, std::string> Project::to_map()
   v["borrower_info"] = std::to_string(_borrower_info);
   v["crowdfunding_address"] = _crowdfunding_address;
   v["product_description"] = _product_description;
+
+  v["projecter_publickey"] = _projecter_publickey;
+  v["financial_controller_publickey"] = _financial_controller_publickey;
+  v["crowdfunding_payment_txid"] = _crowdfunding_payment_txid;
+  
   return v;
 }
 
@@ -270,7 +282,13 @@ std::string Project::to_json()
   str += json("received_crowdfunding", _received_crowdfunding, false);
   str += json("interest_type", _interest_type, false);
   str += json("borrower_info", _borrower_info, false);
+
   str += json("crowdfunding_address", _crowdfunding_address, false);
+
+  str += json("projecter_publickey", _projecter_publickey, false);
+  str += json("financial_controller_publickey", _financial_controller_publickey, false);
+  str += json("crowdfunding_payment_txid", _crowdfunding_payment_txid, false);
+
   str += json("product_description", _product_description, true);
   str += "}";
   return str;
@@ -304,6 +322,11 @@ std::shared_ptr<Order> Order::create(std::map<std::string, std::string> & kvs)
     o->_booking_timestamp = atoi(kvs["booking_timestamp"].c_str());
   else
     o->_booking_timestamp = (int)uint32_t(time(NULL));
+
+  if(kvs.count("oracle_publickey"))
+    o->_oracle_publickey = kvs["oracle_publickey"];
+  if(kvs.count("contract_address"))
+    o->_contract_address = kvs["contract_address"];
   
   return o;
 }
@@ -334,6 +357,10 @@ std::map<std::string, std::string> Order::to_map()
   v["investment_return_addr"] = _investment_return_addr;
   v["accumulated_gain"] = std::to_string(_accumulated_gain);
   v["status"] = std::to_string(_status);
+
+  v["oracle_publickey"] = _oracle_publickey;
+  v["contract_address"] = _contract_address;
+  
   return v;
 }
 
@@ -352,6 +379,10 @@ std::string Order::to_json()
   str += json("accumulated_gain", _accumulated_gain, false);
   str += json("project_no", _project_no, false);
   str += json("user_publickey", _user_publickey, false);
+
+  str += json("oracle_publickey", _oracle_publickey, false);
+  str += json("contract_address", _contract_address, false);
+  
   str += json("status", _status, true);
   str += "}";
   return str;
@@ -402,6 +433,12 @@ std::string User::to_json()
   str += json("collections", _collections, true);
   str += "}";
   return str;
+}
+
+FinancialManagement* FinancialManagement::get()
+{
+  static FinancialManagement a;
+  return &a;
 }
 
 int FinancialManagement::add_project(std::shared_ptr<Project> project)
@@ -462,7 +499,37 @@ int FinancialManagement::add_user(std::string publickey)
   _usercnt++;
   return 0;    
 }
+
+int check_valid_for_new_order(std::shared_ptr<Order> order, std::shared_ptr<Project> project)
+{
+  auto now = order->_booking_timestamp;
+  auto amount = order->_booking_amount;
   
+  if(project->_status == PROJECT_STATUS_CROWDFUND_SUCCESS)
+    return ERROR_ADD_ORDER_CROWDFUNDING_FULL;
+  
+  if(double_great_equal(project->_received_crowdfunding, project->_total_crowdfunding_amount))
+    return ERROR_ADD_ORDER_CROWDFUNDING_FULL;
+    
+  if(now < project->_booking_starting_time)
+    return ERROR_ADD_ORDER_CROWDFUNDING_NOT_START;
+  
+  if(now > (project->_crowdfunding_ending_time - 7200))
+    return ERROR_ADD_ORDER_CROWDFUNDING_FINISHED;
+
+  if(double_less(amount, project->_min_invest_amount))
+    return ERROR_ADD_ORDER_TOO_LOW_AMOUNT;
+  
+  if(double_great(amount, project->_max_invest_amount))
+    return ERROR_ADD_ORDER_TOO_HIGH_AMOUNT;
+
+  if(double_great(amount, (project->_total_crowdfunding_amount - project->_booked_crowdfunding)))
+    return ERROR_ADD_ORDER_CROWDFUNDING_BOOK_FULL;
+  
+  return 0;
+}
+
+
 int FinancialManagement::add_order(std::map<std::string, std::string> & kvs)
 {
   auto now = (int)uint32_t(time(NULL));
@@ -589,7 +656,7 @@ int FinancialManagement::cancel_order(std::string project_no, std::string public
   return 0;
 }
 
-int FinancialManagement::update_order_txid(long orderid, std::string project_no, std::string publickey, std::string txid, std::string investment_return_addr, int payment_timestamp)
+int FinancialManagement::update_order_txid(long orderid, std::string project_no, std::string publickey, std::string txid, std::string investment_return_addr, int payment_timestamp, std::string oracle_publickey, std::string contract_address)
 {
   auto order = get_order(orderid);
     
@@ -603,7 +670,7 @@ int FinancialManagement::update_order_txid(long orderid, std::string project_no,
   if(order->_status != ORDER_STATUS_BOOKING_SUCCESS)
     return ERROR_DUPLICATE_SET_TXID;
     
-  ret = _remotedb->update_order_txid(orderid, txid, investment_return_addr, payment_timestamp);
+  ret = _remotedb->update_order_txid(orderid, txid, investment_return_addr, payment_timestamp, oracle_publickey, contract_address);
   if(ret != 0)
     return ret;
 
@@ -613,7 +680,9 @@ int FinancialManagement::update_order_txid(long orderid, std::string project_no,
   order->_status = ORDER_STATUS_PAYED_AUDITING;
   order->_investment_return_addr = investment_return_addr;
   order->_payment_timestamp = payment_timestamp;
-
+  order->_oracle_publickey = oracle_publickey;
+  order->_contract_address = contract_address;
+  
   _order_confirm_timeout_heap.emplace(order->_booking_timestamp, order);
 
   //lmf test
@@ -806,7 +875,42 @@ std::shared_ptr<Project> FinancialManagement::get_project_by_no(std::string no)
     return get_project(_cache_project_no2id[no]);
   return _remotedb->get_project_by_no(no);
 }
+
+std::shared_ptr<User> FinancialManagement::cache_get_user_by_publickey(std::string publickey)
+{
+  if(_cache_user_publickey2id.count(publickey))
+    return cache_get_user(_cache_user_publickey2id[publickey]);
+  return std::shared_ptr<User>();
+}
   
+std::shared_ptr<Project> FinancialManagement::cache_get_project_by_no(std::string no)
+{
+  if(_cache_project_no2id.count(no))
+    return cache_get_project(_cache_project_no2id[no]);
+  return std::shared_ptr<Project>();
+}
+
+std::shared_ptr<Project> FinancialManagement::cache_get_project(long id)
+{
+  if(_projects[id%maxcnt] && _projects[id%maxcnt]->_id == id)
+    return _projects[id%maxcnt];
+  return std::shared_ptr<Project>();
+}
+
+std::shared_ptr<User> FinancialManagement::cache_get_user(long id)
+{
+  if(_users[id%maxcnt] && _users[id%maxcnt]->_id == id)
+    return _users[id%maxcnt];
+  return std::shared_ptr<User>();
+}
+
+std::shared_ptr<Order> FinancialManagement::cache_get_order(long id)
+{
+  if(_orders[id%maxcnt] && _orders[id%maxcnt]->_id == id)
+    return _orders[id%maxcnt];
+  return std::shared_ptr<Order>();
+}
+
 std::shared_ptr<Project> FinancialManagement::get_project(long id)
 {
   if(_projects[id%maxcnt] && _projects[id%maxcnt]->_id == id)
@@ -901,6 +1005,8 @@ void FinancialManagement::load_order(std::shared_ptr<Order> a)
 
 bool FinancialManagement::load()
 {
+  LOG(INFO, "got into load");
+  
   TimeElapsed te("load db");
   
   long onetime_to_load = 1000;
@@ -974,6 +1080,9 @@ bool FinancialManagement::load()
       _ordercnt = last->_id+1;
   }
 
+  //lmf_test
+  _ordercnt += 1000000;
+  
   LOG(INFO, "load success: %ld, %ld, %ld", _projectcnt, _ordercnt, _usercnt);
 
   return true;
@@ -993,7 +1102,7 @@ void FinancialManagement::start_epoll_server()
 	  return client;
 	};
       
-      SocketHelper::epoll_loop(60001, 1024, creater);
+      SocketHelper::epoll_loop(60002, 1024, creater);
 
       LOG(WARNING, "epoll loop exited!!!");
       
@@ -1162,13 +1271,16 @@ void FinancialManagement::watch_new_project(int now)
 
   TimeElapsed te("watch_new_project");
   
-  auto cnt = _remotedb->get_projects_cnt();
+  auto last = _remotedb->get_last_project();
   
-  if(cnt > _projectcnt)
+  if(!last)
+    return;
+  
+  if(last->_id >= _projectcnt)
     {
-      LOG(INFO, "found %ld new projects", cnt-_projectcnt);
+      LOG(INFO, "found %ld new projects", last->_id-_projectcnt+1);
       
-      auto projects = _remotedb->get_projects_by_limit(_projectcnt, cnt-_projectcnt);
+      auto projects = _remotedb->get_projects_by_limit(_projectcnt, last->_id-_projectcnt+1);
       
       for(auto project : projects)
 	{
@@ -1192,6 +1304,8 @@ void FinancialManagement::run(volatile bool * alive)
 	break;
       sleep(3);
     }
+
+  _remotedb->start();
   
   load();
 
@@ -1207,6 +1321,19 @@ void FinancialManagement::run(volatile bool * alive)
       watch_new_project(now+3);
       update_project_status(now+6);
       print_status(now);
+
+      for(;;)
+	{
+	  auto task = _qtasks.try_pop();
+	  if(!task)
+	    break;
+	  auto ret = task->work();
+	  if(ret != RETCODE_MSG_TRANSFERED)
+	    {
+	      auto rsp = gen_rsp(task->_name, task->_msn, ret, task->_v);
+	      _qrspmsg.push(std::make_shared<Message>(task->_client, rsp));
+	    }
+	}
       
       auto msg = _qreqmsg.timed_pop();
       if(!msg)
@@ -1215,12 +1342,18 @@ void FinancialManagement::run(volatile bool * alive)
       auto req = msg->data();
       
       //write_file(req);
-      auto rsp = handle_request(req);
+      
+      auto rsp = handle_request(req, msg->client());
+      if(rsp.empty())
+	continue;
+
       LOG(INFO, "rsp: %s", rsp.c_str());
+      
       //write_file(rsp);
 
       msg->set_data(rsp);
       _qrspmsg.push(msg);
+      
     }
   
   LOG(INFO, "run exit...");
@@ -1270,7 +1403,7 @@ bool status_match(int status1, int status2)
   return false;
 }
 
-std::string FinancialManagement::handle_request(std::string req)
+std::string FinancialManagement::handle_request(std::string req, std::shared_ptr<Client> client)
 {
   LOG(INFO, "into handle_request:\n%s", req.c_str());
   
@@ -1333,9 +1466,16 @@ std::string FinancialManagement::handle_request(std::string req)
       kvs["project_no"] = paras["product_no"];
       kvs["user_publickey"] = paras["user_publickey"];
       kvs["booking_amount"] = paras["amount"];
+      //lmf_test
+#if 0
       auto ret = add_order(kvs);
       if(ret == 0)
 	v.push_back("{\"order_id\":" + kvs["id"] + "}");
+#else
+      _qtasks.push(std::make_shared<Booking>(kvs, client, msn));
+      return "";
+#endif
+      
       return gen_rsp(command, msn, ret, v);
     }
 
@@ -1350,8 +1490,15 @@ std::string FinancialManagement::handle_request(std::string req)
 
   if(command == "update_order_txid")
     {
+      //lmfnew
       if(!check_paras(paras, {"product_no", "user_publickey", "order_id", "txid", "investment_return_addr", "payment_timestamp"}))
+      //if(!check_paras(paras, {"product_no", "user_publickey", "order_id", "txid", "investment_return_addr", "payment_timestamp", "oracle_publickey", "contract_address"}))
 	return gen_rsp(command, msn, ERROR_INVALID_PARAS, v);
+
+      if(paras.count("oracle_publickey") == 0)
+	paras["oracle_publickey"] = "oracle_publickey";
+      if(paras.count("contract_address") == 0)
+	paras["contract_address"] = "contract_address";
       
       auto ret = update_order_txid(
 				   atol(paras["order_id"].c_str()),
@@ -1359,7 +1506,9 @@ std::string FinancialManagement::handle_request(std::string req)
 				   paras["user_publickey"],
 				   paras["txid"],
 				   paras["investment_return_addr"],
-				   atoi(paras["payment_timestamp"].c_str())
+				   atoi(paras["payment_timestamp"].c_str()),
+				   paras["oracle_publickey"],
+				   paras["contract_address"]
 				   );
       return gen_rsp(command, msn, ret, v);
     }
@@ -1490,10 +1639,104 @@ std::string FinancialManagement::handle_request(std::string req)
       
       return gen_rsp(command, msn, 0, v);
     }
+
+  if(command == "update_crowdfunding_payment_txid")
+    {
+      if(!check_paras(paras, {"product_no", "crowdfunding_payment_txid"}))
+	return gen_rsp(command, msn, ERROR_INVALID_PARAS, v);
+      
+      auto a = get_project_by_no(paras["product_no"]);
+      if(!a)
+	return gen_rsp(command, msn, ERROR_NOT_EXIST_PROJECT_NO, v);
+      if(a->_status != PROJECT_STATUS_CROWDFUND_SUCCESS)
+	return gen_rsp(command, msn, ERROR_PROJECT_NOT_CROWDFUND_SUCCESS, v);
+
+      auto ret = _remotedb->update_crowdfunding_payment_txid(a->_id, paras["crowdfunding_payment_txid"]);
+      
+      return gen_rsp(command, msn, ret, v);
+    }
   
   return gen_rsp(command, msn, ERROR_INVALID_COMMAND, v);
 }
 
+int Task::work()
+{
+  if(_ret != 0)
+    return _ret;
+    
+  auto ret = do_work();
+
+  if(ret >= WAIT_REMOTEDB_START && ret < WAIT_REMOTEDB_COUNT)
+    {
+      _wait_command = ret;
+      fm()->remotedb()->_qtasks.push(shared_from_this());
+      return RETCODE_MSG_TRANSFERED;
+    }
+    
+  _ret = ret;
+  
+  return _ret;
+}
+
+int Booking::do_work()
+{
+  if(step(0))
+    {
+      long id = fm()->_ordercnt;
+      _kvs["id"] = std::to_string(id);
+      _order = Order::create(_kvs);
+  
+      _project = fm()->cache_get_project_by_no(_kvs["project_no"]);
+      if(!_project)
+	return WAIT_REMOTEDB_GET_PROJECT_BY_NO;
+    }
+
+  if(step(1))
+    {
+      if(!_project)
+	return ERROR_NOT_EXIST_PROJECT_NO;
+	
+      _user = fm()->cache_get_user_by_publickey(_kvs["user_publickey"]);
+      if(!_user)
+	return WAIT_REMOTEDB_GET_USER_BY_PUBLICKEY;
+    }
+    
+  if(step(2))
+    {
+      if(!_user)
+	{
+	  fm()->add_user(_kvs["user_publickey"]);
+	  _user = fm()->cache_get_user_by_publickey(_kvs["user_publickey"]);	    
+	}
+	
+      auto ret = check_valid_for_new_order(_order, _project);
+      if(ret)
+	return ret;
+
+      _order->_project_id = _project->_id;
+      _order->_user_id = _user->_id;
+      _order->_project_no = _kvs["project_no"];
+      _order->_user_publickey = _kvs["user_publickey"];
+
+      return WAIT_REMOTEDB_ADD_ORDER;
+    }
+
+  if(step(3))
+    {
+      _user->_orders.push_back(_order->_id);
+      _project->_orders.push_back(_order->_id);
+  
+      fm()->_orders[_order->_id % fm()->maxcnt] = _order;
+
+      _project->_booked_crowdfunding += _order->_booking_amount;
+  
+      fm()->_order_txid_timeout_heap.emplace(_order->_booking_timestamp, _order);
+  
+      fm()->_ordercnt++;
+	
+      return 0;
+    }
+}
 
 const char* query(const char* req)
 {

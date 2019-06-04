@@ -624,6 +624,8 @@ void SocketHelper::epoll_add(int epfd, int connfd, void* ptr)
 
 void SocketHelper::epoll_loop(int port, int client_cnt, std::function<std::shared_ptr<Client>(int)> client_creater)
 {
+  LOG(INFO, "got into epoll_loop");
+  
   static std::map<Client*, std::shared_ptr<Client>> keeper;
   
   struct epoll_event * events = NULL;

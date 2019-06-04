@@ -156,10 +156,10 @@ void create_table()
       auto now = (int)uint32_t(time(NULL));
       char query[256];
       int idx = get_rows_count("financial_management_projects");
-      int cnt = 5;
+      int cnt = 1;
       for(int i=idx; i<(idx+cnt); ++i)
 	{
-	  snprintf(query, sizeof(query), "INSERT INTO financial_management_projects VALUES (%d, 'FM%04d', 'money%04d', %f, 30, 0.001, 0.1, 3, %d, %d, 0, 0, 0, 0, 'mousWBSN7Rsqi8qpmZp7C6VmRkBGPD5bFF', 'makemoney%04d')", i, i, i, 0.083+0.001*(i-idx), now+3, now+3+3600*24, i);
+	  snprintf(query, sizeof(query), "INSERT INTO financial_management_projects VALUES (%d, 'FM%04d', 'money%04d', %f, 30, 0.001, 0.1, 3333, %d, %d, 0, 0, 0, 0, 'mousWBSN7Rsqi8qpmZp7C6VmRkBGPD5bFF', 'makemoney%04d', '', '', '')", i, i, i, 0.083+0.001*(i-idx), now+3, now+3+3600*72, i);
 	  if (mysql_real_query(mysql, query, strlen(query)))
 	    show_error(mysql);
 	}

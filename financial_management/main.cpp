@@ -53,9 +53,9 @@ int main()
 
   Config::instance()->parse("./config");
   
-  FinancialManagement a;
+  auto fm = FinancialManagement::get();
   
-  a.start();
+  fm->start();
   
   {
     // a.push_request("{\"command\": \"get_product_info\", \"seq\": 0, \"paras\": { \"product_no\": \"FM0001\"} }");
