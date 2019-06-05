@@ -49,7 +49,7 @@ struct RemoteDB
   std::vector<std::shared_ptr<Order>>   get_orders_by_limit(long start, long cnt);
 
   int update_order_status(long orderid, int status);
-  int update_order_txid(long orderid, std::string txid, std::string investment_return_addr, int payment_timestamp, std::string oracle_publickey, std::string contract_address);
+  int update_order_txid(long orderid, std::string txid, std::string investment_return_addr, int payment_timestamp, std::string oracle_publickey, std::string contract_address, std::string contract_script, int vout, int mc, int ms, int version, int locktime, std::string script_oracle_address);
   int update_order_confirm_timestamp(long orderid, int now);
   int update_project_status(long projectid, int status);
   int update_project_received_crowdfunding(long projectid, double amount);
@@ -58,7 +58,7 @@ struct RemoteDB
   int update_collections(long userid, std::string collections);
 
   int update_order_status_impl(MYSQL* mysql, long orderid, int status);
-  int update_order_txid_impl(MYSQL* mysql, long orderid, std::string txid, std::string investment_return_addr, int payment_timestamp, std::string oracle_publickey, std::string contract_address);
+  int update_order_txid_impl(MYSQL* mysql, long orderid, std::string txid, std::string investment_return_addr, int payment_timestamp, std::string oracle_publickey, std::string contract_address, std::string contract_script, int vout, int mc, int ms, int version, int locktime, std::string script_oracle_address);
   int update_order_confirm_timestamp_impl(MYSQL* mysql, long orderid, int now);
   int update_project_status_impl(MYSQL* mysql, long projectid, int status);
   int update_project_received_crowdfunding_impl(MYSQL* mysql, long projectid, double amount);
@@ -68,22 +68,16 @@ struct RemoteDB
   std::shared_ptr<Order> get_last_order();
   std::shared_ptr<Project> get_last_project();
 
-  utils::Queue<std::shared_ptr<Task>> _qtasks;
-
-  static const int thrdscnt = 4;
-
-    /* WAIT_REMOTEDB_GET_USER = 9001, */
-    /* WAIT_REMOTEDB_GET_PROJECT = 9002, */
-    /* WAIT_REMOTEDB_GET_ORDER = 9003, */
-    /* WAIT_REMOTEDB_ADD_ORDER = 9004, */
-  
-  void start();
-  
 private:
 
   void print_mysql_error()
   {
-    printf("Error(%d) [%s] \"%s\"", mysql_errno(_mysql), mysql_sqlstate(_mysql), mysql_error(_mysql));
+    print_mysql_error_impl(_mysql);
+  }
+
+  void print_mysql_error_impl(MYSQL* mysql)
+  {
+    printf("Error1(%d) [%s] \"%s\"", mysql_errno(mysql), mysql_sqlstate(mysql), mysql_error(mysql));
   }
 
   bool do_connect();
@@ -103,9 +97,9 @@ private:
   std::map<std::string, std::string>
     get_last_record(const char* table, const std::vector<std::string> & keys);
 
-  std::vector<std::string> _projectKeys;
-  std::vector<std::string> _userKeys;
-  std::vector<std::string> _orderKeys;
+  static std::vector<std::string> _projectKeys;
+  static std::vector<std::string> _userKeys;
+  static std::vector<std::string> _orderKeys;
 
   bool _connected = false;
   MYSQL *_mysql;

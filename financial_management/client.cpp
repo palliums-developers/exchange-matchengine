@@ -42,7 +42,7 @@ int g_log_level = INFO;
 
 const char * linesplit = "@#$";
 
-int main()
+int main1()
 {
   const char* book_pat = "{\"command\": \"booking\", \"seq\": 2, \"paras\": { \"product_no\": \"%s\", \"user_publickey\":\"%s\", \"amount\":0.001, \"timestamp\": 1558322863 } }";
 
@@ -109,7 +109,7 @@ int main()
 		}
 	    }
 	  //sleep(10000);
-	  usleep(600000*1000);
+	  usleep(1*1000);
 	}
     });
 
@@ -167,3 +167,15 @@ int main()
   sendthrd.join();
   return 0;
 }
+
+int main()
+{
+  for(int i=0; i<1; ++i)
+    {
+      std::thread thrd(main1);
+      thrd.detach();
+    }
+  
+  sleep(33333);
+}
+

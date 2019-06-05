@@ -32,6 +32,11 @@ using namespace std::chrono_literals;
 #include "remotedb.h"
 #include "financial_management.h"
 
+std::vector<std::string> RemoteDB::_projectKeys;
+std::vector<std::string> RemoteDB::_userKeys;
+std::vector<std::string> RemoteDB::_orderKeys;
+
+
 bool RemoteDB::connect()
 {
   if(!do_connect())
@@ -39,30 +44,35 @@ bool RemoteDB::connect()
 
   std::vector<std::vector<std::string>> vv;
 
-  {
-    auto query = "select COLUMN_NAME from information_schema.COLUMNS where table_name = 'financial_management_projects'";
-    if(do_query(query, &vv))
-      return false;
-    for(auto & v : vv)
-      _projectKeys.push_back(v[0]);
-  }
+  static bool done = false;
+  if(!done)
+    {
+      done = true;
+      {
+	auto query = "select COLUMN_NAME from information_schema.COLUMNS where table_name = 'financial_management_projects'";
+	if(do_query(query, &vv))
+	  return false;
+	for(auto & v : vv)
+	  _projectKeys.push_back(v[0]);
+      }
 
-  {
-    auto query = "select COLUMN_NAME from information_schema.COLUMNS where table_name = 'financial_management_users'";
-    if(do_query(query, &vv))
-      return false;
-    for(auto & v : vv)
-      _userKeys.push_back(v[0]);
-  }
+      {
+	auto query = "select COLUMN_NAME from information_schema.COLUMNS where table_name = 'financial_management_users'";
+	if(do_query(query, &vv))
+	  return false;
+	for(auto & v : vv)
+	  _userKeys.push_back(v[0]);
+      }
   
-  {
-    auto query = "select COLUMN_NAME from information_schema.COLUMNS where table_name = 'financial_management_orders'";
-    if(do_query(query, &vv))
-      return false;
-    for(auto & v : vv)
-      _orderKeys.push_back(v[0]);
-  }
-
+      {
+	auto query = "select COLUMN_NAME from information_schema.COLUMNS where table_name = 'financial_management_orders'";
+	if(do_query(query, &vv))
+	  return false;
+	for(auto & v : vv)
+	  _orderKeys.push_back(v[0]);
+      }
+    }
+  
   LOG(INFO, "remotedb connect success...");
   
   return true;
@@ -193,6 +203,7 @@ int RemoteDB::add_user_impl(MYSQL* mysql, std::shared_ptr<User> o)
 
 int RemoteDB::add_order(std::shared_ptr<Order> o)
 {
+  //raii r("add_order");
   return add_order_impl(_mysql, o);
 }
 
@@ -339,15 +350,15 @@ int RemoteDB::update_crowdfunding_payment_txid_impl(MYSQL* mysql, long projectid
   return do_query_impl(mysql, query, NULL);
 }
 
-int RemoteDB::update_order_txid(long orderid, std::string txid, std::string investment_return_addr, int payment_timestamp, std::string oracle_publickey, std::string contract_address)
+int RemoteDB::update_order_txid(long orderid, std::string txid, std::string investment_return_addr, int payment_timestamp, std::string oracle_publickey, std::string contract_address, std::string contract_script, int vout, int mc, int ms, int version, int locktime, std::string script_oracle_address)
 {
-  return update_order_txid_impl(_mysql, orderid, txid, investment_return_addr, payment_timestamp, oracle_publickey, contract_address);
+  return update_order_txid_impl(_mysql, orderid, txid, investment_return_addr, payment_timestamp, oracle_publickey, contract_address, contract_script, vout, mc, ms, version, locktime, script_oracle_address);
 }
 
-int RemoteDB::update_order_txid_impl(MYSQL* mysql, long orderid, std::string txid, std::string investment_return_addr, int payment_timestamp, std::string oracle_publickey, std::string contract_address)
+int RemoteDB::update_order_txid_impl(MYSQL* mysql, long orderid, std::string txid, std::string investment_return_addr, int payment_timestamp, std::string oracle_publickey, std::string contract_address, std::string contract_script, int vout, int mc, int ms, int version, int locktime, std::string script_oracle_address)
 {
   char query[1024];
-  snprintf(query, sizeof(query), "UPDATE financial_management_orders SET payment_txid='%s', investment_return_addr='%s', payment_timestamp=%d, oracle_publickey='%s', contract_address='%s' WHERE id=%ld", txid.c_str(), investment_return_addr.c_str(), payment_timestamp, oracle_publickey.c_str(), contract_address.c_str(), orderid);
+  snprintf(query, sizeof(query), "UPDATE financial_management_orders SET payment_txid='%s', investment_return_addr='%s', payment_timestamp=%d, oracle_publickey='%s', contract_address='%s', contract_script='%s', vout=%d, mc=%d, ms=%d, version=%d, locktime=%d, script_oracle_address='%s' WHERE id=%ld", txid.c_str(), investment_return_addr.c_str(), payment_timestamp, oracle_publickey.c_str(), contract_address.c_str(), contract_script.c_str(), vout, mc, ms, version, locktime, script_oracle_address.c_str(), orderid);
   return do_query_impl(mysql, query, NULL);
 }
 
@@ -406,9 +417,13 @@ int RemoteDB::do_query(const char* query, std::vector<std::vector<std::string>>*
 
 int RemoteDB::do_query_impl(MYSQL* mysql, const char* query, std::vector<std::vector<std::string>>* vv)
 {
-  if(mysql_real_query(mysql, query, strlen(query)))
+  //raii r1("do_query_impl");
+
+  auto ret = mysql_real_query(mysql, query, strlen(query));
+  if(ret != 0)
     {
-      print_mysql_error();
+      LOG(WARNING, "mysql_real_query return %d", ret);
+      print_mysql_error_impl(mysql);
       return ERROR_MYSQL_REAL_QUERY_FAILED;
     }
     
@@ -419,7 +434,7 @@ int RemoteDB::do_query_impl(MYSQL* mysql, const char* query, std::vector<std::ve
       auto result= mysql_store_result(mysql);
       if(result == NULL)
 	{
-	  print_mysql_error();
+	  print_mysql_error_impl(mysql);
 	  return ERROR_MYSQL_STORE_RESULT_FAILED;
 	}
       auto rowscnt = mysql_num_rows(result);
@@ -449,7 +464,7 @@ int RemoteDB::do_select_impl(MYSQL* mysql, const char* query, std::vector<std::s
 {
   if(mysql_real_query(mysql, query, strlen(query)))
     {
-      print_mysql_error();
+      print_mysql_error_impl(mysql);
       return ERROR_MYSQL_REAL_QUERY_FAILED;
     }
     
@@ -460,7 +475,7 @@ int RemoteDB::do_select_impl(MYSQL* mysql, const char* query, std::vector<std::s
       auto result= mysql_store_result(mysql);
       if(result == NULL)
 	{
-	  print_mysql_error();
+	  print_mysql_error_impl(mysql);
 	  return ERROR_MYSQL_STORE_RESULT_FAILED;
 	}
       auto rowscnt = mysql_num_rows(result);
@@ -525,63 +540,4 @@ RemoteDB::get_record_by_limit(const char* table, const std::vector<std::string> 
   return vv;
 }
 
-void RemoteDB::start()
-{
-  auto func = [this]{
-    
-    auto ip = Config::instance()->get("remotedb_ip");
-    auto usr = Config::instance()->get("remotedb_usr");
-    auto pwd = Config::instance()->get("remotedb_pwd");
-    auto dbname = Config::instance()->get("remotedb_dbname");
-      
-    auto mysql = mysql_init(NULL);
-      
-    for(;;)
-      {
-	mysql = mysql_real_connect(mysql, ip.c_str(), usr.c_str(), pwd.c_str(), dbname.c_str(), 0, NULL, 0);
-	if(mysql != NULL)
-	  break;
-	print_mysql_error();
-	sleep(3);
-      }
-
-    static int idx = 0;
-    auto thrdidx = idx++;
-    LOG(INFO, "remotedb start %d thread...", thrdidx);
-    
-    for(;;)
-      {
-	auto task = _qtasks.pop();
-
-	LOG(INFO, "remotedb thread %d got a task", thrdidx);
-	
-	if(task->_wait_command == WAIT_REMOTEDB_GET_PROJECT_BY_NO)
-	  {
-	    printf("000 ---------- %s", task->_kvs["project_no"].c_str());
-	    task->_project = get_project_by_no_impl(mysql, task->_kvs["project_no"]);
-	    continue;
-	  }
-
-	if(task->_wait_command == WAIT_REMOTEDB_GET_USER_BY_PUBLICKEY)
-	  {
-	    task->_user = get_user_by_publickey_impl(mysql, task->_kvs["user_publickey"]);
-	    continue;
-	  }
-
-	if(task->_wait_command == WAIT_REMOTEDB_ADD_ORDER)
-	  {
-	    task->_ret = add_order_impl(mysql, task->_order);
-	    continue;
-	  }
-
-	LOG(WARNING, "remotedb should not be here at start()");
-      }
-  };
-    
-  for(int i=0; i<thrdscnt; ++i)
-    {
-      std::thread thrd(func);
-      thrd.detach();
-    }
-}
   

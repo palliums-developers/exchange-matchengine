@@ -301,6 +301,21 @@ struct SocketHelper
   
 };
 
+struct raii
+{
+  raii(const char* name)
+  {
+    _name = name;
+    printf(">>>>>>> %s\n", _name);
+  }
+  ~raii()
+  {
+    printf("<<<<<<< %s\n", _name);
+  }
+  const char* _name;
+};
+
+
 // ----------------------------------------------------------------------------
 
 #endif
