@@ -302,7 +302,6 @@ std::string Project::to_json()
   return str;
 }
 
-
 std::shared_ptr<Order> Order::create(std::map<std::string, std::string> & kvs)
 {
   auto o = std::make_shared<Order>();
@@ -533,7 +532,9 @@ int FinancialManagement::add_user(std::string publickey)
   auto ret = _remotedb->add_user(user);
   if(ret != 0)
     return ret;
-  
+
+  user->_order_scanned = true;
+
   {
     std::unique_lock<std::mutex> lk(_mtx);
     _cache_user_publickey2id[publickey] = id;
@@ -640,10 +641,24 @@ int FinancialManagement::add_order(std::map<std::string, std::string> & kvs)
   order->_user_id = user->_id;
   order->_project_no = no;
   order->_user_publickey = publickey;
+
+  {
+    std::unique_lock<std::mutex> lk(project->_mtx);
+    
+    if(double_great(amount, (project->_total_crowdfunding_amount - project->_booked_crowdfunding)))
+      return ERROR_ADD_ORDER_CROWDFUNDING_BOOK_FULL;
+    
+    project->_booked_crowdfunding += amount;
+  }
   
   auto ret = _remotedb->add_order(order);
+  
   if(ret != 0)
-    return ret;
+    {
+      std::unique_lock<std::mutex> lk(project->_mtx);
+      project->_booked_crowdfunding -= amount;
+      return ret;
+    }
 
   user->_orders.push_back(id);
   {
@@ -653,11 +668,6 @@ int FinancialManagement::add_order(std::map<std::string, std::string> & kvs)
   
   _orders[ida] = order;
 
-  {
-    std::unique_lock<std::mutex> lk(project->_mtx);
-    project->_booked_crowdfunding += amount;
-  }
-  
   {
     std::unique_lock<std::mutex> lk(_mtx);
     _order_txid_timeout_heap.emplace(order->_booking_timestamp, order);
@@ -991,7 +1001,17 @@ std::shared_ptr<Order> FinancialManagement::get_order(long id)
 {
   if(_orders[id%maxcnt] && _orders[id%maxcnt]->_id == id)
     return _orders[id%maxcnt];
-  return _remotedb->get_order(id);
+
+  dot("`");
+  
+  auto order = _remotedb->get_order(id);
+  if(!order)
+    return order;
+  
+  complete_order(order);
+  _orders[id%maxcnt] = order;
+  
+  return order;
 }
   
 void FinancialManagement::start()
@@ -1006,26 +1026,93 @@ void FinancialManagement::start()
   thrd.detach();
 }
 
-void FinancialManagement::load_project(std::shared_ptr<Project> a)
+void FinancialManagement::multithread_load_orders(std::vector<long> orders, std::shared_ptr<Project> project)
 {
-  if(!a)
+  utils::Queue<long> q;
+  for(auto a : orders)
+    q.push(a);
+  
+  auto handler = [&,this] {
+
+    RemoteDB remotedb;
+    _remotedb = &remotedb;
+
+    for(;;)
+      {
+	if(_remotedb->connect())
+	  break;
+	sleep(3);
+      }
+    
+    for(;;)
+      {
+	auto orderid = q.timed_pop();
+    
+	if(orderid == 0)
+	  return;
+
+	dot(",");
+    
+	auto order = get_order(orderid);
+	if(!order)
+	  continue;
+    
+	auto user = get_user(order->_user_id);
+	if(!user)
+	  continue;
+    
+	load_order(order, project, user);
+      }
+  };
+  
+  for(int i=0; i<THREAD_CNT; ++i)
+    {
+      std::thread thrd(handler);
+      thrd.detach();
+    }
+}
+
+void FinancialManagement::load_project(std::shared_ptr<Project> project)
+{
+  if(!project)
     return;
-  _projects[a->_id%maxcnt] = a;
+  _projects[project->_id%maxcnt] = project;
 
   {
     std::unique_lock<std::mutex> lk(_mtx);
-    _cache_project_no2id[a->_no] = a->_id;
+    _cache_project_no2id[project->_no] = project->_id;
   }
 
-  {
-    std::unique_lock<std::mutex> lk(a->_mtx);
-    if(a->_status == PROJECT_STATUS_CROWDFUND_SUCCESS)
-      a->_received_crowdfunding = a->_total_crowdfunding_amount;
-  }
+  //std::unique_lock<std::mutex> lk(a->_mtx);
+  if(project->_status == PROJECT_STATUS_CROWDFUND_SUCCESS)
+    {
+      project->_received_crowdfunding = project->_total_crowdfunding_amount;
+      project->_booked_crowdfunding = project->_total_crowdfunding_amount;
+    }
+  else if(project->_status == PROJECT_STATUS_CROWDFUNDING)
+    {
+      auto orders = get_project_orders(project);
+      printf("orders: %lu\n", orders.size());
+
+      multithread_load_orders(orders, project);
+      // for(auto orderid : orders)
+      // 	{
+      // 	  dot(",");
+      // 	  auto order = get_order(orderid);
+      // 	  if(!order)
+      // 	    continue;
+      // 	  auto user = get_user(order->_user_id);
+      // 	  if(!user)
+      // 	    continue;
+      // 	  load_order(order, project, user);
+      // 	}
+    }
 }
 
 void FinancialManagement::load_user(std::shared_ptr<User> a)
 {
+  dot("#");
+
   if(!a)
     return;
   _users[a->_id%maxcnt] = a;
@@ -1036,62 +1123,45 @@ void FinancialManagement::load_user(std::shared_ptr<User> a)
   }
 }
 
-void FinancialManagement::load_order(std::shared_ptr<Order> a)
+void FinancialManagement::load_order(std::shared_ptr<Order> order, std::shared_ptr<Project> project, std::shared_ptr<User> user)
 {
-  if(!a)
+  
+  if(!order)
     return;
 
-  _orders[a->_id%maxcnt] = a;
-  
-  auto user = _users[a->_user_id%maxcnt];
-  if(user && user->_id == a->_user_id)
-    {
-      user->_orders.push_back(a->_id);
-      a->_user_publickey = user->_publickey;
-    }
-  
-  auto project = _projects[a->_project_id%maxcnt];
-  if(project && project->_id == a->_project_id)
-    {
-      {
-	std::unique_lock<std::mutex> lk(project->_mtx);
-	project->_orders.push_back(a->_id);
-      }
-      a->_project_no = project->_no;
-    }
+  _orders[order->_id%maxcnt] = order;
+
+  order->_user_publickey = user->_publickey;
+  order->_project_no = project->_no;
 
   {
     std::unique_lock<std::mutex> lk(_mtx);
-    
-    if(a->_status == ORDER_STATUS_BOOKING_SUCCESS)
-      _order_txid_timeout_heap.emplace(a->_booking_timestamp, a);
-    if(a->_status == ORDER_STATUS_PAYED_AUDITING)
-      _order_confirm_timeout_heap.emplace(a->_booking_timestamp, a);
+    if(order->_status == ORDER_STATUS_BOOKING_SUCCESS)
+      _order_txid_timeout_heap.emplace(order->_booking_timestamp, order);
+    if(order->_status == ORDER_STATUS_PAYED_AUDITING)
+      _order_confirm_timeout_heap.emplace(order->_booking_timestamp, order);
   }
-  
-  if(project && project->_status == PROJECT_STATUS_CROWDFUNDING)
+
+  switch(order->_status)
     {
-      switch(a->_status)
-	{
-	case ORDER_STATUS_BOOKING_SUCCESS:
-	case ORDER_STATUS_PAYED_AUDITING:
-	  {
-	    std::unique_lock<std::mutex> lk(project->_mtx);
-	    project->_booked_crowdfunding += a->_booking_amount;
-	  }
-	  break;
-	case ORDER_STATUS_AUDIT_SUCCESS:
-	  {
-	    std::unique_lock<std::mutex> lk(project->_mtx);
-	    project->_received_crowdfunding += a->_booking_amount;
-	  }
-	  break;
-	default:
-	  {
-	    std::unique_lock<std::mutex> lk(project->_mtx);
-	    project->_booked_crowdfunding -= a->_booking_amount;
-	  }
-	}
+    case ORDER_STATUS_BOOKING_SUCCESS:
+    case ORDER_STATUS_PAYED_AUDITING:
+      {
+	std::unique_lock<std::mutex> lk(project->_mtx);
+	project->_booked_crowdfunding += order->_booking_amount;
+      }
+      break;
+    case ORDER_STATUS_AUDIT_SUCCESS:
+      {
+	std::unique_lock<std::mutex> lk(project->_mtx);
+	project->_received_crowdfunding += order->_booking_amount;
+      }
+      break;
+    default:
+      {
+	std::unique_lock<std::mutex> lk(project->_mtx);
+	project->_booked_crowdfunding -= order->_booking_amount;
+      }
     }
 }
 
@@ -1106,27 +1176,6 @@ bool FinancialManagement::load()
   auto projectcnt = _remotedb->get_projects_cnt();
   auto ordercnt = _remotedb->get_orders_cnt();
   auto usercnt = _remotedb->get_users_cnt();
-    
-  {
-    auto & acnt = projectcnt;
-    std::shared_ptr<Project> last;
-    
-    long i = 0;
-    long cnt = 0;
-    while(cnt < acnt)
-      {
-	auto v = _remotedb->get_projects_by_limit(i*onetime_to_load, onetime_to_load);
-	for(auto & a : v)
-	  {
-	    load_project(a);
-	    cnt++;
-	    last = a;
-	  }
-	i++;
-      }
-    if(last)
-      _projectcnt = last->_id+1;
-  }
 
   {
     auto & acnt = usercnt;
@@ -1149,31 +1198,36 @@ bool FinancialManagement::load()
     if(last)
       _usercnt = last->_id+1;
   }
-
+  
   {
-    auto & acnt = ordercnt;
-    std::shared_ptr<Order> last;
-
+    auto & acnt = projectcnt;
+    std::shared_ptr<Project> last;
+    
     long i = 0;
     long cnt = 0;
     while(cnt < acnt)
       {
-	auto v = _remotedb->get_orders_by_limit(i*onetime_to_load, onetime_to_load);
+	auto v = _remotedb->get_projects_by_limit(i*onetime_to_load, onetime_to_load);
 	for(auto & a : v)
 	  {
-	    load_order(a);
+	    load_project(a);
 	    cnt++;
 	    last = a;
 	  }
 	i++;
       }
-    
+    if(last)
+      _projectcnt = last->_id+1;
+  }
+
+  {
+    auto last = _remotedb->get_last_order();
     if(last)
       _ordercnt = last->_id+1;
   }
 
   //lmf_test
-  _ordercnt += 100000;
+  //_ordercnt += 100000;
   
   LOG(INFO, "load success: %ld, %ld, %ld", long(_projectcnt), long(_ordercnt), long(_usercnt));
 
@@ -1193,8 +1247,9 @@ void FinancialManagement::start_epoll_server()
 	  client->set_qmsg(qreqmsg);
 	  return client;
 	};
-      
-      SocketHelper::epoll_loop(60002, 1024, creater);
+
+      //lmf_test
+      SocketHelper::epoll_loop(60001, 1024, creater);
 
       LOG(WARNING, "epoll loop exited!!!");
       
@@ -1241,6 +1296,41 @@ void FinancialManagement::print_status(int now)
   char buf[512];
   sprintf(buf, "qreq:%d, qrsp:%d", _qreqmsg.size(), _qrspmsg.size());
   write_file(buf);
+}
+
+void FinancialManagement::handle_order_list(int now)
+{
+  static int idx1 = _usercnt-1;
+  if(idx1 >= 0)
+    {
+      auto user = _users[idx1%maxcnt];
+      if(user && !user->_order_scanned && user->_orders.empty())
+	get_user_orders(user);
+      idx1--;
+    }
+  else
+    idx1 = _usercnt-1;
+  
+  static int idx2 = _projectcnt-1;
+  if(idx2 >= 0)
+    {
+      auto project = _projects[idx2%maxcnt];
+      if(project && !project->_order_scanned && project->_orders.empty())
+	get_project_orders(project);
+      idx2--;
+    }
+  else
+    idx2 = _projectcnt-1;
+
+  static int idx3 = _ordercnt-1;
+  static int cnt = 0;
+  if(idx3 >= 0 && cnt++ < 100000)
+    {
+      auto order = _orders[idx3%maxcnt];
+      if(!order)
+	get_order(idx3);
+      idx3--;
+    }
 }
 
 void FinancialManagement::handle_order_heap(int now)
@@ -1403,6 +1493,8 @@ void FinancialManagement::watch_new_project(int now)
       
       for(auto project : projects)
 	{
+	  project->_order_scanned = true;
+	  
 	  auto ret = add_project(project);
 	  if(ret != 0)
 	    LOG(WARNING, "add_project failed: %d, project_id:%ld", ret, project->_id);
@@ -1479,12 +1571,16 @@ void FinancialManagement::run(volatile bool * alive)
       watch_new_project(now+3);
       update_project_status(now+6);
       print_status(now);
-
+      handle_order_list(now);
+      
       sleep(1);
     }
   
   LOG(INFO, "run exit...");
 }
+
+// lmf
+// {"seq": 1, "command": "get_orders", "paras": {"user_publickey": "mousWBSN7Rsqi8qpmZp7C6VmRkBGPD5bFF", "product_no": "all", "status": 1, "offset": 0, "limit": 10}}
 
 void FinancialManagement::push_request(std::string req)
 {
@@ -1528,6 +1624,108 @@ bool status_match(int status1, int status2)
       if(status2 == ORDER_STATUS_BOOKING_TIMEOUT) return true;
     }
   return false;
+}
+
+std::vector<int> status_match2(int status)
+{
+  std::vector<int> v;
+  if(status == 0)
+    {
+      v.push_back(ORDER_STATUS_BOOKING_SUCCESS);
+      v.push_back(ORDER_STATUS_PAYED_AUDITING);
+    }
+  if(status == 1)
+    {
+      v.push_back(ORDER_STATUS_AUDIT_SUCCESS);
+    }
+  if(status == 2)
+    {
+      v.push_back(ORDER_STATUS_AUDIT_FAILURE);
+      v.push_back(ORDER_STATUS_CANCELED);
+      v.push_back(ORDER_STATUS_PAYMENT_REFUNDED);
+      v.push_back(ORDER_STATUS_AUDIT_SUCCESS_TOO_LATE);
+      v.push_back(ORDER_STATUS_AUDIT_TIMEOUT);
+      v.push_back(ORDER_STATUS_BOOKING_TIMEOUT);
+    }
+  return v;
+}
+
+std::vector<long> FinancialManagement::get_user_orders(std::shared_ptr<User> user)
+{
+  std::vector<long> v;
+  
+  if(!user)
+    return v;
+
+  LOG(INFO, "call remotedb get_user_orders %ld", user->_id);
+  
+  v = _remotedb->get_user_orders(user->_id);
+
+  user->_orders = v;
+  user->_order_scanned = true;
+  
+  return v;
+}
+
+void FinancialManagement::cache_order(std::shared_ptr<Order> order)
+{
+  complete_order(order);
+  _orders[order->_id%maxcnt] = order;
+}
+
+std::vector<std::shared_ptr<Order>> 
+FinancialManagement::get_user_orders_limit(std::shared_ptr<User> user, std::vector<int> statuses, int offset, int count, int direction)
+{
+  auto v = _remotedb->get_user_orders_limit(user, statuses, offset, count, direction);
+  for(auto order : v)
+    cache_order(order);
+  return v;
+}
+
+std::vector<std::shared_ptr<Order>> 
+FinancialManagement::get_project_orders_limit(std::shared_ptr<Project> project, std::vector<int> statuses, int offset, int count, int direction)
+{
+  auto v = _remotedb->get_project_orders_limit(project, statuses, offset, count, direction);
+  for(auto order : v)
+    cache_order(order);
+  return v;
+}
+
+std::vector<long> FinancialManagement::get_project_orders(std::shared_ptr<Project> project)
+{
+  std::vector<long> v;
+  
+  if(!project)
+    return v;
+
+  LOG(INFO, "call remotedb get_project_orders %ld", project->_id);
+  
+  v = _remotedb->get_project_orders(project->_id);
+
+  {
+    std::unique_lock<std::mutex> lk(project->_mtx);
+    project->_orders = v;
+    project->_order_scanned = true;
+  }
+  
+  return v;
+}
+
+void FinancialManagement::complete_order(std::shared_ptr<Order> order)
+{
+  if(order->_user_publickey.empty())
+    {
+      auto user = get_user(order->_user_id);
+      if(user)
+	order->_user_publickey = user->_publickey;
+    }
+
+  if(order->_project_no.empty())
+    {
+      auto project = get_project(order->_project_id);
+      if(project)
+	order->_project_no = project->_no;
+    }
 }
 
 std::string FinancialManagement::handle_request(std::string req)
@@ -1723,7 +1921,7 @@ std::string FinancialManagement::handle_request(std::string req)
 
       if(!paras["user_publickey"].empty() && paras["user_publickey"] != "all")
 	add_user(paras["user_publickey"]);
-      
+
       std::vector<long> orders;
       
       if(paras["product_no"] == "all")
@@ -1732,7 +1930,10 @@ std::string FinancialManagement::handle_request(std::string req)
 	  if(!user)
 	    return gen_rsp(command, msn, ERROR_NOT_EXIST_USER_PUBLICKEY, v);
 	  orders = user->_orders;
+	  if(orders.empty() && !user->_order_scanned)
+	    orders = get_user_orders(user);
 	}
+      
       if(paras["user_publickey"] == "all")
 	{
 	  auto project = get_project_by_no(paras["product_no"]);
@@ -1742,6 +1943,8 @@ std::string FinancialManagement::handle_request(std::string req)
 	    std::unique_lock<std::mutex> lk(project->_mtx);
 	    orders = project->_orders;
 	  }
+	  if(orders.empty() && !project->_order_scanned)
+	    orders = get_project_orders(project);
 	}
       
       for(int i=orders.size()-1; i>=0 ; --i)
@@ -1749,6 +1952,7 @@ std::string FinancialManagement::handle_request(std::string req)
 	  auto order = get_order(orders[i]);
 	  if(!order)
 	    continue;
+	  complete_order(order);
 	  if(status != 999 && !status_match(status, order->_status))
 	    continue;
 	  if(idx++ < offset)

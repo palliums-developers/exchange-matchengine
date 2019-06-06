@@ -68,6 +68,14 @@ struct RemoteDB
   std::shared_ptr<Order> get_last_order();
   std::shared_ptr<Project> get_last_project();
 
+  std::vector<long> get_project_orders(long projectid);
+  std::vector<long> get_user_orders(long userid);
+
+  std::vector<std::shared_ptr<Order>> 
+  get_project_orders_limit(std::shared_ptr<Project> project, std::vector<int> statuses, int offset, int count, int direction);
+  std::vector<std::shared_ptr<Order>> 
+  get_user_orders_limit(std::shared_ptr<User> user, std::vector<int> statuses, int offset, int count, int direction);
+
 private:
 
   void print_mysql_error()

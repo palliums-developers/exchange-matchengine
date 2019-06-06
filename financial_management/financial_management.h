@@ -129,7 +129,8 @@ struct Project
   std::string  _crowdfunding_payment_txid;
 
   std::vector<long> _orders;
-
+  bool         _order_scanned = false;
+  
   std::mutex _mtx;
 };
 
@@ -186,6 +187,8 @@ struct User
   std::string _collections;
 
   std::vector<long> _orders;
+
+  bool         _order_scanned = false;
 };
 
 struct FinancialManagement
@@ -226,23 +229,38 @@ struct FinancialManagement
 
   std::shared_ptr<Project> cache_get_project_by_no(std::string no);
   std::shared_ptr<User> cache_get_user_by_publickey(std::string publickey);
-  
+
+  std::vector<long> get_user_orders(std::shared_ptr<User> user);
+  std::vector<long> get_project_orders(std::shared_ptr<Project> project);
+
+  void complete_order(std::shared_ptr<Order> order);
+
+  void cache_order(std::shared_ptr<Order> order);
+  std::vector<std::shared_ptr<Order>> 
+  get_user_orders_limit(std::shared_ptr<User> user, std::vector<int> statuses, int offset, int count, int direction);
+  std::vector<std::shared_ptr<Order>> 
+  get_project_orders_limit(std::shared_ptr<Project> project, std::vector<int> statuses, int offset, int count, int direction);
+
   void start();
   bool load();
 
   void load_project(std::shared_ptr<Project> a);
   void load_user(std::shared_ptr<User> a);
-  void load_order(std::shared_ptr<Order> a);
+  void load_order(std::shared_ptr<Order> a, std::shared_ptr<Project>, std::shared_ptr<User>);
 
   void start_server();
   void server_proc(utils::Queue<std::string>* qreq, utils::Queue<std::string>* qrsp);
   void start_epoll_server();
+
+  void handle_order_list(int now);
   
   void handle_order_heap(int);
   void watch_new_project(int);
   void update_project_status(int);
   void print_status(int);
-  
+
+  void multithread_load_orders(std::vector<long> orders, std::shared_ptr<Project>);
+
   void run(volatile bool * alive);
   
   void push_request(std::string req);

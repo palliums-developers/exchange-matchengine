@@ -72,8 +72,9 @@ bool RemoteDB::connect()
 	  _orderKeys.push_back(v[0]);
       }
     }
-  
-  LOG(INFO, "remotedb connect success...");
+
+  dot("*");
+  //LOG(INFO, "remotedb connect success...");
   
   return true;
 }
@@ -357,7 +358,7 @@ int RemoteDB::update_order_txid(long orderid, std::string txid, std::string inve
 
 int RemoteDB::update_order_txid_impl(MYSQL* mysql, long orderid, std::string txid, std::string investment_return_addr, int payment_timestamp, std::string oracle_publickey, std::string contract_address, std::string contract_script, int vout, int mc, int ms, int version, int locktime, std::string script_oracle_address)
 {
-  char query[1024];
+  char query[2048];
   snprintf(query, sizeof(query), "UPDATE financial_management_orders SET payment_txid='%s', investment_return_addr='%s', payment_timestamp=%d, oracle_publickey='%s', contract_address='%s', contract_script='%s', vout=%d, mc=%d, ms=%d, version=%d, locktime=%d, script_oracle_address='%s' WHERE id=%ld", txid.c_str(), investment_return_addr.c_str(), payment_timestamp, oracle_publickey.c_str(), contract_address.c_str(), contract_script.c_str(), vout, mc, ms, version, locktime, script_oracle_address.c_str(), orderid);
   return do_query_impl(mysql, query, NULL);
 }
@@ -386,6 +387,135 @@ int RemoteDB::update_collections_impl(MYSQL* mysql, long userid, std::string col
   return do_query_impl(mysql, query, NULL);
 }
 
+std::vector<long> RemoteDB::get_project_orders(long projectid)
+{
+  std::vector<long> v;
+
+  int idx = 0;
+  int cnt = 200;
+
+  for(;;)
+    {
+      std::vector<std::map<std::string, std::string>> vv;
+    
+      char query[256];
+      snprintf(query, sizeof(query), "SELECT id FROM financial_management_orders WHERE project_id = %ld LIMIT %d,%d", projectid, idx, cnt);
+  
+      std::vector<std::string> keys{"id"};
+  
+      do_select(query, keys, &vv);
+
+      for(auto & a : vv)
+	v.push_back(atol(a["id"].c_str()));
+      
+      if(vv.size() < cnt)
+	break;
+      
+      idx += cnt;
+    }
+
+  return v;
+}
+
+std::vector<long> RemoteDB::get_user_orders(long userid)
+{
+  std::vector<long> v;
+
+  int idx = 0;
+  int cnt = 200;
+  
+  for(;;)
+    {
+      std::vector<std::map<std::string, std::string>> vv;
+      
+      char query[256];
+      snprintf(query, sizeof(query), "SELECT id FROM financial_management_orders WHERE user_id = %ld LIMIT %d,%d", userid, idx, cnt);
+  
+      std::vector<std::string> keys{"id"};
+  
+      do_select(query, keys, &vv);
+
+      for(auto & a : vv)
+	v.push_back(atol(a["id"].c_str()));
+
+      if(vv.size() < cnt)
+	break;
+      
+      idx += cnt;
+    }
+
+  return v;  
+}
+
+std::vector<std::shared_ptr<Order>> 
+RemoteDB::get_user_orders_limit(std::shared_ptr<User> user, std::vector<int> statuses, int offset, int count, int direction)
+{
+  auto userid = user->_id;
+
+  std::vector<std::shared_ptr<Order>> v;
+  
+  std::vector<std::map<std::string, std::string>> vv;
+  
+  char query[256];
+  
+  const char* dir = (direction==0 ? "DESC": "");
+
+  std::string status;
+  for(int i=0; i<statuses.size(); ++i)
+    {
+      if(i > 0)
+	status += " OR ";
+      status += "status=" + std::to_string(statuses[i]);
+    }
+
+  if(statuses.empty())
+    snprintf(query, sizeof(query), "SELECT * FROM financial_management_orders WHERE user_id=%ld ORDER BY id %s LIMIT %d,%d", userid, dir, offset, count);
+  else
+    snprintf(query, sizeof(query), "SELECT * FROM financial_management_orders WHERE user_id=%ld AND (%s) ORDER BY id %s LIMIT %d,%d", userid, status.c_str(), dir, offset, count);
+  
+  do_select(query, _orderKeys, &vv);
+
+  for(auto & a : vv)
+    v.push_back(Order::create(a));
+
+  return v;
+}
+
+std::vector<std::shared_ptr<Order>> 
+RemoteDB::get_project_orders_limit(std::shared_ptr<Project> project, std::vector<int> statuses, int offset, int count, int direction)
+{
+  auto projectid = project->_id;
+
+  std::vector<std::shared_ptr<Order>> v;
+  
+  std::vector<std::map<std::string, std::string>> vv;
+  
+  char query[256];
+  
+  const char* dir = (direction==0 ? "DESC": "");
+
+  std::string status;
+  for(int i=0; i<statuses.size(); ++i)
+    {
+      if(i > 0)
+	status += " OR ";
+      status += "status=" + std::to_string(statuses[i]);
+    }
+
+  if(statuses.empty())
+    snprintf(query, sizeof(query), "SELECT * FROM financial_management_orders WHERE project_id=%ld ORDER BY id %s LIMIT %d,%d", projectid, dir, offset, count);
+  else
+    snprintf(query, sizeof(query), "SELECT * FROM financial_management_orders WHERE project_id=%ld AND (%s) ORDER BY id %s LIMIT %d,%d", projectid, status.c_str(), dir, offset, count);
+  
+  do_select(query, _orderKeys, &vv);
+
+  for(auto & a : vv)
+    v.push_back(Order::create(a));
+
+  return v;
+}
+
+
 bool RemoteDB::do_connect()
 {
   auto ip = Config::instance()->get("remotedb_ip");
@@ -393,7 +523,7 @@ bool RemoteDB::do_connect()
   auto pwd = Config::instance()->get("remotedb_pwd");
   auto dbname = Config::instance()->get("remotedb_dbname");
 
-  LOG(INFO, "start to connect mariadb...");
+  //LOG(INFO, "start to connect mariadb...");
   
   //auto mysql = mysql_real_connect(_mysql, "47.106.208.207", "root", "1234qwer", "test", 0, NULL, 0);
   auto mysql = mysql_real_connect(_mysql, ip.c_str(), usr.c_str(), pwd.c_str(), dbname.c_str(), 0, NULL, 0);
@@ -403,7 +533,10 @@ bool RemoteDB::do_connect()
       return false;
     }
 
-  LOG(INFO, "connect mariadb success...");
+  char value = 1;
+  mysql_options(_mysql, MYSQL_OPT_RECONNECT, (char *)&value);
+  
+  //LOG(INFO, "connect mariadb success...");
   
   _connected = true;
     
@@ -422,7 +555,7 @@ int RemoteDB::do_query_impl(MYSQL* mysql, const char* query, std::vector<std::ve
   auto ret = mysql_real_query(mysql, query, strlen(query));
   if(ret != 0)
     {
-      LOG(WARNING, "mysql_real_query return %d", ret);
+      LOG(WARNING, "do_query query:\n%s", query);
       print_mysql_error_impl(mysql);
       return ERROR_MYSQL_REAL_QUERY_FAILED;
     }
@@ -465,6 +598,7 @@ int RemoteDB::do_select_impl(MYSQL* mysql, const char* query, std::vector<std::s
   if(mysql_real_query(mysql, query, strlen(query)))
     {
       print_mysql_error_impl(mysql);
+      LOG(WARNING, "do_select query:\n%s", query);
       return ERROR_MYSQL_REAL_QUERY_FAILED;
     }
     

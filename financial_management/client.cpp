@@ -45,7 +45,9 @@ const char * linesplit = "@#$";
 int main1()
 {
   const char* book_pat = "{\"command\": \"booking\", \"seq\": 2, \"paras\": { \"product_no\": \"%s\", \"user_publickey\":\"%s\", \"amount\":0.001, \"timestamp\": 1558322863 } }";
-
+  const char* get_orders_pat = "{\"seq\": 1, \"command\": \"get_orders\", \"paras\": {\"user_publickey\": \"mousWBSN7Rsqi8qpmZp7C6VmRkBGPD5bFF\", \"product_no\": \"all\", \"status\": 1, \"offset\": 0, \"limit\": 10}}";
+  const char* cancel_pat = "{\"seq\": 645, \"command\": \"cancel_order\", \"paras\": {\"order_id\": %d, \"product_no\": \"%s\", \"user_publickey\": \"%s\"}}";
+  
   bool connected = false;
   
   int sock = 0;
@@ -57,7 +59,7 @@ int main1()
     
     for(;;)
       {
-	sock = SocketHelper::connect("127.0.0.1", 60002);
+	sock = SocketHelper::connect("127.0.0.1", 60001);
 	if(sock > 0)
 	  break;
 	sleep(3);
@@ -81,10 +83,12 @@ int main1()
       
 	  for(int i=0; i<1; ++i)
 	    {
+	      static int orderid = 33857;
 	      //sprintf(buf, book_pat, "FM0021", "mousWBSN7Rsqi8qpmZp7C6VmRkBGPD5bFF"); v.push_back(buf);
 	      char username[512];
 	      sprintf(username, "lmf_WbCdvY9c5iUDRSofhU8rFh5kW_%04d", (useridx++%200));
 	      sprintf(buf, book_pat, "FM0065", username); v.push_back(buf);
+	      //sprintf(buf, cancel_pat,  orderid++, "FM0065", username); v.push_back(buf);
 	    }
 
 	  for(auto a : v)
@@ -93,7 +97,12 @@ int main1()
 	  
 	      while(!connected)
 		sleep(1);
-	  
+
+	      //auto str = "{\"seq\": 645, \"command\": \"cancel_order\", \"paras\": {\"order_id\": 33838, \"product_no\": \"FM0065\", \"user_publickey\": \"mrmrQVRepZxBLDXKamDzqXkE3VNdR1eZkX\"}}@#$";
+	      //auto str = "{\"seq\": 1, \"command\": \"get_orders\", \"paras\": {\"user_publickey\": \"mousWBSN7Rsqi8qpmZp7C6VmRkBGPD5bFF\", \"product_no\": \"all\", \"status\": 1, \"offset\": 0, \"limit\": 10}}@#$";
+	      //auto cnt = send(sock, str, strlen(str), 0);
+	      //sleep(1111);
+	      
 	      auto cnt = send(sock, req.c_str(), req.length(), 0);
 	  
 	      if(cnt != req.length())
@@ -107,9 +116,10 @@ int main1()
 		  static int idx = 0;
 		  LOG(INFO, "send %d success", idx++);
 		}
+	      //sleep(5);
 	    }
-	  //sleep(10000);
-	  usleep(1*1000);
+	  sleep(1);
+	  //usleep(1*1000);
 	}
     });
 
