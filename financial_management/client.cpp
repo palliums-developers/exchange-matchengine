@@ -87,7 +87,7 @@ int main1()
 	      //sprintf(buf, book_pat, "FM0021", "mousWBSN7Rsqi8qpmZp7C6VmRkBGPD5bFF"); v.push_back(buf);
 	      char username[512];
 	      sprintf(username, "lmf_WbCdvY9c5iUDRSofhU8rFh5kW_%04d", (useridx++%200));
-	      sprintf(buf, book_pat, "FM0065", username); v.push_back(buf);
+	      sprintf(buf, book_pat, "FM0069", username); v.push_back(buf);
 	      //sprintf(buf, cancel_pat,  orderid++, "FM0065", username); v.push_back(buf);
 	    }
 
@@ -118,8 +118,8 @@ int main1()
 		}
 	      //sleep(5);
 	    }
-	  sleep(1);
-	  //usleep(1*1000);
+	  sleep(3);
+	  //usleep(2*1000);
 	}
     });
 

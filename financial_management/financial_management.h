@@ -105,6 +105,29 @@ struct Project
   std::string to_json();
 
   int check_valid();
+
+  void update_received_crowdfunding(double val)
+  {
+    std::unique_lock<std::mutex> lk(_mtx);
+    _received_crowdfunding += val;
+    _invalid = true;
+  }
+
+  void update_booked_crowdfunding(double val)
+  {
+    std::unique_lock<std::mutex> lk(_mtx);
+    _booked_crowdfunding += val;
+  }
+  
+  void update_status(int status)
+  {
+    std::unique_lock<std::mutex> lk(_mtx);
+    if(_status != status)
+      {
+	_status = status;
+	_invalid = true;
+      }
+  }
   
   long         _id;
   std::string  _no;
@@ -130,6 +153,11 @@ struct Project
 
   std::vector<long> _orders;
   bool         _order_scanned = false;
+
+  bool _invalid = true;
+  std::string _json;
+
+  double       _last_received_crowdfunding = 0;
   
   std::mutex _mtx;
 };
@@ -243,10 +271,11 @@ struct FinancialManagement
 
   void start();
   bool load();
+  bool load_multithread();
 
   void load_project(std::shared_ptr<Project> a);
   void load_user(std::shared_ptr<User> a);
-  void load_order(std::shared_ptr<Order> a, std::shared_ptr<Project>, std::shared_ptr<User>);
+  void load_order(std::shared_ptr<Order> a);
 
   void start_server();
   void server_proc(utils::Queue<std::string>* qreq, utils::Queue<std::string>* qrsp);

@@ -303,6 +303,15 @@ RemoteDB::get_last_project()
   return Project::create(v);
 }
 
+std::shared_ptr<User>
+RemoteDB::get_last_user()
+{
+  auto v = get_last_record("financial_management_users", _userKeys);
+  if(v.empty())
+    return std::shared_ptr<User>();
+  return User::create(v);
+}
+
 int RemoteDB::update_order_status(long orderid, int status)
 {
   return update_order_status_impl(_mysql, orderid, status);
@@ -443,6 +452,25 @@ std::vector<long> RemoteDB::get_user_orders(long userid)
       
       idx += cnt;
     }
+
+  return v;  
+}
+
+std::vector<long> RemoteDB::get_user_history_orders(long userid, long end_orderid)
+{
+  std::vector<long> v;
+  
+  std::vector<std::map<std::string, std::string>> vv;
+      
+  char query[256];
+  snprintf(query, sizeof(query), "SELECT id FROM financial_management_orders WHERE id<%ld AND user_id = %ld", end_orderid, userid);
+  
+  std::vector<std::string> keys{"id"};
+  
+  do_select(query, keys, &vv);
+
+  for(auto & a : vv)
+    v.push_back(atol(a["id"].c_str()));
 
   return v;  
 }

@@ -67,9 +67,11 @@ struct RemoteDB
   
   std::shared_ptr<Order> get_last_order();
   std::shared_ptr<Project> get_last_project();
+  std::shared_ptr<User> get_last_user();
 
   std::vector<long> get_project_orders(long projectid);
   std::vector<long> get_user_orders(long userid);
+  std::vector<long> get_user_history_orders(long userid, long end_orderid);
 
   std::vector<std::shared_ptr<Order>> 
   get_project_orders_limit(std::shared_ptr<Project> project, std::vector<int> statuses, int offset, int count, int direction);
