@@ -90,6 +90,19 @@ void write_file(const std::string & str)
     }
 }
 
+FILE* log2filehandle = NULL;
+
+void log_2_file(const std::string & str)
+{
+  static auto fh = fopen("a.log", "a");
+  log2filehandle = fh;
+  if(fh)
+    {
+      fwrite(str.c_str(), 1, str.length(), fh);
+      fwrite("\n\n", 1, 2, fh);
+    }
+}
+
 struct TimeElapsed
 {
   TimeElapsed(const char* name)
@@ -765,24 +778,16 @@ int FinancialManagement::update_order_txid(long orderid, std::string project_no,
   if(0 != ret)
     return ret;
 
-  if(order->_status == ORDER_STATUS_BOOKING_TIMEOUT || order->_status == ORDER_STATUS_AUDIT_TIMEOUT)
-    return ERROR_ORDER_TIMEOUT;
+  if(order->_status != ORDER_STATUS_BOOKING_SUCCESS && order->_status != ORDER_STATUS_BOOKING_TIMEOUT)
+    return ERROR_CANNOT_UPDATE_ORDER_TXID;
 
   auto now = (int)uint32_t(time(NULL));
-  if(now > (order->_booking_timestamp+1800))
-    return ERROR_ORDER_TIMEOUT;
-  
-  if(order->_status != ORDER_STATUS_BOOKING_SUCCESS)
-    return ERROR_DUPLICATE_SET_TXID;
 
   ret = _remotedb->update_order_txid(orderid, txid, investment_return_addr, payment_timestamp, oracle_publickey, contract_address, contract_script, vout, mc, ms, version, locktime, script_oracle_address);
   if(ret != 0)
     return ret;
 
-  _remotedb->update_order_status(orderid, ORDER_STATUS_PAYED_AUDITING);
-  
   order->_payment_txid = txid;
-  order->_status = ORDER_STATUS_PAYED_AUDITING;
   order->_investment_return_addr = investment_return_addr;
   order->_payment_timestamp = payment_timestamp;
   order->_oracle_publickey = oracle_publickey;
@@ -794,15 +799,26 @@ int FinancialManagement::update_order_txid(long orderid, std::string project_no,
   order->_version = version;
   order->_locktime = locktime;
   order->_script_oracle_address = script_oracle_address;
+
+  if(order->_status == ORDER_STATUS_BOOKING_TIMEOUT || order->_status == ORDER_STATUS_AUDIT_TIMEOUT)
+    return ERROR_ORDER_TIMEOUT;
+
+  if(now > (order->_booking_timestamp+1800))
+    return ERROR_ORDER_TIMEOUT;
+
+  _remotedb->update_order_status(orderid, ORDER_STATUS_PAYED_AUDITING);
+
+  order->_status = ORDER_STATUS_PAYED_AUDITING;
   
   {
     std::unique_lock<std::mutex> lk(_mtx);
     _order_confirm_timeout_heap.emplace(order->_booking_timestamp, order);
   }
   //lmf test
+  //order_txid_confirm(orderid, txid, "true");
   if(orderid % 2 == 0)
     {
-      order_txid_confirm(orderid, txid, "true");
+      //order_txid_confirm(orderid, txid, "true");
     }
   
   return 0;
@@ -1597,7 +1613,7 @@ void FinancialManagement::handle_order_heap(int now)
   
   for(;;)
     {
-      dot(":");
+      //dot(":");
       std::multimap<int, std::shared_ptr<Order>>::iterator iter;
       std::shared_ptr<Order> order;
       
@@ -1624,7 +1640,7 @@ void FinancialManagement::handle_order_heap(int now)
       if(timepassed < 1800)
 	break;
 
-      dot("<");
+      //dot("<");
       order->_status = ORDER_STATUS_BOOKING_TIMEOUT;
       
       _qreqmsg.push(gen_self_update_order_status_req(order->_id, order->_status));
@@ -1644,7 +1660,7 @@ void FinancialManagement::handle_order_heap(int now)
   
   for(;;)
     {
-      dot(";");
+      //dot(";");
       
       std::multimap<int, std::shared_ptr<Order>>::iterator iter;
       std::shared_ptr<Order> order;
@@ -1672,7 +1688,7 @@ void FinancialManagement::handle_order_heap(int now)
       if(timepassed < 7200)
 	break;
 
-      dot(">");
+      //dot(">");
 
       order->_status = ORDER_STATUS_AUDIT_TIMEOUT;
 
@@ -1797,21 +1813,24 @@ void FinancialManagement::run(volatile bool * alive)
       {
 	auto msg = _qreqmsg.timed_pop();
 	if(!msg)
-	  continue;
+	  {
+	    fflush(log2filehandle);
+	    continue;
+	  }
 
 	auto req = msg->data();
       
-	//write_file(req);
+	log_2_file(req);
       
 	auto rsp = handle_request(req);
 	if(rsp.empty())
 	  continue;
 
 	//lmf_test
-	LOG(INFO, "rsp: %s", rsp.c_str());
+	//LOG(INFO, "rsp: %s", rsp.c_str());
 	//dot(">");
       
-	//write_file(rsp);
+	log_2_file(rsp);
 
 	msg->set_data(rsp);
 	_qrspmsg.push(msg);
@@ -1996,7 +2015,7 @@ void FinancialManagement::complete_order(std::shared_ptr<Order> order)
 std::string FinancialManagement::handle_request(std::string req)
 {
   //lmf_test
-  LOG(INFO, "into handle_request:\n%s", req.c_str());
+  //LOG(INFO, "into handle_request:\n%s", req.c_str());
   
   std::string rsp;
   
@@ -2090,10 +2109,10 @@ std::string FinancialManagement::handle_request(std::string req)
 
   if(command == "update_order_txid")
     {
-      if(!check_paras(paras, {"product_no", "user_publickey", "order_id", "txid", "investment_return_addr", "payment_timestamp", "oracle_publickey", "contract_address", "contract_script", "vout", "mc", "ms", "version", "locktime", "script_oracle_address"}))
+      if(!check_paras(paras, {"product_no", "user_publickey", "order_id", "txid", "investment_return_addr", "payment_timestamp", "contract_address", "contract_script", "vout", "mc", "ms", "version", "locktime", "script_oracle_address"}))
       	return gen_rsp(command, msn, ERROR_INVALID_PARAS, v);
 
-      
+      paras["oracle_publickey"] = "";
       auto ret = update_order_txid(
       				   atol(paras["order_id"].c_str()),
       				   paras["product_no"],
@@ -2194,6 +2213,10 @@ std::string FinancialManagement::handle_request(std::string req)
     {
       if(!check_paras(paras, {"product_no", "user_publickey", "status", "offset", "limit"}))
 	return gen_rsp(command, msn, ERROR_INVALID_PARAS, v);
+      if(paras["product_no"] != "all" && (paras["product_no"].empty() || paras["product_no"] == "null"))
+	return gen_rsp(command, msn, ERROR_INVALID_PARAS, v);
+      if(paras["user_publickey"] != "all" && (paras["user_publickey"].empty() || paras["user_publickey"] == "null"))
+	return gen_rsp(command, msn, ERROR_INVALID_PARAS, v);
       
       long offset = atol(paras["offset"].c_str());
       int limit = atoi(paras["limit"].c_str());
@@ -2204,30 +2227,53 @@ std::string FinancialManagement::handle_request(std::string req)
 	add_user(paras["user_publickey"]);
 
       std::vector<long> orders;
-      
-      if(paras["product_no"] == "all")
+
+      if(paras["product_no"] == "all" && paras["user_publickey"] == "all")
 	{
-	  auto user = get_user_by_publickey(paras["user_publickey"]);
-	  if(!user)
-	    return gen_rsp(command, msn, ERROR_NOT_EXIST_USER_PUBLICKEY, v);
-	  orders = user->_orders;
-	  if(orders.empty() && !user->_order_scanned)
-	    orders = get_user_orders(user);
+	  auto projectid = _projectcnt-1;
+	  while(projectid >= 0)
+	    {
+	      auto project = get_project(projectid);
+	      if(!project)
+		break;
+	      if(project->_status == PROJECT_STATUS_CROWDFUNDING)
+		{
+		  std::vector<long> porders;
+		  {
+		    std::unique_lock<std::mutex> lk(project->_mtx);
+		    porders = project->_orders;
+		  }
+		  for(auto a : porders)
+		    orders.push_back(a);
+		}
+	      projectid--;
+	    }
 	}
-      
-      if(paras["user_publickey"] == "all")
+      else
 	{
-	  auto project = get_project_by_no(paras["product_no"]);
-	  if(!project)
-	    return gen_rsp(command, msn, ERROR_NOT_EXIST_PROJECT_NO, v);
-	  {
-	    std::unique_lock<std::mutex> lk(project->_mtx);
-	    orders = project->_orders;
-	  }
-	  if(orders.empty() && !project->_order_scanned)
-	    orders = get_project_orders(project);
-	}
+	  if(paras["product_no"] == "all")
+	    {
+	      auto user = get_user_by_publickey(paras["user_publickey"]);
+	      if(!user)
+		return gen_rsp(command, msn, ERROR_NOT_EXIST_USER_PUBLICKEY, v);
+	      orders = user->_orders;
+	      // if(orders.empty() && !user->_order_scanned)
+	      //   orders = get_user_orders(user);
+	    }
       
+	  if(paras["user_publickey"] == "all")
+	    {
+	      auto project = get_project_by_no(paras["product_no"]);
+	      if(!project)
+		return gen_rsp(command, msn, ERROR_NOT_EXIST_PROJECT_NO, v);
+	      {
+		std::unique_lock<std::mutex> lk(project->_mtx);
+		orders = project->_orders;
+	      }
+	      // if(orders.empty() && !project->_order_scanned)
+	      //   orders = get_project_orders(project);
+	    }
+	}
       for(int i=orders.size()-1; i>=0 ; --i)
 	{
 	  auto order = get_order(orders[i]);
