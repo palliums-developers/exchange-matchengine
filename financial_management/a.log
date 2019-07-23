@@ -1,0 +1,8 @@
+{"command": "booking", "seq": 2, "paras": { "product_no": "FM0069", "user_publickey":"lmf_WbCdvY9c5iUDRSofhU8rFh5kW_0000", "amount":0.001, "timestamp": 1558322863 } }
+
+{"command":"booking", "status":3008, "seq":2, "data":[]}
+
+{"command": "booking", "seq": 2, "paras": { "product_no": "FM0069", "user_publickey":"lmf_WbCdvY9c5iUDRSofhU8rFh5kW_0001", "amount":0.001, "timestamp": 1558322863 } }
+
+{"command":"booking", "status":3008, "seq":2, "data":[]}
+

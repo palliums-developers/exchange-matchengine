@@ -21,6 +21,8 @@ void log(int level, const char* file, int line, const char* func, const char *fo
 void log2(int level, const char* file, int line, const char* func, const char *format, ...);
 #define LOG(lvl, ...) log2((lvl), __FILE__, __LINE__, __func__, __VA_ARGS__)
 
+#define TIMER(n) do{ static int last = 0; if(now-last < (n)) return; last = now; } while(0)
+
 // -------------------------------------------------------
 
 template<class Container, class Element>
@@ -315,6 +317,120 @@ struct raii
   const char* _name;
 };
 
+
+// ----------------------------------------------------------------------------
+
+struct TimeElapsed
+{
+  TimeElapsed(const char* name)
+  {
+    start = std::chrono::system_clock::now();
+    this->name = name;
+  }
+  
+  ~TimeElapsed()
+  {
+    auto end   = std::chrono::system_clock::now();
+    auto duration = std::chrono::duration_cast<std::chrono::microseconds>(end - start);
+    int milliseconds = duration.count()/1000;
+
+    char buf[512];
+    sprintf(buf, "%s cost %d milliseconds", name, milliseconds);
+    //write_file(buf);
+
+    if(milliseconds >= 100)
+      LOG(WARNING, buf);
+  }
+  
+  std::chrono::system_clock::time_point start;
+  const char* name;
+};
+
+// ----------------------------------------------------------------------------
+
+bool double_equal(double a, double b);
+bool double_not_equal(double a, double b);
+bool double_great(double a, double b);
+bool double_less(double a, double b);
+bool double_great_equal(double a, double b);
+bool double_less_equal(double a, double b);
+
+// ----------------------------------------------------------------------------
+
+struct ThreadPool
+{
+  ThreadPool(int thrdcnt, std::function<void*()> state_creater, std::function<void(void*)> state_destroyer)
+  {
+    _thread_count = thrdcnt;
+    _state_creater = state_creater;
+    _state_destroyer = state_destroyer;
+    
+    for(int i=0; i<_thread_count; ++i)
+      _threads[i] = new std::thread(&ThreadPool::run, this);
+  }
+  
+  ~ThreadPool()
+  {
+    _running = false;
+    
+    for(int i=0; i<_thread_count; ++i)
+      {
+	_threads[i]->join();
+	delete _threads[i];
+      }
+
+    LOG(INFO, "thread pool exited!");
+  }
+  
+  void run()
+  {
+    auto state = _state_creater();
+    
+    for(;;)
+      {
+	auto task = _qtasks.timed_pop();
+	if(!task)
+	  {
+	    if(!_running)
+	      break;
+	    continue;
+	  }
+	
+	task(state);
+	
+	_running_count--;
+      }
+
+    _state_destroyer(state);
+  }
+
+  void push(std::function<void(void*)> task)
+  {
+    _running_count++;
+    _qtasks.push(task);
+  }
+
+  void wait()
+  {
+    while(_running_count > 0)
+      sleep(1);
+    
+    sleep(1);
+
+    while(_running_count > 0)
+      sleep(1);
+  }
+
+  int _thread_count = 0;
+  
+  std::function<void*()> _state_creater;
+  std::function<void(void*)> _state_destroyer;
+
+  utils::Queue<std::function<void(void*)>> _qtasks;
+  std::vector<std::thread*> _threads;
+  bool _running = true;
+  std::atomic_int _running_count = 0;
+};
 
 // ----------------------------------------------------------------------------
 

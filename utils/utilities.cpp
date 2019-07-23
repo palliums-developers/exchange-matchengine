@@ -23,6 +23,7 @@
 #include <assert.h>
 
 #include <stdio.h>
+#include <math.h>
 #include <stdlib.h>
 #include <fcntl.h>
 #include <errno.h>
@@ -465,8 +466,6 @@ std::string get_file_content(const char* path)
 
 //-----------------------------------------------------------------------------------------
 
-#if 1
-
 void SocketHelper::set_non_blocking(int sock)
 {
   if(sock <= 0)
@@ -672,7 +671,7 @@ void SocketHelper::epoll_loop(int port, int client_cnt, std::function<std::share
 		  if(cnt == 0)
 		    LOG(WARNING, "client %s socket closed...", client->name().c_str());
 		  if(cnt <  0)
-		    LOG(WARNING, "client %s recv failed: %s", strerror(errno));
+		    LOG(WARNING, "client %s recv failed: %s", client->name().c_str(), strerror(errno));
 
 		  keeper.erase(client);
 		}
@@ -725,7 +724,38 @@ int SocketHelper::connect(const char * serverip, const int serverport)
   return sock;
 }
 
-#endif
+//-----------------------------------------------------------------------------------------
+
+bool double_equal(double a, double b)
+{
+  return fabs(a-b) < 0.00001;
+}
+
+bool double_not_equal(double a, double b)
+{
+  return !double_equal(a, b);
+}
+
+bool double_great(double a, double b)
+{
+  return a > b && !double_equal(a, b);
+}
+
+bool double_less(double a, double b)
+{
+  return a < b && !double_equal(a, b);
+}
+
+bool double_great_equal(double a, double b)
+{
+  return !double_less(a, b);
+}
+
+bool double_less_equal(double a, double b)
+{
+  return !double_great(a, b);
+}
+
 
 //-----------------------------------------------------------------------------------------
 
