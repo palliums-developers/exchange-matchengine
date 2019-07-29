@@ -151,8 +151,8 @@ int main1()
 		  LOG(INFO, "send %d success: %s", idx++, req.c_str());
 		}
 	    }
-	  sleep(30000);
-	  //usleep(10*1000);
+	  //sleep(30000);
+	  usleep(10*1000);
 	}
     });
 
