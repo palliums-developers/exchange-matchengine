@@ -659,11 +659,15 @@ void SocketHelper::epoll_loop(int port, int client_cnt, std::function<std::share
 	      Client* client = (Client*)events[i].data.ptr;
 	      auto fd = client->get_fd();
 	      auto cnt = ::recv(fd, client->buf(), client->space(), 0);
+	      
 	      if(cnt > 0)
 		{
-		  client->recved(cnt);
+		  auto ret = client->recved(cnt);
+		  if(ret < 0)
+		    cnt = ret;
 		}
-	      else
+	      
+	      if(cnt <= 0)
 		{
 		  client->set_fd(0);
 		  ::epoll_ctl(epfd, EPOLL_CTL_DEL, fd, 0);
@@ -672,7 +676,7 @@ void SocketHelper::epoll_loop(int port, int client_cnt, std::function<std::share
 		    LOG(WARNING, "client %s socket closed...", client->name().c_str());
 		  if(cnt <  0)
 		    LOG(WARNING, "client %s recv failed: %s", client->name().c_str(), strerror(errno));
-
+		  
 		  keeper.erase(client);
 		}
 	    }

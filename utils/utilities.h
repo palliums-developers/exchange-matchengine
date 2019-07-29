@@ -212,22 +212,59 @@ struct Client : std::enable_shared_from_this<Client>
   bool send_closed() { return _send_closed; }
   void set_send_closed() { _send_closed = true; }
   
-  void recved(int cnt)
+  int recved(int cnt)
   {
     _pos += cnt;
     
-    split();
+    auto ret = split_by_len();
+    if(ret < 0)
+      return ret;
     
     if(_msgs.empty())
-      return;
+      return 0;
 
     auto msg = _msgs.front();
     _msgs.pop_front();
 
     assert(_qmsg != NULL);
     _qmsg->push(std::make_shared<Message>(shared_from_this(), msg));
+    
+    return 0;
   }
 
+  int split_by_len()
+  {
+    char* p = _buf;
+    int cnt = _pos;
+    
+    for(;;)
+      {
+	if(cnt <= 2)
+	  break;
+
+	unsigned short len = *(unsigned short *)p;
+	if(len > sizeof(_buf))
+	  return -1;
+
+	if(cnt < len)
+	  break;
+
+	if(p[len-1] != 0x00)
+	  return -2;
+
+	_msgs.push_back(&p[2]);
+
+	p += len;
+	cnt -= len;
+      }
+
+    if(cnt > 0 && p != &_buf[0])
+      memmove(_buf, p, cnt);
+    _pos = cnt;
+    
+    return 0;
+  }
+  
   void split()
   {
     const char* linesplit = "@#$";
@@ -361,19 +398,18 @@ struct ThreadPool
 {
   ThreadPool(int thrdcnt, std::function<void*()> state_creater, std::function<void(void*)> state_destroyer)
   {
-    _thread_count = thrdcnt;
     _state_creater = state_creater;
     _state_destroyer = state_destroyer;
     
-    for(int i=0; i<_thread_count; ++i)
-      _threads[i] = new std::thread(&ThreadPool::run, this);
+    for(int i=0; i<thrdcnt; ++i)
+      _threads.push_back(new std::thread(&ThreadPool::run, this));
   }
   
   ~ThreadPool()
   {
     _running = false;
     
-    for(int i=0; i<_thread_count; ++i)
+    for(int i=0; i<_threads.size(); ++i)
       {
 	_threads[i]->join();
 	delete _threads[i];
@@ -421,8 +457,6 @@ struct ThreadPool
       sleep(1);
   }
 
-  int _thread_count = 0;
-  
   std::function<void*()> _state_creater;
   std::function<void(void*)> _state_destroyer;
 
