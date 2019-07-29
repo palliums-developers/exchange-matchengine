@@ -136,8 +136,37 @@ struct Test : public TestBase
   virtual ~Test(){ std::cout << "~test()\n"; }
 };
 
+
+
+struct RangeLock
+{
+  RangeLock(int id, std::mutex * mtxs, int mtxcnt) : _lk(mtxs[id%mtxcnt]) {}
+  ~RangeLock() {}
+  std::unique_lock<std::mutex> _lk;
+};
+
 int main()
 {
+  {
+    std::mutex mtxs[4];
+
+    for(int i=0; i<20; i++) {
+      std::thread thrd([&, i]{
+	  int idx = i;
+	  {
+	    RangeLock rl(idx, mtxs, 4);
+	    printf("thrd %d start...\n", idx);
+	    sleep(3);
+	  }
+	  printf("thrd %d done...\n", idx);
+	});
+      thrd.detach();
+    }
+
+    sleep(333333);
+    return 0;
+    
+  }
   {
     std::map<std::string, std::string> m;
     m["timestamp"] = 3;

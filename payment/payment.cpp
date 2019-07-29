@@ -208,6 +208,12 @@ std::string Order::to_json()
 }
 
 
+std::mutex* get_user_mtx(long id)
+{
+  static std::mutex mtxs[1024];
+  return &mtxs[id%1024];
+}
+
 std::shared_ptr<User> User::create(std::map<std::string, std::string> & kvs)
 {
   auto o = std::make_shared<User>();
@@ -242,6 +248,8 @@ std::shared_ptr<User> User::create(std::map<std::string, std::string> & kvs)
   if(kvs.count("withdraw_addr"))
     o->_withdraw_addr = kvs["withdraw_addr"];
 
+  //o->_mtx = get_user_mtx(o->_id);
+  
   return o;
 }
 
@@ -502,6 +510,7 @@ int Payment::add_order(std::map<std::string, std::string> & kvs)
   
   {
     std::unique_lock<std::mutex> lk(_mtx);
+    
     if(order->_type == ORDER_TYPE_TRANSACTION) {
       if(double_less(user->_balance, amount))
 	return ERROR_INSUFFICIENT_AMOUNT; 
@@ -521,28 +530,28 @@ int Payment::add_order(std::map<std::string, std::string> & kvs)
 
   {
     std::unique_lock<std::mutex> lk(_mtx);
+    
     if(order->_type == ORDER_TYPE_RECHARGE)
       user->_balance += amount;
     if(order->_type == ORDER_TYPE_TRANSACTION) 
       touser->_balance += amount;
+    
+    user->_orders.push_back(id);
+    if(user->_orders.size() > 4096)
+      user->_orders.pop_front();
+  
+    if(order->_type == ORDER_TYPE_RECHARGE)
+      user->_recharges.push_back(id);
+  
+    if(order->_type == ORDER_TYPE_TRANSACTION) {
+      touser->_orders.push_back(id);
+      if(touser->_orders.size() > 4096)
+	touser->_orders.pop_front();
+    }
+    
+    if(order->_type == ORDER_TYPE_WITHDRAW)
+      user->_withdraws.push_back(id);
   }
-  
-  user->_orders.push_back(id);
-  if(user->_orders.size() > 4096)
-    user->_orders.pop_front();
-  
-  if(order->_type == ORDER_TYPE_RECHARGE)
-    user->_recharges.push_back(id);
-  
-  if(order->_type == ORDER_TYPE_TRANSACTION) {
-    std::unique_lock<std::mutex> lk(_mtx);
-    touser->_orders.push_back(id);
-    if(touser->_orders.size() > 4096)
-      touser->_orders.pop_front();
-  }
-  
-  if(order->_type == ORDER_TYPE_WITHDRAW)
-    user->_withdraws.push_back(id);
   
   _orders[ida] = order;
 
@@ -991,7 +1000,8 @@ std::string Payment::handle_request(std::string req)
   
   if(command == "add_user")
     {
-      if(!check_paras(paras, {"login_pwd_hash", "tx_pwd_hash", "login_pwd_salt", "tx_pwd_salt", "balance", "recharge_addr", "reward_point", "timestamp"}))
+      if(!check_paras(paras, {"login_pwd_hash", "recharge_addr", }))
+      //if(!check_paras(paras, {"login_pwd_hash", "tx_pwd_hash", "login_pwd_salt", "tx_pwd_salt", "balance", "recharge_addr", "reward_point", "timestamp"}))
 	return gen_rsp(command, msn, ERROR_INVALID_PARAS, v);
       auto idstr = check_or_paras(paras, {"user", "phone", "mail"});
       if(idstr.empty())
@@ -1118,13 +1128,16 @@ std::string Payment::handle_request(std::string req)
 	return gen_rsp(command, msn, ERROR_NOT_EXIST_USER, v);
 
       std::list<long> orders;
-      if(type == ORDER_TYPE_RECHARGE)
-	orders = user->_recharges;
-      else if(type == ORDER_TYPE_WITHDRAW)
-	orders = user->_withdraws;
-      else
-	orders = user->_orders;
-
+      {
+	std::unique_lock<std::mutex> lk(_mtx);
+	if(type == ORDER_TYPE_RECHARGE)
+	  orders = user->_recharges;
+	else if(type == ORDER_TYPE_WITHDRAW)
+	  orders = user->_withdraws;
+	else
+	  orders = user->_orders;
+      }
+      
       long last_orderid = 0;
 
       for(auto it=orders.rbegin(); it != orders.rend(); it++)

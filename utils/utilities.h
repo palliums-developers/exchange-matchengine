@@ -243,14 +243,18 @@ struct Client : std::enable_shared_from_this<Client>
 	  break;
 
 	unsigned short len = *(unsigned short *)p;
-	if(len > sizeof(_buf))
+	if(len > sizeof(_buf)) {
+	  LOG(WARNING, "too large msg: %d", len);
 	  return -1;
+	}
 
 	if(cnt < len)
 	  break;
 
-	if(p[len-1] != 0x00)
+	if(p[len-1] != 0x00) {
+	  LOG(WARNING, "msg shoule end with 0x00");
 	  return -2;
+	}
 
 	_msgs.push_back(&p[2]);
 
@@ -465,6 +469,15 @@ struct ThreadPool
   bool _running = true;
   //std::atomic_int _running_count = 0;
   std::atomic_int _running_count{0};
+};
+
+// ----------------------------------------------------------------------------
+
+struct RangeLock
+{
+  RangeLock(int id, std::mutex * mtxs, int mtxcnt) : _lk(mtxs[id%mtxcnt]) {}
+  ~RangeLock() {}
+  std::unique_lock<std::mutex> _lk;
 };
 
 // ----------------------------------------------------------------------------

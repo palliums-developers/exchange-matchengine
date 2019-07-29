@@ -83,6 +83,7 @@ int main1()
       for(;;)
 	{
 	  sock = SocketHelper::connect("127.0.0.1", 60001);
+	  //sock = SocketHelper::connect("47.106.208.207", 60001);
 	  if(sock > 0)
 	    break;
 	  sleep(3);
@@ -152,7 +153,7 @@ int main1()
 		}
 	    }
 	  //sleep(30000);
-	  usleep(10*1000);
+	  usleep(100*1000);
 	}
     });
 

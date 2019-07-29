@@ -662,6 +662,7 @@ void SocketHelper::epoll_loop(int port, int client_cnt, std::function<std::share
 	      
 	      if(cnt > 0)
 		{
+		  dot("d");
 		  auto ret = client->recved(cnt);
 		  if(ret < 0)
 		    cnt = ret;

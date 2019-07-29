@@ -75,6 +75,61 @@ struct User
 
   int check_valid();
 
+  /* double get_balance() */
+  /* { */
+  /*   std::unique_lock<std::mutex> lk(*_mtx); */
+  /*   return _balance; */
+  /* } */
+
+  /* void balance(double amount) */
+  /* { */
+  /*   std::unique_lock<std::mutex> lk(*_mtx); */
+  /*   _balance += amount; */
+  /* } */
+
+  /* std::list<long> get_orders() */
+  /* { */
+  /*   std::unique_lock<std::mutex> lk(*_mtx); */
+  /*   return _orders; */
+  /* } */
+
+  /* std::list<long> get_recharges() */
+  /* { */
+  /*   std::unique_lock<std::mutex> lk(*_mtx); */
+  /*   return _recharges; */
+  /* } */
+
+  /* std::list<long> get_withdraws() */
+  /* { */
+  /*   std::unique_lock<std::mutex> lk(*_mtx); */
+  /*   return _withdraws; */
+  /* } */
+
+  /* void push_order(long id) */
+  /* { */
+  /*   std::unique_lock<std::mutex> lk(*_mtx); */
+  /*   _orders.push_back(id); */
+  /* } */
+
+  /* void push_recharge(long id) */
+  /* { */
+  /*   std::unique_lock<std::mutex> lk(*_mtx); */
+  /*   _recharges.push_back(id); */
+  /* } */
+
+  /* void push_withdraw(long id) */
+  /* { */
+  /*   std::unique_lock<std::mutex> lk(*_mtx); */
+  /*   _withdraws.push_back(id); */
+  /* } */
+
+  /* void pop_order() */
+  /* { */
+  /*   std::unique_lock<std::mutex> lk(*_mtx); */
+  /*   if(_orders.size() > 4096) */
+  /*     _orders.pop_front(); */
+  /* } */
+  
   long _id;
   std::string _user;
   std::string _login_pwd_hash;
@@ -93,6 +148,8 @@ struct User
   std::list<long> _orders;
   std::list<long> _recharges;
   std::list<long> _withdraws;
+
+  //std::mutex* _mtx = NULL;
 };
 
 struct Payment
@@ -103,7 +160,7 @@ struct Payment
     _users.resize(maxcnt);
     _orders.resize(maxcnt);
   }
-  
+
   int add_user(std::map<std::string, std::string> & kvs);
   int update_user(std::shared_ptr<User> user, std::map<std::string, std::string> & kvs);
 
@@ -161,8 +218,8 @@ struct Payment
   utils::Queue<std::shared_ptr<Message>> _qrspmsg;
   
   std::mutex _mtx;
+  std::mutex _userMtxs[1024];
 };
-
 
 #endif
 
