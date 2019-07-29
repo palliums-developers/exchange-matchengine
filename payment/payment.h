@@ -144,8 +144,8 @@ struct Payment
 
   std::string handle_request(std::string req);
 
-  std::atomic_long _ordercnt = 0;
-  std::atomic_long _usercnt = 0;
+  std::atomic_long _ordercnt{0};
+  std::atomic_long _usercnt{0};
 
   std::vector<std::shared_ptr<Order>>   _orders;
   std::vector<std::shared_ptr<User>>    _users;
