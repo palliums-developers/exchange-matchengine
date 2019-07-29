@@ -463,7 +463,8 @@ struct ThreadPool
   utils::Queue<std::function<void(void*)>> _qtasks;
   std::vector<std::thread*> _threads;
   bool _running = true;
-  std::atomic_int _running_count = 0;
+  //std::atomic_int _running_count = 0;
+  std::atomic_int _running_count{0};
 };
 
 // ----------------------------------------------------------------------------
