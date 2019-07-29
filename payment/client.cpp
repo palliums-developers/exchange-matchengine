@@ -42,31 +42,54 @@ int g_log_level = INFO;
 
 const char * linesplit = "@#$";
 
+	// `id` INT(11) NOT NULL,
+	// `user` VARCHAR(50) NOT NULL,
+	// `login_pwd_hash` VARCHAR(50) NOT NULL,
+	// `tx_pwd_hash` VARCHAR(50) NOT NULL,
+	// `login_pwd_salt` VARCHAR(50) NOT NULL,
+	// `tx_pwd_salt` VARCHAR(50) NOT NULL,
+	// `balance` DECIMAL(24,8) NOT NULL,
+	// `phone` VARCHAR(50) NOT NULL,
+	// `mail` VARCHAR(50) NOT NULL,
+	// `recharge_addr` VARCHAR(50) NOT NULL,
+	// `reward_point` VARCHAR(50) NOT NULL,
+	// `timestamp` INT(11) NOT NULL,
+	// `device_token` VARCHAR(50) NOT NULL,
+	  
 int main1()
 {
   const char* book_pat = "{\"command\": \"booking\", \"seq\": 2, \"paras\": { \"product_no\": \"%s\", \"user_publickey\":\"%s\", \"amount\":0.001, \"timestamp\": 1558322863 } }";
   const char* get_orders_pat = "{\"seq\": 1, \"command\": \"get_orders\", \"paras\": {\"user_publickey\": \"mousWBSN7Rsqi8qpmZp7C6VmRkBGPD5bFF\", \"product_no\": \"all\", \"status\": 1, \"offset\": 0, \"limit\": 10}}";
   const char* cancel_pat = "{\"seq\": 645, \"command\": \"cancel_order\", \"paras\": {\"order_id\": %d, \"product_no\": \"%s\", \"user_publickey\": \"%s\"}}";
-  
+
+  const char* add_user_pat = "{\"command\":\"add_user\", \"seq\":2, \"paras\":{\"user\":\"%s\", \"login_pwd_hash\":\"aaa\", \"tx_pwd_hash\":\"bbb\", \"login_pwd_salt\":\"ccc\", \"tx_pwd_salt\":\"ddd\", \"balance\":3, \"phone\":\"1350123%d\", \"mail\":\"abc%d@qq.com\", \"recharge_addr\":\"eee\", \"reward_point\": 55, \"timestamp\":0, \"device_token\":\"fff\", \"withdraw_addr\":\"hhh\"} }";
+
+  const char* get_user_pat = "{\"seq\": 645, \"command\": \"get_user\", \"paras\": {\"id\": %d}}";
+  const char* get_user_pat1 = "{\"seq\": 645, \"command\": \"get_user\", \"paras\": {\"user\": %s}}";
+  const char* get_user_pat2 = "{\"seq\": 645, \"command\": \"get_user\", \"paras\": {\"phone\": 1350123%d}}";
+  const char* add_order_pat = "{\"seq\": 888, \"command\": \"add_order\", \"paras\": {\"type\":%d, \"from\":%d, \"to\":%d, \"amount\":%f, \"recharge_utxo\":\"utxo001\", \"utxo_confirmed\":1}}";
+  const char* add_order_pat1 = "{\"seq\": 888, \"command\": \"add_order\", \"paras\": {\"type\":%d, \"from\":%d, \"to\":%d, \"amount\":%f, \"recharge_utxo\":\"utxo001\", \"utxo_confirmed\":1}}";
+  const char* add_order_pat2 = "{\"seq\": 888, \"command\": \"add_order\", \"paras\": {\"type\":%d, \"from\":%d, \"to\":%d, \"amount\":%f, \"withdraw_utxo\":\"wu001\", \"withdraw_addr\":\"wa001\", \"withdraw_fee\":0.01}}";
+
   bool connected = false;
   
   int sock = 0;
 
-  auto do_connect = [&]{
+  auto do_connect = [&]
+    {
+      if(connected)
+	return;
     
-    if(connected)
-      return;
+      for(;;)
+	{
+	  sock = SocketHelper::connect("127.0.0.1", 60001);
+	  if(sock > 0)
+	    break;
+	  sleep(3);
+	}
     
-    for(;;)
-      {
-	sock = SocketHelper::connect("127.0.0.1", 60001);
-	if(sock > 0)
-	  break;
-	sleep(3);
-      }
-    
-    connected = true;
-  };
+      connected = true;
+    };
   
 
   do_connect();
@@ -85,27 +108,38 @@ int main1()
 	    {
 	      static int orderid = 33857;
 	      //sprintf(buf, book_pat, "FM0021", "mousWBSN7Rsqi8qpmZp7C6VmRkBGPD5bFF"); v.push_back(buf);
-	      char username[512];
-	      sprintf(username, "lmf_WbCdvY9c5iUDRSofhU8rFh5kW_%04d", (useridx++%200));
-	      sprintf(buf, book_pat, "FM0069", username); v.push_back(buf);
+	      //sprintf(buf, book_pat, "FM0069", username); v.push_back(buf);
 	      //sprintf(buf, cancel_pat,  orderid++, "FM0065", username); v.push_back(buf);
+
+	      useridx %= 200;
+	      char username[512];
+	      sprintf(username, "lmf_WbCdvY9c5iUDRSofhU8rFh5kW_%04d", useridx);
+	      
+	      //sprintf(buf, add_user_pat, username, useridx, useridx); v.push_back(buf);
+	      //sprintf(buf, get_user_pat, useridx); v.push_back(buf);
+	      //sprintf(buf, get_user_pat1, username); v.push_back(buf);
+	      //sprintf(buf, get_user_pat2, useridx); v.push_back(buf);
+	      //sprintf(buf, add_order_pat, 0, 0, 1, 0.1); v.push_back(buf);
+	      sprintf(buf, add_order_pat1, 1, 0, 1, 0.0001); v.push_back(buf);
+	      //sprintf(buf, add_order_pat2, 2, 0, 1, 0.3); v.push_back(buf);
+
+	      useridx++;
 	    }
 
 	  for(auto a : v)
 	    {
-	      std::string req = a + linesplit;
-	  
+	      //std::string req = a + linesplit;
+	      std::string req = a;
+	      
 	      while(!connected)
 		sleep(1);
-
-	      //auto str = "{\"seq\": 645, \"command\": \"cancel_order\", \"paras\": {\"order_id\": 33838, \"product_no\": \"FM0065\", \"user_publickey\": \"mrmrQVRepZxBLDXKamDzqXkE3VNdR1eZkX\"}}@#$";
-	      //auto str = "{\"seq\": 1, \"command\": \"get_orders\", \"paras\": {\"user_publickey\": \"mousWBSN7Rsqi8qpmZp7C6VmRkBGPD5bFF\", \"product_no\": \"all\", \"status\": 1, \"offset\": 0, \"limit\": 10}}@#$";
-	      //auto cnt = send(sock, str, strlen(str), 0);
-	      //sleep(1111);
 	      
-	      auto cnt = send(sock, req.c_str(), req.length(), 0);
+	      unsigned short len = req.length()+3;
+	      
+	      auto cnt = send(sock, &len, 2, 0);
+	      cnt = send(sock, req.c_str(), req.length()+1, 0);
 	  
-	      if(cnt != req.length())
+	      if(cnt != req.length()+1)
 		{
 		  connected = false;
 		  close(sock);
@@ -114,64 +148,56 @@ int main1()
 	      else
 		{
 		  static int idx = 0;
-		  LOG(INFO, "send %d success", idx++);
+		  LOG(INFO, "send %d success: %s", idx++, req.c_str());
 		}
-	      //sleep(5);
 	    }
-	  sleep(3);
-	  //usleep(1*1000);
+	  //sleep(30000);
+	  usleep(10*1000);
 	}
     });
 
   char buf[8192];
   buf[sizeof(buf)-1] = 0x00;
   int idx = 0;
+
+  unsigned short len;
+
+  auto close_and_connect = [&](int i)
+    {
+      LOG(WARNING, "close_and_connect called with %d", i);
+      connected = false;
+      close(sock);
+      do_connect();
+    };
   
   for(;;) {
 
-    std::vector<std::string> v;
-    
-    int size = sizeof(buf)-idx-1;
-    auto cnt = recv(sock, &buf[idx],  size, 0);
-    
-    if(cnt > 0)
+    auto cnt = recv(sock, &len, 2, 0);
+
+    if(cnt != 2)
       {
-	idx += cnt;
-	buf[idx] = 0x00;
+	close_and_connect(1); continue;
+      }
 
-	char* p = &buf[0];
+    if(len > sizeof(buf))
+      {
+	close_and_connect(2); continue;
+      }
 
-	while(p < &buf[idx])
-	  {
-	    auto e = strstr(p, linesplit);
-	    if(e == NULL)
-	      break;
-	    *e = 0x00;
-	    v.push_back(p);
-	    p = e + strlen(linesplit);
-	  }
-	
-	int left = int(&buf[idx] - p);
-	if(left > 0 && p != &buf[0])
-	    memmove(&buf[0], p, left);
-	
-	idx = left;
+    cnt = recv(sock, buf, len-2, 0);
 
-	for(auto a : v)
-	  {
-	    static int i = 0;
-	    LOG(INFO, "recved msg %d:\n%s", i++, a.c_str());
-	  }
+    if(cnt != len-2)
+      {
+	close_and_connect(3); continue;
+      }
+
+    if(buf[cnt-1] != 0x00)
+      {
+	close_and_connect(4); continue;
       }
     
-    if(cnt <= 0)
-      {
-	connected = false;
-	close(sock);
-	LOG(WARNING, "recv failed: %d", cnt);
-	
-	do_connect();
-      }
+    static int i = 0;
+    LOG(INFO, "recved msg %d:\n%s", i++, buf);
   }
   
   sendthrd.join();

@@ -18,6 +18,8 @@ enum
     ERROR_NOT_EXIST_ORDER = 3501,
     ERROR_NOT_EXIST_USER = 3503,
     ERROR_EXIST_USER = 3514,
+    ERROR_DUPLICATE_UTXO_CONFIRM = 3515,
+    ERROR_UPDATE_ORDER_WITH_WRONG_KV = 3516,
     
     ERROR_INVALID_JSON = 3601,
     ERROR_INVALID_COMMAND = 3602,
@@ -85,6 +87,8 @@ struct User
   std::string _recharge_addr;
   int _reward_point;
   int _timestamp;
+  std::string _device_token;
+  std::string _withdraw_addr;
   
   std::list<long> _orders;
   std::list<long> _recharges;

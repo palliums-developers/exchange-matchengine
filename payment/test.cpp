@@ -139,6 +139,10 @@ struct Test : public TestBase
 int main()
 {
   {
+    std::map<std::string, std::string> m;
+    m["timestamp"] = 3;
+    std::cout << "{{" << m["timestamp"] << "}}\n";
+    return 0;
     //Test t;
     // TestBase * p = new Test();
     // delete p;

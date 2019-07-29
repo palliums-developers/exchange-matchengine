@@ -55,6 +55,28 @@ void RemoteDBBase::zip_map(const std::map<std::string, std::string> & v, std::st
   vals = string_join(vs, ",");
 }
 
+std::string RemoteDBBase::join_map(const std::map<std::string, std::string> & v)
+{
+  std::vector<std::string> kvs;
+  for(auto & a : v)
+    {
+      auto key = "`" + a.first + "`";
+      auto value = "'" + escape_string(a.second) + "'";
+      kvs.push_back(key+"="+value);
+    }
+  return string_join(kvs, ",");
+}
+
+void RemoteDBBase::free_result()
+{
+  do
+    {
+      MYSQL_RES* res = mysql_store_result(_mysql);
+      mysql_free_result(res);
+    }
+  while ( (0 == mysql_next_result(_mysql)) );
+}
+
 bool RemoteDBBase::do_connect()
 {
   auto ip = Config::instance()->get("remotedb_ip");
@@ -78,8 +100,16 @@ bool RemoteDBBase::do_connect()
   
   _connected = true;
 
-  mysql_autocommit(_mysql, 0);
-
+  auto ret = mysql_autocommit(_mysql, 0);
+  if(ret != 0)
+    {
+      LOG(WARNING, "mysql_autocommit failed");
+      print_mysql_error();
+      return false;
+    }
+  
+  //free_result();
+  
   return true;
 }
   
@@ -92,12 +122,11 @@ int RemoteDBBase::do_query(const char* query, std::vector<std::vector<std::strin
     {
       LOG(WARNING, "do_query query:\n%s", query);
       print_mysql_error();
+      if(do_commit)
+	mysql_rollback(mysql);
       return ERROR_MYSQL_REAL_QUERY_FAILED;
     }
 
-  if(do_commit)
-    mysql_commit(mysql);
-  
   if(vv != NULL)
     {
       vv->clear();
@@ -106,6 +135,8 @@ int RemoteDBBase::do_query(const char* query, std::vector<std::vector<std::strin
       if(result == NULL)
 	{
 	  print_mysql_error();
+	  if(do_commit)
+	    mysql_rollback(mysql);
 	  return ERROR_MYSQL_STORE_RESULT_FAILED;
 	}
       auto rowscnt = mysql_num_rows(result);
@@ -122,7 +153,10 @@ int RemoteDBBase::do_query(const char* query, std::vector<std::vector<std::strin
 
       mysql_free_result(result);
     }
-    
+
+  if(do_commit)
+    mysql_commit(mysql);
+  
   return 0;
 }
 
@@ -134,12 +168,11 @@ int RemoteDBBase::do_select(const char* query, std::vector<std::string> keys, st
     {
       print_mysql_error();
       LOG(WARNING, "do_select query:\n%s", query);
+      if(do_commit)
+	mysql_rollback(mysql);
       return ERROR_MYSQL_REAL_QUERY_FAILED;
     }
 
-  if(do_commit)
-    mysql_commit(mysql);
-  
   if(vv != NULL)
     {
       vv->clear();
@@ -148,6 +181,8 @@ int RemoteDBBase::do_select(const char* query, std::vector<std::string> keys, st
       if(result == NULL)
 	{
 	  print_mysql_error();
+	  if(do_commit)
+	    mysql_rollback(mysql);
 	  return ERROR_MYSQL_STORE_RESULT_FAILED;
 	}
       auto rowscnt = mysql_num_rows(result);
@@ -164,6 +199,9 @@ int RemoteDBBase::do_select(const char* query, std::vector<std::string> keys, st
 	
       mysql_free_result(result);
     }
+
+  if(do_commit)
+    mysql_commit(mysql);
   
   return 0;
 }
@@ -253,14 +291,20 @@ bool RemoteDB::connect()
 
 std::shared_ptr<User> RemoteDB::get_user(long id)
 {
-  return get_user_impl(id, true);
+  return get_user_impl(id, false, true);
 }
 
-std::shared_ptr<User> RemoteDB::get_user_impl(long id, bool do_commit)
+std::shared_ptr<User> RemoteDB::get_user_impl(long id, bool forupate, bool do_commit)
 {
+  // lmf
+  forupate = false;
+  
   std::vector<std::map<std::string, std::string>> vv;
   char query[256];
-  snprintf(query, sizeof(query), "SELECT * FROM payment_users WHERE id=%ld", id);
+  if(forupate)
+    snprintf(query, sizeof(query), "SELECT * FROM payment_users WHERE id=%ld FOR UPDATE", id); 
+  else
+    snprintf(query, sizeof(query), "SELECT * FROM payment_users WHERE id=%ld", id); 
   do_select(query, _userKeys, &vv, do_commit);
 
   std::shared_ptr<User> o;
@@ -340,7 +384,7 @@ int RemoteDB::add_order_impl(std::shared_ptr<Order> order, bool do_commit)
   
 }
 
-int RemoteDB::add_order(std::shared_ptr<Order> order)
+int RemoteDB::add_order(std::shared_ptr<Order> order, std::shared_ptr<User> from_user, std::shared_ptr<User> to_user)
 {
   auto mysql = _mysql;
 
@@ -350,7 +394,7 @@ int RemoteDB::add_order(std::shared_ptr<Order> order)
 
   if(order->_type == ORDER_TYPE_RECHARGE)
     {
-      auto from_user = get_user_impl(order->_from, false);
+      //auto from_user = get_user_impl(order->_from, false, false);
 
       if(!from_user) {
 	mysql_rollback(mysql);
@@ -362,13 +406,22 @@ int RemoteDB::add_order(std::shared_ptr<Order> order)
 	mysql_rollback(mysql);
 	return ret;
       }
+
+      if(order->_utxo_confirmed) {
+	snprintf(query, sizeof(query), "UPDATE payment_users SET balance=balance+%f WHERE id=%ld", order->_amount, from_user->_id);
+	ret = do_query(query, NULL, false);
+	if(ret != 0) {
+	  mysql_rollback(mysql);
+	  return ret;
+	}
+      }
       
       mysql_commit(mysql);      
     }
 
   if(order->_type == ORDER_TYPE_WITHDRAW)
     {
-      auto from_user = get_user_impl(order->_from, false);
+      //auto from_user = get_user_impl(order->_from, true, false);
       
       auto feestr = Config::instance()->get("min_withdraw_fee");
       double min_withdraw_fee = atof(feestr.c_str());
@@ -377,7 +430,9 @@ int RemoteDB::add_order(std::shared_ptr<Order> order)
 	mysql_rollback(mysql);
 	return ERROR_NOT_EXIST_USER;
       }
-      
+
+      //printf("balance:%f, amount:%f, fee:%f\n", from_user->_balance, order->_amount, order->_withdraw_fee);
+
       if(double_less(order->_withdraw_fee, min_withdraw_fee)) {
 	mysql_rollback(mysql);
 	return ERROR_INSUFFICIENT_FEE;
@@ -387,14 +442,27 @@ int RemoteDB::add_order(std::shared_ptr<Order> order)
 	mysql_rollback(mysql);
 	return ERROR_INSUFFICIENT_AMOUNT; 
       }
+
+      ret = add_order_impl(order, false);
+      if(ret != 0) {
+	mysql_rollback(mysql);
+	return ret;
+      }
+
+      snprintf(query, sizeof(query), "UPDATE payment_users SET balance=balance-%f WHERE id=%ld", order->_amount+order->_withdraw_fee, from_user->_id);
+      ret = do_query(query, NULL, false);
+      if(ret != 0) {
+	mysql_rollback(mysql);
+	return ret;
+      }
       
       mysql_commit(mysql);      
     }
   
   if(order->_type == ORDER_TYPE_TRANSACTION)
     {
-      auto from_user = get_user_impl(order->_from, false);
-      auto to_user = get_user_impl(order->_to, false);
+      //auto from_user = get_user_impl(order->_from, true, false);
+      //auto to_user = get_user_impl(order->_to, false, false);
 
       if(!from_user || !to_user) {
 	mysql_rollback(mysql);
@@ -406,29 +474,93 @@ int RemoteDB::add_order(std::shared_ptr<Order> order)
 	return ERROR_INSUFFICIENT_AMOUNT;
       }
 
+      ret = add_order_impl(order, false);
+      if(ret != 0) {
+      	mysql_rollback(mysql);
+      	return ret;
+      }
+
+      // snprintf(query, sizeof(query), "UPDATE payment_users SET balance = CASE id WHEN %ld THEN balance-%f WHEN %ld THEN balance+%f END WHERE id IN (%ld,%ld)",
+      // 	       from_user->_id, order->_amount, to_user->_id, order->_amount, from_user->_id, to_user->_id);
+      // ret = do_query(query, NULL, false);
+      // if(ret != 0) {
+      // 	mysql_rollback(mysql);
+      // 	return ret;
+      // }
+      
       snprintf(query, sizeof(query), "UPDATE payment_users SET balance=balance-%f WHERE id=%ld", order->_amount, from_user->_id);
       ret = do_query(query, NULL, false);
       if(ret != 0) {
-	mysql_rollback(mysql);
-	return ret;
+      	mysql_rollback(mysql);
+      	return ret;
       }
 
       snprintf(query, sizeof(query), "UPDATE payment_users SET balance=balance+%f WHERE id=%ld", order->_amount, to_user->_id);
       ret = do_query(query, NULL, false);
       if(ret != 0) {
-	mysql_rollback(mysql);
-	return ret;
+      	mysql_rollback(mysql);
+      	return ret;
       }
-
-      ret = add_order_impl(order, false);
-      if(ret != 0) {
-	mysql_rollback(mysql);
-	return ret;
-      }
-      
+ 
       mysql_commit(mysql);
     }
   
+  return 0;
+}
+
+int RemoteDB::update_order(std::shared_ptr<Order> order, std::map<std::string, std::string>& kvs)
+{
+  auto mysql = _mysql;
+  char query[1024];
+  int ret;
+  
+  if(order->_type == ORDER_TYPE_RECHARGE)
+    {
+      if(kvs["utxo_confirmed"] == "1") {
+	auto from_user = get_user_impl(order->_from, false, false);
+
+	if(!from_user) {
+	  mysql_rollback(mysql);
+	  return ERROR_NOT_EXIST_USER;
+	}
+	
+	snprintf(query, sizeof(query), "UPDATE payment_users SET balance=balance+%f WHERE id=%ld", order->_amount, from_user->_id);
+	ret = do_query(query, NULL, false);
+	if(ret != 0) {
+	  mysql_rollback(mysql);
+	  return ret;
+	}
+	
+	mysql_commit(mysql);
+	return 0;
+      }
+    }
+
+  snprintf(query, sizeof(query), "UPDATE payment_orders SET %s WHERE id=%ld", join_map(kvs).c_str(), order->_id);
+  ret = do_query(query, NULL, false);
+  if(ret != 0) {
+    mysql_rollback(mysql);
+    return ret;
+  }
+	
+  mysql_commit(mysql);
+  return 0;
+}
+
+int RemoteDB::update_user(std::shared_ptr<User> user, std::map<std::string, std::string>& kvs)
+{
+  auto mysql = _mysql;
+  char query[1024];
+  int ret;
+  
+  snprintf(query, sizeof(query), "UPDATE payment_users SET %s WHERE id=%ld", join_map(kvs).c_str(), user->_id);
+  ret = do_query(query, NULL, false);
+  if(ret != 0) {
+    mysql_rollback(mysql);
+    return ret;
+  }
+	
+  mysql_commit(mysql);
   return 0;
 }
 

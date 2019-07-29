@@ -19,6 +19,9 @@ struct RemoteDBBase
   
   std::string escape_string(std::string str);
   void zip_map(const std::map<std::string, std::string> & v, std::string & keys, std::string & vals);
+  std::string join_map(const std::map<std::string, std::string> & v);
+
+  void free_result();
 
   void print_mysql_error()
   {
@@ -62,7 +65,10 @@ struct RemoteDB : public RemoteDBBase
   order_p get_order(long id);
 
   int add_user(user_p o);
-  int add_order(order_p o);
+  int add_order(order_p o, user_p from_user, user_p to_user);
+  
+  int update_user(std::shared_ptr<User> user, std::map<std::string, std::string>& kvs);
+  int update_order(std::shared_ptr<Order> order, std::map<std::string, std::string>& kvs);
 
   user_p get_user_by_user_phone_mail(std::string name, std::string value);
   
@@ -84,7 +90,7 @@ struct RemoteDB : public RemoteDBBase
   
 private:
   
-  user_p get_user_impl(long id, bool);
+  user_p get_user_impl(long id, bool forupate, bool);
   order_p get_order_impl(long id, bool);
   user_p get_user_by_user_phone_mail_impl(std::string name, std::string value, bool);
   int add_order_impl(order_p order, bool);

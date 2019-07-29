@@ -236,7 +236,12 @@ std::shared_ptr<User> User::create(std::map<std::string, std::string> & kvs)
     o->_reward_point = atoi(kvs["reward_point"].c_str());
   if(kvs.count("timestamp"))
     o->_timestamp = atoi(kvs["timestamp"].c_str());
-  
+
+  if(kvs.count("device_token"))
+    o->_device_token = kvs["device_token"];
+  if(kvs.count("withdraw_addr"))
+    o->_withdraw_addr = kvs["withdraw_addr"];
+
   return o;
 }
 
@@ -261,6 +266,8 @@ std::map<std::string, std::string> User::to_map()
   v["recharge_addr"] = (_recharge_addr);
   v["reward_point"] = std::to_string(_reward_point);
   v["timestamp"] = std::to_string(_timestamp);
+  v["device_token"] = _device_token;
+  v["withdraw_addr"] = _withdraw_addr;
   
   return v;
 }
@@ -279,7 +286,10 @@ std::string User::to_json()
   str += json("mail", _mail, false);
   str += json("recharge_addr", _recharge_addr, false);
   str += json("reward_point", _reward_point, false);
-  str += json("timestamp", _timestamp, true);
+  str += json("timestamp", _timestamp, false);
+  str += json("device_token", _device_token, false);
+  str += json("withdraw_addr", _withdraw_addr, true);
+  
   str += "}";
   return str;
 }
@@ -301,13 +311,14 @@ Payment* Payment::get()
   
 int Payment::add_user(std::map<std::string, std::string> & kvs)
 {
-  long id = _usercnt;
-  long ida = _usercnt % maxcnt;
+  long id = _usercnt++;
+  long ida = id % maxcnt;
 
   kvs["id"] = std::to_string(id);
+  kvs["timestamp"] = std::to_string((int)uint32_t(time(NULL)));
   
   auto user = User::create(kvs);
-
+  
   {
     std::unique_lock<std::mutex> lk(_mtx);
     auto & v = _cache_user_phone_mail_2_id;
@@ -340,12 +351,12 @@ int Payment::add_user(std::map<std::string, std::string> & kvs)
   
   _users[ida] = user;
     
-  _usercnt++;
   return 0;    
 }
 
 int Payment::update_user(std::shared_ptr<User> user, std::map<std::string, std::string> & kvs)
 {
+  auto user_ori = *user;
   auto o = user;
 
   // if(kvs.count("id"))
@@ -370,14 +381,26 @@ int Payment::update_user(std::shared_ptr<User> user, std::map<std::string, std::
     o->_recharge_addr = kvs["recharge_addr"];
   if(kvs.count("reward_point"))
     o->_reward_point = atoi(kvs["reward_point"].c_str());
-  if(kvs.count("timestamp"))
-    o->_timestamp = atoi(kvs["timestamp"].c_str());
+  // if(kvs.count("timestamp"))
+  //   o->_timestamp = atoi(kvs["timestamp"].c_str());
 
+  if(kvs.count("device_token"))
+    o->_device_token = kvs["device_token"];
+  if(kvs.count("withdraw_addr"))
+    o->_withdraw_addr = kvs["withdraw_addr"];
+
+  auto ret = _remotedb->update_user(user, kvs);
+  if(ret != 0) {
+    *user = user_ori;
+    return ret;
+  }
+  
   return 0;
 }
 
 int Payment::update_order(std::shared_ptr<Order> order, std::map<std::string, std::string> & kvs)
 {
+  auto order_ori = *order;
   auto o = order;
   
   // if(kvs.count("id")) 
@@ -390,27 +413,58 @@ int Payment::update_order(std::shared_ptr<Order> order, std::map<std::string, st
   //   o->_to = atol(kvs["to"].c_str());
   // if(kvs.count("amount")) 
   //   o->_amount = atof(kvs["amount"].c_str());
-  if(kvs.count("timestamp")) 
-    o->_timestamp = atoi(kvs["timestamp"].c_str());
-  if(kvs.count("withdraw_addr")) 
-    o->_withdraw_addr = kvs["withdraw_addr"];
-  if(kvs.count("recharge_utxo")) 
-    o->_recharge_utxo = kvs["recharge_utxo"];
-  if(kvs.count("withdraw_utxo")) 
-    o->_withdraw_utxo = kvs["withdraw_utxo"];
-  if(kvs.count("withdraw_fee")) 
-    o->_withdraw_fee = atof(kvs["withdraw_fee"].c_str());
-  if(kvs.count("utxo_confirmed")) 
-    o->_utxo_confirmed = atoi(kvs["utxo_confirmed"].c_str());
-  if(kvs.count("legal_currency_name")) 
-    o->_legal_currency_name = kvs["legal_currency_name"];
-  if(kvs.count("legal_currency_value")) 
-    o->_legal_currency_value = atof(kvs["legal_currency_value"].c_str());
+  // if(kvs.count("timestamp")) 
+  //   o->_timestamp = atoi(kvs["timestamp"].c_str());
+  // if(kvs.count("withdraw_addr")) 
+  //   o->_withdraw_addr = kvs["withdraw_addr"];
+  // if(kvs.count("recharge_utxo")) 
+  //   o->_recharge_utxo = kvs["recharge_utxo"];
+  // if(kvs.count("withdraw_utxo")) 
+  //   o->_withdraw_utxo = kvs["withdraw_utxo"];
+  // if(kvs.count("withdraw_fee")) 
+  //   o->_withdraw_fee = atof(kvs["withdraw_fee"].c_str());
+  // if(kvs.count("legal_currency_name")) 
+  //   o->_legal_currency_name = kvs["legal_currency_name"];
+  // if(kvs.count("legal_currency_value")) 
+  //   o->_legal_currency_value = atof(kvs["legal_currency_value"].c_str());
+
+  if(kvs.count("utxo_confirmed") && kvs["utxo_confirmed"] == "1") {
+    if(o->_utxo_confirmed)
+      return ERROR_DUPLICATE_UTXO_CONFIRM;
+    o->_utxo_confirmed = 1;
+  }
+  
+  auto ret = _remotedb->update_order(order, kvs);
+  if(ret != 0) {
+    *order = order_ori;
+    return ret;
+  }
   
   return 0;
 }
 
 static const double min_withdraw_fee = 0.00050000;
+
+struct BalanceSaver
+{
+  BalanceSaver(double* balance) {
+    _balance = balance;
+  }
+  ~BalanceSaver() {
+    if(!_commited) {
+      *_balance = *_balance - _amount;
+    }
+  }
+  void change(double amount)
+  {
+    _amount = amount;
+    *_balance = *_balance + _amount;
+  }
+  void commit() { _commited = true; }
+  double* _balance;
+  double _amount = 0;
+  bool _commited = false;
+};
 
 int Payment::add_order(std::map<std::string, std::string> & kvs)
 {
@@ -420,6 +474,7 @@ int Payment::add_order(std::map<std::string, std::string> & kvs)
   long ida = id % maxcnt;
 
   kvs["id"] = std::to_string(id);
+  kvs["timestamp"] = std::to_string((int)uint32_t(time(NULL)));
 
   auto order = Order::create(kvs);
   if(!order)
@@ -436,22 +491,30 @@ int Payment::add_order(std::map<std::string, std::string> & kvs)
     if(!touser)
       return ERROR_NOT_EXIST_USER;
   }
-    
+  
   auto amount = atof(kvs["amount"].c_str());
-  
-  if(order->_type == ORDER_TYPE_TRANSACTION) {
-    if(double_less(user->_balance, amount))
-      return ERROR_INSUFFICIENT_AMOUNT; 
-  }
 
-  if(order->_type == ORDER_TYPE_WITHDRAW) {
-    if(double_less(order->_withdraw_fee, min_withdraw_fee))
-      return ERROR_INSUFFICIENT_FEE; 
-    if(double_less(user->_balance, (amount + order->_withdraw_fee)))
-      return ERROR_INSUFFICIENT_AMOUNT; 
+  if(order->_type == ORDER_TYPE_WITHDRAW &&
+     double_less(order->_withdraw_fee, min_withdraw_fee))
+    return ERROR_INSUFFICIENT_FEE; 
+  
+  BalanceSaver bs(&user->_balance);
+  
+  {
+    std::unique_lock<std::mutex> lk(_mtx);
+    if(order->_type == ORDER_TYPE_TRANSACTION) {
+      if(double_less(user->_balance, amount))
+	return ERROR_INSUFFICIENT_AMOUNT; 
+      bs.change(-amount);
+    }
+    if(order->_type == ORDER_TYPE_WITHDRAW)  {
+      if(double_less(user->_balance, (amount + order->_withdraw_fee)))
+	return ERROR_INSUFFICIENT_AMOUNT; 
+      bs.change(-(amount + order->_withdraw_fee));
+    }
   }
   
-  auto ret = _remotedb->add_order(order);
+  auto ret = _remotedb->add_order(order, user, touser);
   
   if(ret != 0)
     return ret;
@@ -460,12 +523,8 @@ int Payment::add_order(std::map<std::string, std::string> & kvs)
     std::unique_lock<std::mutex> lk(_mtx);
     if(order->_type == ORDER_TYPE_RECHARGE)
       user->_balance += amount;
-    if(order->_type == ORDER_TYPE_TRANSACTION) {
-      user->_balance -= amount;
+    if(order->_type == ORDER_TYPE_TRANSACTION) 
       touser->_balance += amount;
-    }
-    if(order->_type == ORDER_TYPE_WITHDRAW)
-      user->_balance -= (amount + order->_withdraw_fee);
   }
   
   user->_orders.push_back(id);
@@ -486,6 +545,8 @@ int Payment::add_order(std::map<std::string, std::string> & kvs)
     user->_withdraws.push_back(id);
   
   _orders[ida] = order;
+
+  bs.commit();
   
   return 0;    
 }
@@ -646,14 +707,14 @@ bool Payment::load_multithread()
   LOG(INFO, "load multithread:  %ld %ld", _usercnt.load(), _ordercnt.load());
   
   {
-    auto remotedb_creater = [&] {
+    auto remotedb_creater = [&]() -> void* {
       auto remotedb = new RemoteDB();
       for(;;)
-	{
-	  if(remotedb->connect())
-	    break;
-	  sleep(3);
-	}
+    	{
+    	  if(remotedb->connect())
+    	    break;
+    	  sleep(3);
+    	}
       return (void*)remotedb;
     };
 
@@ -662,7 +723,7 @@ bool Payment::load_multithread()
     };
 
     ThreadPool tp(THREAD_CNT, remotedb_creater, remotedb_destroyer);
-    
+
     {
       auto cnt = _usercnt / onetime_to_load;
       if((_usercnt % onetime_to_load) != 0)
@@ -743,17 +804,28 @@ void Payment::start_epoll_server()
 	  //dot("*");
 	  
 	  auto msg = _qrspmsg.pop();
-	  auto rsp = msg->data() + linesplit;
+	  //auto rsp = msg->data() + linesplit;
+	  auto rsp = msg->data();
 	  auto fd = msg->client()->get_fd();
 
 	  if(fd <= 0)
 	    continue;
 	  if(msg->client()->send_closed())
 	    continue;
+
+	  unsigned short len = rsp.length()+3;
+	  auto cnt = send(fd, &len, 2, 0);
+	  if(cnt != 2)
+	    {
+	      close(fd);
+	      msg->client()->set_send_closed();
+	      LOG(WARNING, "send header to client failed, will close the socket...");
+	      continue;
+	    }
 	  
-	  auto cnt = send(fd, rsp.c_str(), rsp.length(),0);
+	  cnt = send(fd, rsp.c_str(), rsp.length()+1,0);
 	  
-	  if(cnt != rsp.length())
+	  if(cnt != rsp.length()+1)
 	    {
 	      close(fd);
 	      msg->client()->set_send_closed();
@@ -988,7 +1060,7 @@ std::string Payment::handle_request(std::string req)
 	  return gen_rsp(command, msn, ERROR_INVALID_PARAS, v);
       }
       if(type == 2) {
-	if(!check_paras(paras, {"withdraw_addr", "withdraw_utxo", "withdraw_fee"}))
+	if(!check_paras(paras, {"withdraw_addr", "withdraw_fee"}))
 	  return gen_rsp(command, msn, ERROR_INVALID_PARAS, v);
       }
 

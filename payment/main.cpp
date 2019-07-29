@@ -46,53 +46,44 @@ void create_table();
 void show_error(MYSQL *mysql);
 void do_client();
 
+
+struct Test
+{
+  Test()
+  {
+    _p = new std::thread(&Test::run, this);
+  }
+  ~Test()
+  {
+    _p->join();
+    delete _p;
+    printf("finish\n");
+  }
+  void run()
+  {
+    sleep(3);
+    printf("done\n");
+  }
+
+  std::thread* _p;  
+};
+
 int main()
 {
-  //do_client();
-  //create_table();
-
+  // {
+  //   Test t;
+  // }
+  // sleep(3333);
+  
   Config::instance()->parse("./config");
   
   auto fm = Payment::get();
   
   fm->start();
-  
-  {
-    // a.push_request("{\"command\": \"get_product_info\", \"seq\": 0, \"paras\": { \"product_no\": \"FM0001\"} }");
-    // //a.push_request("{\"command\": \"get_product_list\", \"seq\": 1, \"paras\": { \"start_time\": 1558583587, \"end_time\": 1558588321} }");
-    // a.push_request("{\"command\": \"get_product_list\", \"seq\": 1, \"paras\": { \"start_time\": 0, \"end_time\": 1559109332} }");
-    // a.push_request("{\"command\": \"booking\", \"seq\": 2, \"paras\": { \"product_no\": \"FM0001\", \"user_publickey\":\"up001\", \"amount\":0.1, \"timestamp\": 1558322863 } }");
-    // a.push_request("{\"command\": \"cancel_order\", \"seq\": 3, \"paras\": { \"product_no\": \"FM0001\", \"user_publickey\": \"up001\", \"order_id\": 10} }");
-    // a.push_request("{\"command\": \"update_order_txid\", \"seq\": 4, \"paras\": { \"product_no\": \"FM0001\", \"user_publickey\": \"up001\", \"order_id\": 15, \"txid\":\"txid011\", \"investment_return_addr\":\"ira011\"} }");
-    // a.push_request("{\"command\": \"order_txid_confirm\", \"seq\": 5, \"paras\": { \"txid\": \"txid011\", \"success\": \"true\", \"order_id\": 15} }");
-    // a.push_request("{\"command\": \"order_txid_confirm\", \"seq\": 5, \"paras\": { \"txid\": \"txid011\", \"success\": \"false\", \"order_id\": 14} }");
-    // a.push_request("{\"command\": \"payment_refund_success\", \"seq\": 7, \"paras\": { \"txid\": \"txid011\", \"order_id\": 15} }");
-    // a.push_request("{\"command\": \"collect\", \"seq\": 3, \"paras\": { \"product_no\": \"FM0001\", \"user_publickey\": \"up001\"} }");
-    // a.push_request("{\"command\": \"collect\", \"seq\": 3, \"paras\": { \"product_no\": \"FM0002\", \"user_publickey\": \"up001\"} }");
-    // a.push_request("{\"command\": \"collect\", \"seq\": 3, \"paras\": { \"product_no\": \"FM0003\", \"user_publickey\": \"up001\"} }");
-    // a.push_request("{\"command\": \"cancel_collection\", \"seq\": 3, \"paras\": { \"product_no\": \"FM0002\", \"user_publickey\": \"up001\"} }");
-    // a.push_request("{\"command\": \"get_user_collections\", \"seq\": 3, \"paras\": { \"user_publickey\": \"up001\"} }");
-    // a.push_request("{\"command\": \"get_order\", \"seq\": 7, \"paras\": { \"order_id\": 26} }");
-    // a.push_request("{\"command\": \"get_user\", \"seq\": 7, \"paras\": { \"user_publickey\": \"up001\"} }");
-
-    // a.push_request("{\"command\": \"get_orders\", \"seq\": 7, \"paras\": { \"product_no\": \"FM0001\", \"user_publickey\": \"all\", \"status\": 0, \"offset\":0, \"limit\":10 } }");
-    
-  }
-
-  {
-    for(int i=0; i<500; ++i)
-      {
-	//query("{\"command\": \"booking\", \"seq\": 1, \"paras\": { \"product_no\": \"FM0001\", \"user_publickey\":\"up001\", \"amount\":0.1, \"timestamp\": 1558322863 } }");
-      }
-  }
-  
-  //std::cout << "rsp: " << rsp << "\n";
 
   sleep(300000);
   return 0;
 }
-
-//INSERT INTO `test`.`aaa` (`a`, `b`) VALUES ('aaa', '3');
 
 MYSQL *mysql;
 
@@ -298,45 +289,3 @@ void create_table()
 
 // mariadb -u root -p -h 47.106.208.207
 
-// id
-// project_id
-// user_id
-// booking_timestamp
-// booking_amount
-// payment_txid
-// payment_timestamp
-// investment_return_addr
-// accumulated_gain
-// status
-
-// char(16)
-// text
-// float
-// int
-// double
-// double
-// double
-// int
-// int
-// int
-// double
-// int
-// int
-// char(72)
-// text
-
-// no
-// name
-// annualized_return_rate
-// investment_period
-// min_invest_amount
-// max_invest_amount
-// total_crowdfunding_amount
-// booking_starting_time
-// crowdfunding_ending_time
-// status
-// received_crowdfunding
-// interest_type
-// borrower_info
-// crowdfunding_address
-// product_description
