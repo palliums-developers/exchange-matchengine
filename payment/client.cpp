@@ -59,7 +59,6 @@ const char * linesplit = "@#$";
 int main1()
 {
   const char* book_pat = "{\"command\": \"booking\", \"seq\": 2, \"paras\": { \"product_no\": \"%s\", \"user_publickey\":\"%s\", \"amount\":0.001, \"timestamp\": 1558322863 } }";
-  const char* get_orders_pat = "{\"seq\": 1, \"command\": \"get_orders\", \"paras\": {\"user_publickey\": \"mousWBSN7Rsqi8qpmZp7C6VmRkBGPD5bFF\", \"product_no\": \"all\", \"status\": 1, \"offset\": 0, \"limit\": 10}}";
   const char* cancel_pat = "{\"seq\": 645, \"command\": \"cancel_order\", \"paras\": {\"order_id\": %d, \"product_no\": \"%s\", \"user_publickey\": \"%s\"}}";
 
   const char* add_user_pat = "{\"command\":\"add_user\", \"seq\":2, \"paras\":{\"user\":\"%s\", \"login_pwd_hash\":\"aaa\", \"tx_pwd_hash\":\"bbb\", \"login_pwd_salt\":\"ccc\", \"tx_pwd_salt\":\"ddd\", \"balance\":3, \"phone\":\"1350123%d\", \"mail\":\"abc%d@qq.com\", \"recharge_addr\":\"eee\", \"reward_point\": 55, \"timestamp\":0, \"device_token\":\"fff\", \"withdraw_addr\":\"hhh\"} }";
@@ -70,7 +69,8 @@ int main1()
   const char* add_order_pat = "{\"seq\": 888, \"command\": \"add_order\", \"paras\": {\"type\":%d, \"from\":%d, \"to\":%d, \"amount\":%f, \"recharge_utxo\":\"utxo001\", \"utxo_confirmed\":1}}";
   const char* add_order_pat1 = "{\"seq\": 888, \"command\": \"add_order\", \"paras\": {\"type\":%d, \"from\":%d, \"to\":%d, \"amount\":%f, \"recharge_utxo\":\"utxo001\", \"utxo_confirmed\":1}}";
   const char* add_order_pat2 = "{\"seq\": 888, \"command\": \"add_order\", \"paras\": {\"type\":%d, \"from\":%d, \"to\":%d, \"amount\":%f, \"withdraw_utxo\":\"wu001\", \"withdraw_addr\":\"wa001\", \"withdraw_fee\":0.01}}";
-
+  const char* get_orders_pat = "{\"seq\": 645, \"command\": \"get_orders\", \"paras\": {\"user_id\":%d, \"type\":%d, \"offset\":%d, \"limit\":10}}";
+  
   bool connected = false;
   
   int sock = 0;
@@ -121,9 +121,10 @@ int main1()
 	      //sprintf(buf, get_user_pat1, username); v.push_back(buf);
 	      //sprintf(buf, get_user_pat2, useridx); v.push_back(buf);
 	      //sprintf(buf, add_order_pat, 0, 0, 1, 0.1); v.push_back(buf);
-	      sprintf(buf, add_order_pat1, 1, 0, 1, 0.0001); v.push_back(buf);
+	      sprintf(buf, add_order_pat1, 1, 0, 203, 0.0001); v.push_back(buf);
 	      //sprintf(buf, add_order_pat2, 2, 0, 1, 0.3); v.push_back(buf);
-
+	      //sprintf(buf, get_orders_pat, 0, 1, 0); v.push_back(buf);
+	      
 	      useridx++;
 	    }
 
@@ -152,8 +153,8 @@ int main1()
 		  LOG(INFO, "send %d success: %s", idx++, req.c_str());
 		}
 	    }
-	  //sleep(30000);
-	  usleep(100*1000);
+	  sleep(3);
+	  //usleep(1*1000);
 	}
     });
 

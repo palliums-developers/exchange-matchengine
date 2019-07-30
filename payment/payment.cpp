@@ -455,11 +455,10 @@ static const double min_withdraw_fee = 0.00050000;
 
 struct BalanceSaver
 {
-  BalanceSaver(double* balance) {
-    _balance = balance;
-  }
+  BalanceSaver(double* balance, std::mutex& mtx) : _balance(balance), _mtx(mtx) { }
   ~BalanceSaver() {
     if(!_commited) {
+      std::unique_lock<std::mutex> lk(_mtx);
       *_balance = *_balance - _amount;
     }
   }
@@ -472,6 +471,7 @@ struct BalanceSaver
   double* _balance;
   double _amount = 0;
   bool _commited = false;
+  std::mutex& _mtx;
 };
 
 int Payment::add_order(std::map<std::string, std::string> & kvs)
@@ -506,7 +506,7 @@ int Payment::add_order(std::map<std::string, std::string> & kvs)
      double_less(order->_withdraw_fee, min_withdraw_fee))
     return ERROR_INSUFFICIENT_FEE; 
   
-  BalanceSaver bs(&user->_balance);
+  BalanceSaver bs(&user->_balance, _mtx);
   
   {
     std::unique_lock<std::mutex> lk(_mtx);
