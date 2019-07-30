@@ -214,22 +214,21 @@ struct Client : std::enable_shared_from_this<Client>
   
   int recved(int cnt)
   {
+    int ret = 0;
+    
     _pos += cnt;
     
-    auto ret = split_by_len();
-    if(ret < 0)
-      return ret;
+    ret = split_by_len();
     
-    if(_msgs.empty())
-      return 0;
+    while(!_msgs.empty()) {
+      auto msg = _msgs.front();
+      _msgs.pop_front();
 
-    auto msg = _msgs.front();
-    _msgs.pop_front();
-
-    assert(_qmsg != NULL);
-    _qmsg->push(std::make_shared<Message>(shared_from_this(), msg));
+      assert(_qmsg != NULL);
+      _qmsg->push(std::make_shared<Message>(shared_from_this(), msg));
+    }
     
-    return 0;
+    return ret;
   }
 
   int split_by_len()
