@@ -82,8 +82,8 @@ int main1()
     
       for(;;)
 	{
-	  sock = SocketHelper::connect("127.0.0.1", 60001);
-	  //sock = SocketHelper::connect("47.106.208.207", 60001);
+	  //sock = SocketHelper::connect("127.0.0.1", 60001);
+	  sock = SocketHelper::connect("47.106.208.207", 60001);
 	  if(sock > 0)
 	    break;
 	  sleep(3);
@@ -122,7 +122,7 @@ int main1()
 	      //sprintf(buf, get_user_pat2, useridx); v.push_back(buf);
 	      //sprintf(buf, add_order_pat, 0, 0, 1, 0.1); v.push_back(buf);
 	      //sprintf(buf, add_order_pat1, 1, 0, 276, 10.0); v.push_back(buf);
-	      sprintf(buf, add_order_pat1, 1, 0, 203, 1.0); v.push_back(buf);
+	      sprintf(buf, add_order_pat1, 1, 0, 203, 0.001); v.push_back(buf);
 	      //sprintf(buf, add_order_pat2, 2, 0, 1, 0.3); v.push_back(buf);
 	      //sprintf(buf, get_orders_pat, 0, 1, 0); v.push_back(buf);
 	      
@@ -187,14 +187,24 @@ int main1()
 	close_and_connect(2); continue;
       }
 
-    cnt = recv(sock, buf, len-2, 0);
+    int left = len-2;
+    int recved = 0;
+    bool errored = false;
+    
+    while(left > 0) {
+      cnt = recv(sock, &buf[recved], left, 0);
+      if(cnt <= 0)
+	{
+	  close_and_connect(3);
+	  errored = true; break; 
+	}
+      recved += cnt;
+      left -= cnt;
+    }
 
-    if(cnt != len-2)
-      {
-	close_and_connect(3); continue;
-      }
-
-    if(buf[cnt-1] != 0x00)
+    if(errored) continue;
+    
+    if(buf[len-2-1] != 0x00)
       {
 	close_and_connect(4); continue;
       }

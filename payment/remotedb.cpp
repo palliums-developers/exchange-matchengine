@@ -116,17 +116,28 @@ bool RemoteDBBase::do_connect()
 int RemoteDBBase::do_query(const char* query, std::vector<std::vector<std::string>>* vv, bool do_commit = true)
 {
   auto mysql = _mysql;
-  
-  auto ret = mysql_real_query(mysql, query, strlen(query));
-  if(ret != 0)
-    {
-      LOG(WARNING, "do_query query:\n%s", query);
-      print_mysql_error();
-      if(do_commit)
-	mysql_rollback(mysql);
-      return ERROR_MYSQL_REAL_QUERY_FAILED;
-    }
 
+  for(;;)
+    {
+      auto ret = mysql_real_query(mysql, query, strlen(query));
+      if(ret != 0)
+	{
+	  if(mysql_errno(_mysql) == 2013) {
+	    LOG(WARNING, "do_query query:\n%s", query);
+	    print_mysql_error();
+	    usleep(1*1000);
+	    continue;
+	  }
+	  
+	  LOG(WARNING, "do_query query:\n%s", query);
+	  print_mysql_error();
+	  if(do_commit)
+	    mysql_rollback(mysql);
+	  return ERROR_MYSQL_REAL_QUERY_FAILED;
+	}
+      break;
+    }
+  
   if(vv != NULL)
     {
       vv->clear();
@@ -163,14 +174,25 @@ int RemoteDBBase::do_query(const char* query, std::vector<std::vector<std::strin
 int RemoteDBBase::do_select(const char* query, std::vector<std::string> keys, std::vector<std::map<std::string, std::string>>* vv, bool do_commit = true)
 {
   auto mysql = _mysql;
-  
-  if(mysql_real_query(mysql, query, strlen(query)))
+
+  for(;;)
     {
-      print_mysql_error();
-      LOG(WARNING, "do_select query:\n%s", query);
-      if(do_commit)
-	mysql_rollback(mysql);
-      return ERROR_MYSQL_REAL_QUERY_FAILED;
+      if(mysql_real_query(mysql, query, strlen(query)))
+	{
+	  if(mysql_errno(_mysql) == 2013) {
+	    LOG(WARNING, "do_selct query:\n%s", query);
+	    print_mysql_error();
+	    usleep(1*1000);
+	    continue;
+	  }
+	  
+	  print_mysql_error();
+	  LOG(WARNING, "do_select query:\n%s", query);
+	  if(do_commit)
+	    mysql_rollback(mysql);
+	  return ERROR_MYSQL_REAL_QUERY_FAILED;
+	}
+      break;
     }
 
   if(vv != NULL)
