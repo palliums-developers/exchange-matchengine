@@ -22,6 +22,9 @@
 #include <unordered_map>
 #include <assert.h>
 
+#include <cstdlib>
+#include <signal.h>
+
 using namespace std::chrono_literals;
 
 #include <sys/socket.h>
@@ -70,10 +73,7 @@ struct Test
 
 int main()
 {
-  // {
-  //   Test t;
-  // }
-  // sleep(3333);
+  signal(SIGPIPE, SIG_IGN);
   
   Config::instance()->parse("./config");
   
@@ -81,7 +81,8 @@ int main()
   
   fm->start();
 
-  sleep(300000);
+  for(;;) sleep(3);
+  
   return 0;
 }
 

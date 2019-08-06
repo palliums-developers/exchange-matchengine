@@ -36,7 +36,7 @@ using namespace std::chrono_literals;
 
 std::string RemoteDBBase::escape_string(std::string str)
 {
-  char buf[256];
+  char buf[4096];
   memset(buf, 0, sizeof(buf));
   mysql_real_escape_string(_mysql, buf, str.c_str(), str.length());
   return std::string(buf);
@@ -208,7 +208,7 @@ int RemoteDBBase::do_select(const char* query, std::vector<std::string> keys, st
 
 long RemoteDBBase::get_rows_count(const char* table)
 {
-  char query[256];
+  char query[2048];
   snprintf(query, sizeof(query), "SELECT COUNT(*) FROM %s", table);
 
   std::vector<std::vector<std::string>> vv;
@@ -224,7 +224,7 @@ long RemoteDBBase::get_rows_count(const char* table)
 std::map<std::string, std::string>
 RemoteDBBase::get_last_record(const char* table, const std::vector<std::string> & keys)
 {
-  char query[256];
+  char query[2048];
   snprintf(query, sizeof(query), "SELECT * FROM %s ORDER BY id DESC LIMIT 0, 1", table);
   
   std::map<std::string, std::string> v;
@@ -241,7 +241,7 @@ RemoteDBBase::get_last_record(const char* table, const std::vector<std::string> 
 std::vector<std::map<std::string, std::string>>
 RemoteDBBase::get_record_by_limit(const char* table, const std::vector<std::string> & keys, long start, long cnt)
 {
-  char query[256];
+  char query[2048];
   snprintf(query, sizeof(query), "SELECT * FROM %s WHERE id>=%ld AND id<%ld", table, start, start+cnt);
   
   std::vector<std::map<std::string, std::string>> vv;
@@ -300,7 +300,7 @@ std::shared_ptr<User> RemoteDB::get_user_impl(long id, bool forupate, bool do_co
   forupate = false;
   
   std::vector<std::map<std::string, std::string>> vv;
-  char query[256];
+  char query[2048];
   if(forupate)
     snprintf(query, sizeof(query), "SELECT * FROM payment_users WHERE id=%ld FOR UPDATE", id); 
   else
@@ -321,7 +321,7 @@ std::shared_ptr<User> RemoteDB::get_user_by_user_phone_mail(std::string name, st
 std::shared_ptr<User> RemoteDB::get_user_by_user_phone_mail_impl(std::string name, std::string value, bool do_commit)
 {
   std::vector<std::map<std::string, std::string>> vv;
-  char query[256];
+  char query[2048];
   snprintf(query, sizeof(query), "SELECT * FROM payment_users WHERE %s='%s'", name.c_str(), value.c_str());
   do_select(query, _userKeys, &vv, do_commit);
   
@@ -339,7 +339,7 @@ std::shared_ptr<Order> RemoteDB::get_order(long id)
 std::shared_ptr<Order> RemoteDB::get_order_impl(long id, bool do_commit)
 {
   std::vector<std::map<std::string, std::string>> vv;
-  char query[256];
+  char query[2048];
   snprintf(query, sizeof(query), "SELECT * FROM payment_orders WHERE id=%ld", id);
   do_select(query, _orderKeys, &vv, do_commit);
 
@@ -362,7 +362,7 @@ int RemoteDB::add_user_impl(std::shared_ptr<User> o, bool do_commit)
   std::string vals;
   zip_map(v, keys, vals);
 
-  char query[1024];
+  char query[2048];
   snprintf(query, sizeof(query), "INSERT INTO payment_users (%s) VALUES (%s)", keys.c_str(), vals.c_str());
   
   return do_query(query, NULL, do_commit);
@@ -377,7 +377,7 @@ int RemoteDB::add_order_impl(std::shared_ptr<Order> order, bool do_commit)
   std::string vals;
   zip_map(v, keys, vals);
   
-  char query[1024];
+  char query[2048];
   snprintf(query, sizeof(query), "INSERT INTO payment_orders (%s) VALUES (%s)", keys.c_str(), vals.c_str());
   
   return do_query(query, NULL, do_commit);
@@ -390,7 +390,7 @@ int RemoteDB::add_order(std::shared_ptr<Order> order, std::shared_ptr<User> from
 
   int ret = 0;
   
-  char query[1024];
+  char query[2048];
 
   if(order->_type == ORDER_TYPE_RECHARGE)
     {
@@ -511,7 +511,7 @@ int RemoteDB::add_order(std::shared_ptr<Order> order, std::shared_ptr<User> from
 int RemoteDB::update_order(std::shared_ptr<Order> order, std::map<std::string, std::string>& kvs)
 {
   auto mysql = _mysql;
-  char query[1024];
+  char query[2048];
   int ret;
   
   if(order->_type == ORDER_TYPE_RECHARGE)
@@ -550,7 +550,7 @@ int RemoteDB::update_order(std::shared_ptr<Order> order, std::map<std::string, s
 int RemoteDB::update_user(std::shared_ptr<User> user, std::map<std::string, std::string>& kvs)
 {
   auto mysql = _mysql;
-  char query[1024];
+  char query[2048];
   int ret;
   
   snprintf(query, sizeof(query), "UPDATE payment_users SET %s WHERE id=%ld", join_map(kvs).c_str(), user->_id);
@@ -614,7 +614,7 @@ RemoteDB::get_last_user()
 
 int RemoteDB::update_order_status(long orderid, int status)
 {
-  char query[1024];
+  char query[2048];
   snprintf(query, sizeof(query), "UPDATE payment_orders SET status=%d WHERE id=%ld", status, orderid);
   return do_query(query, NULL);
 }
@@ -630,7 +630,7 @@ std::vector<long> RemoteDB::get_user_orders(long userid)
     {
       std::vector<std::map<std::string, std::string>> vv;
       
-      char query[256];
+      char query[2048];
       snprintf(query, sizeof(query), "SELECT id FROM payment_orders WHERE user_id = %ld LIMIT %d,%d", userid, idx, cnt);
   
       std::vector<std::string> keys{"id"};
@@ -655,7 +655,7 @@ std::vector<long> RemoteDB::get_user_history_orders(long userid, long end_orderi
   
   std::vector<std::map<std::string, std::string>> vv;
       
-  char query[256];
+  char query[2048];
   snprintf(query, sizeof(query), "SELECT id FROM payment_orders WHERE id<%ld AND user_id = %ld", end_orderid, userid);
   
   std::vector<std::string> keys{"id"};
@@ -677,7 +677,7 @@ RemoteDB::get_user_orders_limit(std::shared_ptr<User> user, std::vector<int> sta
   
   std::vector<std::map<std::string, std::string>> vv;
   
-  char query[256];
+  char query[2048];
   
   const char* dir = (direction==0 ? "DESC": "");
 
@@ -691,11 +691,11 @@ RemoteDB::get_user_orders_limit(std::shared_ptr<User> user, std::vector<int> sta
 
   if(statuses.empty())
     snprintf(query, sizeof(query),
-	     "SELECT * FROM payment_orders WHERE (from=%ld OR to=%ld) AND timestamp>%d AND id<%ld ORDER BY id %s LIMIT %d,%d",
+	     "SELECT * FROM payment_orders WHERE (`from`=%ld OR `to`=%ld) AND timestamp>%d AND id<%ld ORDER BY id %s LIMIT %d,%d",
 	     userid, userid, start_timestamp, last_orderid, dir, offset, count);
   else
     snprintf(query, sizeof(query),
-	     "SELECT * FROM payment_orders WHERE (from=%ld OR to=%ld) AND timestamp>%d AND id<%ld AND (%s) ORDER BY id %s LIMIT %d,%d",
+	     "SELECT * FROM payment_orders WHERE (`from`=%ld OR `to`=%ld) AND timestamp>%d AND id<%ld AND (%s) ORDER BY id %s LIMIT %d,%d",
 	     userid, userid, start_timestamp, last_orderid, status.c_str(), dir, offset, count);
   
   do_select(query, _orderKeys, &vv);

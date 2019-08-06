@@ -852,7 +852,7 @@ void Payment::print_status(int now)
   TIMER(3);
   
   char buf[512];
-  sprintf(buf, "qreq:%d, qrsp:%d", _qreqmsg.size(), _qrspmsg.size());
+  snprintf(buf, sizeof(buf), "qreq:%d, qrsp:%d", _qreqmsg.size(), _qrspmsg.size());
   write_file(buf);
 }
 
@@ -917,8 +917,11 @@ void Payment::run(volatile bool * alive)
   while(*alive)
     {
       auto now = (int)uint32_t(time(NULL));
-      
-      dot(".");
+
+      if(0 == now%60)
+	dot(".");
+      if(0 == now%3600)
+	dot("@");
       
       print_status(now);
       sleep(1);
@@ -1000,9 +1003,9 @@ std::string Payment::handle_request(std::string req)
   
   if(command == "add_user")
     {
-      if(!check_paras(paras, {"login_pwd_hash", "recharge_addr", }))
+      //if(!check_paras(paras, {"login_pwd_hash", "recharge_addr", }))
       //if(!check_paras(paras, {"login_pwd_hash", "tx_pwd_hash", "login_pwd_salt", "tx_pwd_salt", "balance", "recharge_addr", "reward_point", "timestamp"}))
-	return gen_rsp(command, msn, ERROR_INVALID_PARAS, v);
+      //return gen_rsp(command, msn, ERROR_INVALID_PARAS, v);
       auto idstr = check_or_paras(paras, {"user", "phone", "mail"});
       if(idstr.empty())
 	return gen_rsp(command, msn, ERROR_INVALID_PARAS, v);
@@ -1031,6 +1034,9 @@ std::string Payment::handle_request(std::string req)
       if(!user)
 	return gen_rsp(command, msn, ERROR_NOT_EXIST_USER, v);
 
+      if(paras.count("withdraw_addr") && paras["withdraw_addr"].length() > 512)
+	return gen_rsp(command, msn, ERROR_TOO_LONG_WITHDRAW_ADDR, v);
+      
       auto ret = update_user(user, paras);
       
       return gen_rsp(command, msn, ret, v);
