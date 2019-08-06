@@ -59,19 +59,19 @@ std::string timestamp_2_string(uint32_t stamp)
 //int g_log_level = INFO;
 
 std::string green_text(const char* text) {
-  char buf[256];
+  char buf[2048];
   snprintf(buf, sizeof(buf), "%s%s%s", "\e[0;32m", text, "\e[0m");
   return std::string(buf);
 }
 
 std::string red_text(const char* text) {
-  char buf[256];
+  char buf[2048];
   snprintf(buf, sizeof(buf), "%s%s%s", "\e[0;31m", text, "\e[0m");
   return std::string(buf);
 }
 
 std::string blue_text(const char* text) {
-  char buf[256];
+  char buf[2048];
   snprintf(buf, sizeof(buf), "%s%s%s", "\e[0;34m", text, "\e[0m");
   return std::string(buf);
 }
@@ -91,7 +91,7 @@ void log(int level, const char* file, int line, const char* func, const char *fo
     lvlstr = red_text(lvlstrs[level].c_str());
   std::string task = blue_text("match-engine");
   
-  char content[1024];
+  char content[4096];
   va_list args;
   va_start(args, format);
   vsnprintf(content, sizeof(content), format, args);
@@ -118,8 +118,8 @@ void log2(int level, const char* file, int line, const char* func, const char *f
     lvlstr = red_text(lvlstrs[level].c_str());
   std::string task = blue_text("match-engine");
   
-  char str[512];
-  sprintf(str, "\n%s %s %s:%d %s %s\n", timestamp_2_string(now).c_str(), lvlstr.c_str(), file, line, func, task.c_str());
+  char str[4096];
+  snprintf(str, sizeof(str), "\n%s %s %s:%d %s %s\n", timestamp_2_string(now).c_str(), lvlstr.c_str(), file, line, func, task.c_str());
   printf("%s", str);
   
   va_list args;
@@ -364,7 +364,7 @@ bool Config::parse(const char* path)
 
   for(;;)
     {
-      char buf[512];
+      char buf[1024];
       auto p = fgets(buf, sizeof(buf), fh);
 	
       if(p == NULL)

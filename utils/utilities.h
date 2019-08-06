@@ -198,7 +198,7 @@ struct Client : std::enable_shared_from_this<Client>
     _buf[sizeof(_buf)-1] = 0x00;
 
     char str[80];
-    sprintf(str, "client_%08d", _id);
+    snprintf(str, sizeof(str), "client_%08d", _id);
     _name = str;
   }
   
@@ -375,7 +375,7 @@ struct TimeElapsed
     int milliseconds = duration.count()/1000;
 
     char buf[512];
-    sprintf(buf, "%s cost %d milliseconds", name, milliseconds);
+    snprintf(buf, sizeof(buf), "%s cost %d milliseconds", name, milliseconds);
     //write_file(buf);
 
     if(milliseconds >= 100)

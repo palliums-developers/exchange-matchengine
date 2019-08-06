@@ -122,9 +122,10 @@ int main1()
 	      //sprintf(buf, get_user_pat2, useridx); v.push_back(buf);
 	      //sprintf(buf, add_order_pat, 0, 0, 1, 0.1); v.push_back(buf);
 	      //sprintf(buf, add_order_pat1, 1, 0, 276, 10.0); v.push_back(buf);
-	      sprintf(buf, add_order_pat1, 1, 0, 203, 0.001); v.push_back(buf);
 	      //sprintf(buf, add_order_pat2, 2, 0, 1, 0.3); v.push_back(buf);
 	      //sprintf(buf, get_orders_pat, 0, 1, 0); v.push_back(buf);
+	      sprintf(buf, add_order_pat1, 1, 0, 203, 0.001); v.push_back(buf);
+	      //sprintf(buf, add_order_pat1, 1, 3, 4, 3.0); v.push_back(buf);
 	      
 	      useridx++;
 	    }
@@ -151,6 +152,7 @@ int main1()
 	      else
 		{
 		  static int idx = 0;
+		  dot(".");
 		  LOG(INFO, "send %d success: %s", idx++, req.c_str());
 		}
 	    }
@@ -210,6 +212,7 @@ int main1()
       }
     
     static int i = 0;
+    dot("*");
     LOG(INFO, "recved msg %d:\n%s", i++, buf);
   }
   

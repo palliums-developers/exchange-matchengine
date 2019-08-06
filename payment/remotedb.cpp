@@ -460,10 +460,10 @@ int RemoteDB::add_order(std::shared_ptr<Order> order, std::shared_ptr<User> from
 	return ERROR_INSUFFICIENT_FEE;
       }
       
-      if(double_less(from_user->_balance, (order->_amount + order->_withdraw_fee))) {
-	mysql_rollback(mysql);
-	return ERROR_INSUFFICIENT_AMOUNT; 
-      }
+      // if(double_less(from_user->_balance, (order->_amount + order->_withdraw_fee))) {
+      // 	mysql_rollback(mysql);
+      // 	return ERROR_INSUFFICIENT_AMOUNT; 
+      // }
 
       ret = add_order_impl(order, false);
       if(ret != 0) {
@@ -491,10 +491,10 @@ int RemoteDB::add_order(std::shared_ptr<Order> order, std::shared_ptr<User> from
 	return ERROR_NOT_EXIST_USER;
       }
       
-      if(double_less(from_user->_balance, order->_amount)) {
-	mysql_rollback(mysql);
-	return ERROR_INSUFFICIENT_AMOUNT;
-      }
+      // if(double_less(from_user->_balance, order->_amount)) {
+      // 	mysql_rollback(mysql);
+      // 	return ERROR_INSUFFICIENT_AMOUNT;
+      // }
 
       ret = add_order_impl(order, false);
       if(ret != 0) {

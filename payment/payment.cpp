@@ -513,7 +513,7 @@ int Payment::add_order(std::map<std::string, std::string> & kvs)
     
     if(order->_type == ORDER_TYPE_TRANSACTION) {
       if(double_less(user->_balance, amount))
-	return ERROR_INSUFFICIENT_AMOUNT; 
+	return ERROR_INSUFFICIENT_AMOUNT;
       bs.change(-amount);
     }
     if(order->_type == ORDER_TYPE_WITHDRAW)  {
@@ -522,7 +522,7 @@ int Payment::add_order(std::map<std::string, std::string> & kvs)
       bs.change(-(amount + order->_withdraw_fee));
     }
   }
-  
+
   auto ret = _remotedb->add_order(order, user, touser);
   
   if(ret != 0)
@@ -888,6 +888,7 @@ void Payment::run(volatile bool * alive)
 	if(!msg)
 	  {
 	    fflush(log2filehandle);
+	    _remotedb->ping();
 	    continue;
 	  }
 

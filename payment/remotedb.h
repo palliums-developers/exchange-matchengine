@@ -28,6 +28,11 @@ struct RemoteDBBase
     printf("Error(%d) [%s] \"%s\"", mysql_errno(_mysql), mysql_sqlstate(_mysql), mysql_error(_mysql));
   }
 
+  void ping()
+  {
+    mysql_ping(_mysql);
+  }
+  
   bool do_connect();
   
   int do_query(const char* query, std::vector<std::vector<std::string>>* vv, bool);
