@@ -501,7 +501,9 @@ int Payment::add_order(std::map<std::string, std::string> & kvs)
   }
   
   auto amount = atof(kvs["amount"].c_str());
-
+  if(amount <= 0)
+    return ERROR_INVALID_PARAS;
+  
   if(order->_type == ORDER_TYPE_WITHDRAW &&
      double_less(order->_withdraw_fee, min_withdraw_fee))
     return ERROR_INSUFFICIENT_FEE; 

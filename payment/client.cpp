@@ -124,8 +124,8 @@ int main1()
 	      //sprintf(buf, add_order_pat1, 1, 0, 276, 10.0); v.push_back(buf);
 	      //sprintf(buf, add_order_pat2, 2, 0, 1, 0.3); v.push_back(buf);
 	      //sprintf(buf, get_orders_pat, 0, 1, 0); v.push_back(buf);
-	      sprintf(buf, add_order_pat1, 1, 0, 203, 0.001); v.push_back(buf);
-	      //sprintf(buf, add_order_pat1, 1, 3, 4, 3.0); v.push_back(buf);
+	      //sprintf(buf, add_order_pat1, 1, 0, 203, 0.001); v.push_back(buf);
+	      sprintf(buf, add_order_pat1, 1, 5, 6, 0.001); v.push_back(buf);
 	      
 	      useridx++;
 	    }
