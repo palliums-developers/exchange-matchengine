@@ -51,16 +51,16 @@ struct Order
   int _type;
   long _from;
   long _to;
-  double _amount;
+  long _amount;
   int _timestamp;
   std::string _withdraw_addr;
   std::string _recharge_utxo;
   std::string _withdraw_utxo;
-  double _withdraw_fee;
+  long _withdraw_fee;
   int _utxo_confirmed;
 
   std::string _legal_currency_name;
-  double _legal_currency_value;
+  long _legal_currency_value;
 };
 
 
@@ -135,7 +135,7 @@ struct User
   std::string _tx_pwd_hash;
   std::string _login_pwd_salt;
   std::string _tx_pwd_salt;
-  double _balance;
+  long _balance;
   std::string _phone;
   std::string _mail;
   std::string _recharge_addr;

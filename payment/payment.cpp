@@ -134,7 +134,7 @@ std::shared_ptr<Order> Order::create(std::map<std::string, std::string> & kvs)
   if(kvs.count("to")) 
     o->_to = atol(kvs["to"].c_str());
   if(kvs.count("amount")) 
-    o->_amount = atof(kvs["amount"].c_str());
+    o->_amount = atol(kvs["amount"].c_str());
   if(kvs.count("timestamp")) 
     o->_timestamp = atoi(kvs["timestamp"].c_str());
   if(kvs.count("withdraw_addr")) 
@@ -144,14 +144,14 @@ std::shared_ptr<Order> Order::create(std::map<std::string, std::string> & kvs)
   if(kvs.count("withdraw_utxo")) 
     o->_withdraw_utxo = kvs["withdraw_utxo"];
   if(kvs.count("withdraw_fee")) 
-    o->_withdraw_fee = atof(kvs["withdraw_fee"].c_str());
+    o->_withdraw_fee = atol(kvs["withdraw_fee"].c_str());
   if(kvs.count("utxo_confirmed")) 
     o->_utxo_confirmed = atoi(kvs["utxo_confirmed"].c_str());
 
   if(kvs.count("legal_currency_name")) 
     o->_legal_currency_name = kvs["legal_currency_name"];
   if(kvs.count("legal_currency_value")) 
-    o->_legal_currency_value = atof(kvs["legal_currency_value"].c_str());
+    o->_legal_currency_value = atol(kvs["legal_currency_value"].c_str());
   
   return o;
 }
@@ -231,7 +231,7 @@ std::shared_ptr<User> User::create(std::map<std::string, std::string> & kvs)
   if(kvs.count("tx_pwd_salt"))
     o->_tx_pwd_salt = kvs["tx_pwd_salt"];
   if(kvs.count("balance"))
-    o->_balance = atof(kvs["balance"].c_str());
+    o->_balance = atol(kvs["balance"].c_str());
   if(kvs.count("phone"))
     o->_phone = kvs["phone"];
   if(kvs.count("mail"))
@@ -380,7 +380,7 @@ int Payment::update_user(std::shared_ptr<User> user, std::map<std::string, std::
   if(kvs.count("tx_pwd_salt"))
     o->_tx_pwd_salt = kvs["tx_pwd_salt"];
   // if(kvs.count("balance"))
-  //   o->_balance = atof(kvs["balance"].c_str());
+  //   o->_balance = atol(kvs["balance"].c_str());
   if(kvs.count("phone"))
     o->_phone = kvs["phone"];
   if(kvs.count("mail"))
@@ -420,7 +420,7 @@ int Payment::update_order(std::shared_ptr<Order> order, std::map<std::string, st
   // if(kvs.count("to")) 
   //   o->_to = atol(kvs["to"].c_str());
   // if(kvs.count("amount")) 
-  //   o->_amount = atof(kvs["amount"].c_str());
+  //   o->_amount = atol(kvs["amount"].c_str());
   // if(kvs.count("timestamp")) 
   //   o->_timestamp = atoi(kvs["timestamp"].c_str());
   // if(kvs.count("withdraw_addr")) 
@@ -430,11 +430,11 @@ int Payment::update_order(std::shared_ptr<Order> order, std::map<std::string, st
   // if(kvs.count("withdraw_utxo")) 
   //   o->_withdraw_utxo = kvs["withdraw_utxo"];
   // if(kvs.count("withdraw_fee")) 
-  //   o->_withdraw_fee = atof(kvs["withdraw_fee"].c_str());
+  //   o->_withdraw_fee = atol(kvs["withdraw_fee"].c_str());
   // if(kvs.count("legal_currency_name")) 
   //   o->_legal_currency_name = kvs["legal_currency_name"];
   // if(kvs.count("legal_currency_value")) 
-  //   o->_legal_currency_value = atof(kvs["legal_currency_value"].c_str());
+  //   o->_legal_currency_value = atol(kvs["legal_currency_value"].c_str());
 
   if(kvs.count("utxo_confirmed") && kvs["utxo_confirmed"] == "1") {
     if(o->_utxo_confirmed)
@@ -451,25 +451,25 @@ int Payment::update_order(std::shared_ptr<Order> order, std::map<std::string, st
   return 0;
 }
 
-static const double min_withdraw_fee = 0.00050000;
+static const long min_withdraw_fee = 50000;
 
 struct BalanceSaver
 {
-  BalanceSaver(double* balance, std::mutex& mtx) : _balance(balance), _mtx(mtx) { }
+  BalanceSaver(long* balance, std::mutex& mtx) : _balance(balance), _mtx(mtx) { }
   ~BalanceSaver() {
     if(!_commited) {
       std::unique_lock<std::mutex> lk(_mtx);
       *_balance = *_balance - _amount;
     }
   }
-  void change(double amount)
+  void change(long amount)
   {
     _amount = amount;
     *_balance = *_balance + _amount;
   }
   void commit() { _commited = true; }
-  double* _balance;
-  double _amount = 0;
+  long* _balance;
+  long _amount = 0;
   bool _commited = false;
   std::mutex& _mtx;
 };
@@ -500,7 +500,7 @@ int Payment::add_order(std::map<std::string, std::string> & kvs)
       return ERROR_NOT_EXIST_USER;
   }
   
-  auto amount = atof(kvs["amount"].c_str());
+  auto amount = atol(kvs["amount"].c_str());
   if(amount <= 0)
     return ERROR_INVALID_PARAS;
   
@@ -509,8 +509,7 @@ int Payment::add_order(std::map<std::string, std::string> & kvs)
       return ERROR_INVALID_PARAS;
   }
   
-  if(order->_type == ORDER_TYPE_WITHDRAW &&
-     double_less(order->_withdraw_fee, min_withdraw_fee))
+  if(order->_type == ORDER_TYPE_WITHDRAW && order->_withdraw_fee < min_withdraw_fee)
     return ERROR_INSUFFICIENT_FEE; 
   
   BalanceSaver bs(&user->_balance, _mtx);
@@ -519,12 +518,12 @@ int Payment::add_order(std::map<std::string, std::string> & kvs)
     std::unique_lock<std::mutex> lk(_mtx);
     
     if(order->_type == ORDER_TYPE_TRANSACTION) {
-      if(double_less(user->_balance, amount))
+      if(user->_balance < amount)
 	return ERROR_INSUFFICIENT_AMOUNT;
       bs.change(-amount);
     }
     if(order->_type == ORDER_TYPE_WITHDRAW)  {
-      if(double_less(user->_balance, (amount + order->_withdraw_fee)))
+      if(user->_balance < (amount + order->_withdraw_fee))
 	return ERROR_INSUFFICIENT_AMOUNT; 
       bs.change(-(amount + order->_withdraw_fee));
     }
@@ -1004,7 +1003,7 @@ std::string Payment::handle_request(std::string req)
 
   // if(command == "self_update_project_received_crowdfunding")
   //   {
-  //     _remotedb->update_project_received_crowdfunding(atol(paras["project_id"].c_str()), atof(paras["received_crowdfunding"].c_str()));
+  //     _remotedb->update_project_received_crowdfunding(atol(paras["project_id"].c_str()), atol(paras["received_crowdfunding"].c_str()));
   //     return "";
   //   }
 

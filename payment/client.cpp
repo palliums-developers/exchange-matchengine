@@ -66,11 +66,13 @@ int main1()
   const char* get_user_pat = "{\"seq\": 645, \"command\": \"get_user\", \"paras\": {\"id\": %d}}";
   const char* get_user_pat1 = "{\"seq\": 645, \"command\": \"get_user\", \"paras\": {\"user\": %s}}";
   const char* get_user_pat2 = "{\"seq\": 645, \"command\": \"get_user\", \"paras\": {\"phone\": 1350123%d}}";
-  const char* add_order_pat = "{\"seq\": 888, \"command\": \"add_order\", \"paras\": {\"type\":%d, \"from\":%d, \"to\":%d, \"amount\":%f, \"recharge_utxo\":\"utxo001\", \"utxo_confirmed\":1}}";
-  const char* add_order_pat1 = "{\"seq\": 888, \"command\": \"add_order\", \"paras\": {\"type\":%d, \"from\":%d, \"to\":%d, \"amount\":%f, \"recharge_utxo\":\"utxo001\", \"utxo_confirmed\":1}}";
-  const char* add_order_pat2 = "{\"seq\": 888, \"command\": \"add_order\", \"paras\": {\"type\":%d, \"from\":%d, \"to\":%d, \"amount\":%f, \"withdraw_utxo\":\"wu001\", \"withdraw_addr\":\"wa001\", \"withdraw_fee\":0.01}}";
+  const char* add_order_pat = "{\"seq\": 888, \"command\": \"add_order\", \"paras\": {\"type\":%d, \"from\":%d, \"to\":%d, \"amount\":%ld, \"recharge_utxo\":\"utxo001\", \"utxo_confirmed\":1}}";
+  const char* add_order_pat1 = "{\"seq\": 888, \"command\": \"add_order\", \"paras\": {\"type\":%d, \"from\":%d, \"to\":%d, \"amount\":%ld, \"recharge_utxo\":\"utxo001\", \"utxo_confirmed\":1}}";
+  const char* add_order_pat2 = "{\"seq\": 888, \"command\": \"add_order\", \"paras\": {\"type\":%d, \"from\":%d, \"to\":%d, \"amount\":%ld, \"withdraw_utxo\":\"wu001\", \"withdraw_addr\":\"wa001\", \"withdraw_fee\":0.01}}";
   const char* get_orders_pat = "{\"seq\": 645, \"command\": \"get_orders\", \"paras\": {\"user_id\":%d, \"type\":%d, \"offset\":%d, \"limit\":10}}";
-  
+
+  const char* update_user_pat = "{\"seq\": 645, \"command\": \"update_user\", \"paras\": {\"id\": %d, \"phone\":\"\"}}";
+
   bool connected = false;
   
   int sock = 0;
@@ -82,8 +84,8 @@ int main1()
     
       for(;;)
 	{
-	  //sock = SocketHelper::connect("127.0.0.1", 60001);
-	  sock = SocketHelper::connect("47.106.208.207", 60001);
+	  sock = SocketHelper::connect("127.0.0.1", 60001);
+	  //sock = SocketHelper::connect("47.106.208.207", 60001);
 	  if(sock > 0)
 	    break;
 	  sleep(3);
@@ -125,7 +127,8 @@ int main1()
 	      //sprintf(buf, add_order_pat2, 2, 0, 1, 0.3); v.push_back(buf);
 	      //sprintf(buf, get_orders_pat, 0, 1, 0); v.push_back(buf);
 	      //sprintf(buf, add_order_pat1, 1, 0, 203, 0.001); v.push_back(buf);
-	      sprintf(buf, add_order_pat1, 1, 5, 6, 0.001); v.push_back(buf);
+	      sprintf(buf, add_order_pat1, 1, 0, 328, 5); v.push_back(buf);
+	      //sprintf(buf, update_user_pat, 276); v.push_back(buf);
 	      
 	      useridx++;
 	    }

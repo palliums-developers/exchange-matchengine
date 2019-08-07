@@ -430,7 +430,7 @@ int RemoteDB::add_order(std::shared_ptr<Order> order, std::shared_ptr<User> from
       }
 
       if(order->_utxo_confirmed) {
-	snprintf(query, sizeof(query), "UPDATE payment_users SET balance=balance+%f WHERE id=%ld", order->_amount, from_user->_id);
+	snprintf(query, sizeof(query), "UPDATE payment_users SET balance=balance+%ld WHERE id=%ld", order->_amount, from_user->_id);
 	ret = do_query(query, NULL, false);
 	if(ret != 0) {
 	  mysql_rollback(mysql);
@@ -446,7 +446,7 @@ int RemoteDB::add_order(std::shared_ptr<Order> order, std::shared_ptr<User> from
       //auto from_user = get_user_impl(order->_from, true, false);
       
       auto feestr = Config::instance()->get("min_withdraw_fee");
-      double min_withdraw_fee = atof(feestr.c_str());
+      long min_withdraw_fee = atol(feestr.c_str());
       
       if(!from_user) {
 	mysql_rollback(mysql);
@@ -455,23 +455,18 @@ int RemoteDB::add_order(std::shared_ptr<Order> order, std::shared_ptr<User> from
 
       //printf("balance:%f, amount:%f, fee:%f\n", from_user->_balance, order->_amount, order->_withdraw_fee);
 
-      if(double_less(order->_withdraw_fee, min_withdraw_fee)) {
+      if(order->_withdraw_fee < min_withdraw_fee) {
 	mysql_rollback(mysql);
 	return ERROR_INSUFFICIENT_FEE;
       }
       
-      // if(double_less(from_user->_balance, (order->_amount + order->_withdraw_fee))) {
-      // 	mysql_rollback(mysql);
-      // 	return ERROR_INSUFFICIENT_AMOUNT; 
-      // }
-
       ret = add_order_impl(order, false);
       if(ret != 0) {
 	mysql_rollback(mysql);
 	return ret;
       }
 
-      snprintf(query, sizeof(query), "UPDATE payment_users SET balance=balance-%f WHERE id=%ld", order->_amount+order->_withdraw_fee, from_user->_id);
+      snprintf(query, sizeof(query), "UPDATE payment_users SET balance=balance-%ld WHERE id=%ld", order->_amount+order->_withdraw_fee, from_user->_id);
       ret = do_query(query, NULL, false);
       if(ret != 0) {
 	mysql_rollback(mysql);
@@ -491,11 +486,6 @@ int RemoteDB::add_order(std::shared_ptr<Order> order, std::shared_ptr<User> from
 	return ERROR_NOT_EXIST_USER;
       }
       
-      // if(double_less(from_user->_balance, order->_amount)) {
-      // 	mysql_rollback(mysql);
-      // 	return ERROR_INSUFFICIENT_AMOUNT;
-      // }
-
       ret = add_order_impl(order, false);
       if(ret != 0) {
       	mysql_rollback(mysql);
@@ -510,14 +500,14 @@ int RemoteDB::add_order(std::shared_ptr<Order> order, std::shared_ptr<User> from
       // 	return ret;
       // }
       
-      snprintf(query, sizeof(query), "UPDATE payment_users SET balance=balance-%f WHERE id=%ld", order->_amount, from_user->_id);
+      snprintf(query, sizeof(query), "UPDATE payment_users SET balance=balance-%ld WHERE id=%ld", order->_amount, from_user->_id);
       ret = do_query(query, NULL, false);
       if(ret != 0) {
       	mysql_rollback(mysql);
       	return ret;
       }
 
-      snprintf(query, sizeof(query), "UPDATE payment_users SET balance=balance+%f WHERE id=%ld", order->_amount, to_user->_id);
+      snprintf(query, sizeof(query), "UPDATE payment_users SET balance=balance+%ld WHERE id=%ld", order->_amount, to_user->_id);
       ret = do_query(query, NULL, false);
       if(ret != 0) {
       	mysql_rollback(mysql);
@@ -546,7 +536,7 @@ int RemoteDB::update_order(std::shared_ptr<Order> order, std::map<std::string, s
 	  return ERROR_NOT_EXIST_USER;
 	}
 	
-	snprintf(query, sizeof(query), "UPDATE payment_users SET balance=balance+%f WHERE id=%ld", order->_amount, from_user->_id);
+	snprintf(query, sizeof(query), "UPDATE payment_users SET balance=balance+%ld WHERE id=%ld", order->_amount, from_user->_id);
 	ret = do_query(query, NULL, false);
 	if(ret != 0) {
 	  mysql_rollback(mysql);

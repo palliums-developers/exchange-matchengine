@@ -138,15 +138,30 @@ struct Test : public TestBase
 
 
 
-struct RangeLock
-{
-  RangeLock(int id, std::mutex * mtxs, int mtxcnt) : _lk(mtxs[id%mtxcnt]) {}
-  ~RangeLock() {}
-  std::unique_lock<std::mutex> _lk;
-};
+// struct RangeLock
+// {
+//   RangeLock(int id, std::mutex * mtxs, int mtxcnt) : _lk(mtxs[id%mtxcnt]) {}
+//   ~RangeLock() {}
+//   std::unique_lock<std::mutex> _lk;
+// };
 
 int main()
 {
+  {
+    double a = 0.0000000123;
+    char buf[80];
+    sprintf(buf, "%.9f", a);
+    std::cout << std::string(buf) << "\n";
+
+    auto b = atof("0.0000000123");
+    char buf2[80];
+    sprintf(buf2, "%.9f", b);
+    
+    std::cout << std::string(buf2) << "\n";
+    
+    return 0;
+  }
+  
   {
     std::mutex mtxs[4];
 
