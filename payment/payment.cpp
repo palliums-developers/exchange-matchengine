@@ -369,23 +369,33 @@ int Payment::update_user(std::shared_ptr<User> user, std::map<std::string, std::
 
   if(kvs.count("balance")) kvs.erase("balance");
 
+  
   {
     std::unique_lock<std::mutex> lk(_mtx);
-    if(kvs.count("user") && o->_user != kvs["user"] && _cache_user_phone_mail_2_id.count(kvs["user"]))
-      return ERROR_EXIST_USER;
-    if(kvs.count("phone") && o->_phone != kvs["phone"] && _cache_user_phone_mail_2_id.count(kvs["phone"]))
-      return ERROR_EXIST_USER;
-    if(kvs.count("mail") && o->_user != kvs["mail"] && _cache_user_phone_mail_2_id.count(kvs["mail"]))
-      return ERROR_EXIST_USER;
+    auto & v = _cache_user_phone_mail_2_id;
+    
+    if(kvs.count("user") && o->_user != kvs["user"])
+      {
+	if(v.count(kvs["user"]) && v[kvs["user"]] != user->_id)
+	  return ERROR_EXIST_USER;
+	o->_user = kvs["user"];
+      }
+
+    if(kvs.count("phone") && o->_phone != kvs["phone"])
+      {
+	if(v.count(kvs["phone"]) && v[kvs["phone"]] != user->_id)
+	  return ERROR_EXIST_USER;
+	o->_phone = kvs["phone"];
+      }
+
+    if(kvs.count("mail") && o->_mail != kvs["mail"])
+      {
+	if(v.count(kvs["mail"]) && v[kvs["mail"]] != user->_id)
+	  return ERROR_EXIST_USER;
+	o->_mail = kvs["mail"];
+      }
   }
       
-  if(kvs.count("user"))
-    o->_user = kvs["user"];
-  if(kvs.count("phone"))
-    o->_phone = kvs["phone"];
-  if(kvs.count("mail"))
-    o->_mail = kvs["mail"];
-  
   if(kvs.count("login_pwd_hash"))
     o->_login_pwd_hash = kvs["login_pwd_hash"];
   if(kvs.count("tx_pwd_hash"))
