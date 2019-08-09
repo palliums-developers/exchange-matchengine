@@ -369,7 +369,6 @@ int Payment::update_user(std::shared_ptr<User> user, std::map<std::string, std::
 
   if(kvs.count("balance")) kvs.erase("balance");
 
-  
   {
     std::unique_lock<std::mutex> lk(_mtx);
     auto & v = _cache_user_phone_mail_2_id;
@@ -418,6 +417,20 @@ int Payment::update_user(std::shared_ptr<User> user, std::map<std::string, std::
   if(ret != 0) {
     *user = user_ori;
     return ret;
+  }
+
+  {
+    std::unique_lock<std::mutex> lk(_mtx);
+    auto & v = _cache_user_phone_mail_2_id;
+    
+    if(kvs.count("user"))
+      v[kvs["user"]] = user->_id;
+
+    if(kvs.count("phone"))
+      v[kvs["phone"]] = user->_id;
+
+    if(kvs.count("mail"))
+      v[kvs["mail"]] = user->_id;
   }
   
   return 0;
