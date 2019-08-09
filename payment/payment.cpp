@@ -367,6 +367,8 @@ int Payment::update_user(std::shared_ptr<User> user, std::map<std::string, std::
   auto user_ori = *user;
   auto o = user;
 
+  if(kvs.count("balance")) kvs.erase("balance");
+  
   // if(kvs.count("id"))
   //   o->_id = atol(kvs["id"].c_str());
   if(kvs.count("user"))
@@ -410,6 +412,11 @@ int Payment::update_order(std::shared_ptr<Order> order, std::map<std::string, st
 {
   auto order_ori = *order;
   auto o = order;
+
+  if(kvs.count("amount")) kvs.erase("amount");
+  if(kvs.count("type")) kvs.erase("type");
+  if(kvs.count("from")) kvs.erase("from");
+  if(kvs.count("to")) kvs.erase("to");
   
   // if(kvs.count("id")) 
   //   o->_id = atol(kvs["id"].c_str());
@@ -1081,6 +1088,7 @@ std::string Payment::handle_request(std::string req)
       if(type == 0) {
 	if(!check_paras(paras, {"recharge_utxo"}))
 	  return gen_rsp(command, msn, ERROR_INVALID_PARAS, v);
+	paras["utxo_confirmed"] = "1"; //lmf
       }
       if(type == 2) {
 	if(!check_paras(paras, {"withdraw_addr", "withdraw_fee"}))
@@ -1190,6 +1198,15 @@ std::string Payment::handle_request(std::string req)
       
       return gen_rsp(command, msn, 0, v);
     }
+
+  if(command == "add_feedback")
+    {
+      if(!check_paras(paras, {"feedback", "user_id"}))
+	return gen_rsp(command, msn, ERROR_INVALID_PARAS, v);
+      paras["timestamp"] = std::to_string((int)uint32_t(time(NULL)));
+      _remotedb->add_feedback(paras);
+      return gen_rsp(command, msn, 0, v);	
+    }  
   
   return gen_rsp(command, msn, ERROR_INVALID_COMMAND, v);
 }

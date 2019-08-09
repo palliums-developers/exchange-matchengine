@@ -92,7 +92,9 @@ struct RemoteDB : public RemoteDBBase
   std::vector<long> get_user_history_orders(long userid, long end_orderid);
 
   order_v get_user_orders_limit(user_p user, std::vector<int> statuses, int offset, int count, int direction, int start_timestamp, long last_orderid);
-  
+
+  int add_feedback(std::map<std::string, std::string> & kvs);
+
 private:
   
   user_p get_user_impl(long id, bool forupate, bool);

@@ -718,3 +718,14 @@ RemoteDB::get_user_orders_limit(std::shared_ptr<User> user, std::vector<int> sta
   return v;
 }
 
+int RemoteDB::add_feedback(std::map<std::string, std::string> & kvs)
+{
+  std::string keys;
+  std::string vals;
+  zip_map(kvs, keys, vals);
+  
+  char query[8192];
+  snprintf(query, sizeof(query), "INSERT INTO payment_feedback (%s) VALUES (%s)", keys.c_str(), vals.c_str());
+  
+  return do_query(query, NULL, true);  
+}

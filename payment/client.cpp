@@ -72,7 +72,9 @@ int main1()
   const char* get_orders_pat = "{\"seq\": 645, \"command\": \"get_orders\", \"paras\": {\"user_id\":%d, \"type\":%d, \"offset\":%d, \"limit\":10}}";
 
   const char* update_user_pat = "{\"seq\": 645, \"command\": \"update_user\", \"paras\": {\"id\": %d, \"phone\":\"\"}}";
-
+  
+  const char* add_feedback_pat = "{\"seq\": 666, \"command\": \"add_feedback\", \"paras\": {\"user_id\": %d, \"feedback\":\"good app %d\"}}";
+  
   bool connected = false;
   
   int sock = 0;
@@ -127,9 +129,9 @@ int main1()
 	      //sprintf(buf, add_order_pat2, 2, 0, 1, 0.3); v.push_back(buf);
 	      //sprintf(buf, get_orders_pat, 0, 1, 0); v.push_back(buf);
 	      //sprintf(buf, add_order_pat1, 1, 0, 203, 0.001); v.push_back(buf);
-	      sprintf(buf, add_order_pat1, 1, 0, 328, 5); v.push_back(buf);
+	      //sprintf(buf, add_order_pat1, 1, 0, 1, 1234567890); v.push_back(buf);
 	      //sprintf(buf, update_user_pat, 276); v.push_back(buf);
-	      
+	      sprintf(buf, add_feedback_pat, 33, 34); v.push_back(buf);
 	      useridx++;
 	    }
 
