@@ -368,11 +368,24 @@ int Payment::update_user(std::shared_ptr<User> user, std::map<std::string, std::
   auto o = user;
 
   if(kvs.count("balance")) kvs.erase("balance");
-  
-  // if(kvs.count("id"))
-  //   o->_id = atol(kvs["id"].c_str());
+
+  {
+    std::unique_lock<std::mutex> lk(_mtx);
+    if(kvs.count("user") && o->_user != kvs["user"] && _cache_user_phone_mail_2_id.count(kvs["user"]))
+      return ERROR_EXIST_USER;
+    if(kvs.count("phone") && o->_phone != kvs["phone"] && _cache_user_phone_mail_2_id.count(kvs["phone"]))
+      return ERROR_EXIST_USER;
+    if(kvs.count("mail") && o->_user != kvs["mail"] && _cache_user_phone_mail_2_id.count(kvs["mail"]))
+      return ERROR_EXIST_USER;
+  }
+      
   if(kvs.count("user"))
     o->_user = kvs["user"];
+  if(kvs.count("phone"))
+    o->_phone = kvs["phone"];
+  if(kvs.count("mail"))
+    o->_mail = kvs["mail"];
+  
   if(kvs.count("login_pwd_hash"))
     o->_login_pwd_hash = kvs["login_pwd_hash"];
   if(kvs.count("tx_pwd_hash"))
@@ -381,18 +394,10 @@ int Payment::update_user(std::shared_ptr<User> user, std::map<std::string, std::
     o->_login_pwd_salt = kvs["login_pwd_salt"];
   if(kvs.count("tx_pwd_salt"))
     o->_tx_pwd_salt = kvs["tx_pwd_salt"];
-  // if(kvs.count("balance"))
-  //   o->_balance = atol(kvs["balance"].c_str());
-  if(kvs.count("phone"))
-    o->_phone = kvs["phone"];
-  if(kvs.count("mail"))
-    o->_mail = kvs["mail"];
   if(kvs.count("recharge_addr"))
     o->_recharge_addr = kvs["recharge_addr"];
   if(kvs.count("reward_point"))
     o->_reward_point = atoi(kvs["reward_point"].c_str());
-  // if(kvs.count("timestamp"))
-  //   o->_timestamp = atoi(kvs["timestamp"].c_str());
 
   if(kvs.count("device_token"))
     o->_device_token = kvs["device_token"];
