@@ -424,13 +424,25 @@ int Payment::update_user(std::shared_ptr<User> user, std::map<std::string, std::
     auto & v = _cache_user_phone_mail_2_id;
     
     if(kvs.count("user"))
-      v[kvs["user"]] = user->_id;
-
+      {
+	v[kvs["user"]] = user->_id;
+	if(!user_ori._user.empty() && user_ori._user != kvs["user"])
+	  _cache_user_phone_mail_2_id.erase(user_ori._user);
+       }
+	
     if(kvs.count("phone"))
-      v[kvs["phone"]] = user->_id;
-
+      {
+	v[kvs["phone"]] = user->_id;
+	if(!user_ori._phone.empty() && user_ori._phone != kvs["phone"])
+	  _cache_user_phone_mail_2_id.erase(user_ori._phone);
+      }
+    
     if(kvs.count("mail"))
-      v[kvs["mail"]] = user->_id;
+      {
+	v[kvs["mail"]] = user->_id;
+	if(!user_ori._mail.empty() && user_ori._mail != kvs["mail"])
+	  _cache_user_phone_mail_2_id.erase(user_ori._mail);
+      }
   }
   
   return 0;
@@ -1042,6 +1054,10 @@ std::string Payment::handle_request(std::string req)
   //     return "";
   //   }
 
+  if(command == "heartbeat")
+    {
+      return gen_rsp(command, msn, 0, v);
+    }
   
   if(command == "add_user")
     {
