@@ -107,8 +107,8 @@ int extract_request(const std::string & req, std::string & command, std::map<std
 
   paras = json_get_object(v["paras"]);
   
-  if(paras.empty())
-    return 4;
+  // if(paras.empty())
+  //   return 4;
   
   return 0;
 }
@@ -1058,6 +1058,9 @@ std::string Payment::handle_request(std::string req)
     {
       return gen_rsp(command, msn, 0, v);
     }
+
+  if(paras.empty())
+    return gen_rsp(command, msn, ERROR_INVALID_JSON, v);
   
   if(command == "add_user")
     {
