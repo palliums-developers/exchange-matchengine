@@ -201,7 +201,10 @@ std::string Order::to_json()
   str += json("utxo_confirmed", _utxo_confirmed, false);
 
   str += json("legal_currency_name", _legal_currency_name, false);
-  str += json("legal_currency_value", _legal_currency_value, true);
+  str += json("legal_currency_value", _legal_currency_value, false);
+
+  str += json("from_user", _from_user, false);
+  str += json("to_user", _to_user, true);
   
   str += "}";
   return str;
@@ -1021,7 +1024,21 @@ void Payment::cache_order(std::shared_ptr<Order> order)
 
 void Payment::complete_order(std::shared_ptr<Order> order)
 {
-  
+  if(order)
+    {
+      if(order->_from_user.empty())
+	{
+	  auto from = get_user(order->_from);
+	  if(from)
+	    order->_from_user = from->_user;
+	}
+      if(order->_to_user.empty())
+	{
+	  auto to = get_user(order->_to);
+	  if(to)
+	    order->_to_user = to->_user;
+	}
+    }
 }
 
 std::string Payment::handle_request(std::string req)
@@ -1186,7 +1203,10 @@ std::string Payment::handle_request(std::string req)
       int limit = atoi(paras["limit"].c_str());
       int type = atoi(paras["type"].c_str());
       long idx = 0;
-
+      
+      if(limit > 20)
+	return gen_rsp(command, msn, ERROR_INVALID_PARAS, v);
+      
       std::shared_ptr<User> user;
       if(paras.count("user_id"))
 	user = get_user(atol(paras["user_id"].c_str()));
@@ -1239,8 +1259,10 @@ std::string Payment::handle_request(std::string req)
 	  
 	  auto orders = _remotedb->get_user_orders_limit(user, types, offset, limit, 0, start_timestamp, last_orderid);
 	  
-	  for(auto order : orders) 
+	  for(auto order : orders) {
+	    complete_order(order);
 	    v.push_back(order->to_json());
+	  }
 	}
       
       return gen_rsp(command, msn, 0, v);

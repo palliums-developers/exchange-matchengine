@@ -61,6 +61,9 @@ struct Order
 
   std::string _legal_currency_name;
   long _legal_currency_value;
+
+  std::string _from_user;
+  std::string _to_user;
 };
 
 
