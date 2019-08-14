@@ -1,0 +1,7 @@
+[package]
+name = "t01"
+version = "0.0.1"
+authors = ["lmf"]
+
+[dependencies]
+rand = "^0.7.0"
