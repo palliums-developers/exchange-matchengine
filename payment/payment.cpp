@@ -475,10 +475,10 @@ int Payment::update_order(std::shared_ptr<Order> order, std::map<std::string, st
   //   o->_timestamp = atoi(kvs["timestamp"].c_str());
   // if(kvs.count("withdraw_addr")) 
   //   o->_withdraw_addr = kvs["withdraw_addr"];
-  // if(kvs.count("recharge_utxo")) 
-  //   o->_recharge_utxo = kvs["recharge_utxo"];
-  // if(kvs.count("withdraw_utxo")) 
-  //   o->_withdraw_utxo = kvs["withdraw_utxo"];
+  if(kvs.count("recharge_utxo")) 
+    o->_recharge_utxo = kvs["recharge_utxo"];
+  if(kvs.count("withdraw_utxo")) 
+    o->_withdraw_utxo = kvs["withdraw_utxo"];
   // if(kvs.count("withdraw_fee")) 
   //   o->_withdraw_fee = atol(kvs["withdraw_fee"].c_str());
   // if(kvs.count("legal_currency_name")) 
@@ -491,6 +491,7 @@ int Payment::update_order(std::shared_ptr<Order> order, std::map<std::string, st
       return ERROR_DUPLICATE_UTXO_CONFIRM;
     o->_utxo_confirmed = 1;
   }
+
   
   auto ret = _remotedb->update_order(order, kvs);
   if(ret != 0) {
