@@ -1,0 +1,87 @@
+[base]
+data_dir_path = "/home/dev/libracfg/1"
+node_sync_retries = 7
+node_sync_channel_buffer_size = 10
+node_async_log_chan_size = 256
+
+[metrics]
+dir = "metrics"
+collection_interval_ms = 1000
+push_server_addr = ""
+
+[execution]
+address = "localhost"
+port = 43890
+testnet_genesis = false
+genesis_file_location = "genesis.blob"
+
+[admission_control]
+address = "::1"
+admission_control_service_port = 35432
+need_to_check_mempool_before_validation = false
+
+[admission_control.upstream_proxy_timeout]
+secs = 1
+nanos = 0
+
+[debug_interface]
+admission_control_node_debug_port = 34342
+secret_service_node_debug_port = 46240
+storage_node_debug_port = 45982
+metrics_server_port = 40151
+address = "::1"
+
+[storage]
+address = "localhost"
+port = 45659
+dir = "libradb/db"
+grpc_max_receive_len = 100000000
+
+[[networks]]
+peer_id = "8deeeaed65f0cd7484a9e4e5ac51fbac548f2f71299a05e000156031ca78fb9f"
+listen_address = "/ip6/::1/tcp/39997"
+advertised_address = "/ip6/::1/tcp/39997"
+discovery_interval_ms = 1000
+connectivity_check_interval_ms = 5000
+enable_encryption_and_authentication = true
+is_permissioned = true
+role = "validator"
+network_keypairs_file = "8deeeaed65f0cd7484a9e4e5ac51fbac548f2f71299a05e000156031ca78fb9f.node.network.keys.toml"
+network_peers_file = "8deeeaed65f0cd7484a9e4e5ac51fbac548f2f71299a05e000156031ca78fb9f.network_peers.config.toml"
+seed_peers_file = "8deeeaed65f0cd7484a9e4e5ac51fbac548f2f71299a05e000156031ca78fb9f.seed_peers.config.toml"
+
+[consensus]
+max_block_size = 100
+proposer_type = "multiple_ordered_proposers"
+contiguous_rounds = 2
+consensus_keypair_file = "8deeeaed65f0cd7484a9e4e5ac51fbac548f2f71299a05e000156031ca78fb9f.node.consensus.keys.toml"
+consensus_peers_file = "consensus_peers.config.toml"
+
+[mempool]
+broadcast_transactions = true
+shared_mempool_tick_interval_ms = 50
+shared_mempool_batch_size = 100
+shared_mempool_max_concurrent_inbound_syncs = 100
+capacity = 1000000
+capacity_per_user = 100
+system_transaction_timeout_secs = 86400
+system_transaction_gc_interval_ms = 180000
+mempool_service_port = 34359
+address = "localhost"
+
+[state_sync]
+chunk_limit = 1000
+tick_interval_ms = 100
+long_poll_timeout_ms = 30000
+max_chunk_limit = 1000
+max_timeout_ms = 120000
+upstream_peers = []
+
+[log_collector]
+is_async = true
+[vm_config.publishing_options]
+type = "Open"
+
+[secret_service]
+address = "localhost"
+secret_service_port = 37392
