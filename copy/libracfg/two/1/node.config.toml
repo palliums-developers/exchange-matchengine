@@ -1,5 +1,5 @@
 [base]
-data_dir_path = "/home/dev/libracfg/0"
+data_dir_path = "/home/dev/libracfg/two"
 node_sync_retries = 7
 node_sync_channel_buffer_size = 10
 node_async_log_chan_size = 256
@@ -11,50 +11,46 @@ push_server_addr = ""
 
 [execution]
 address = "localhost"
-port = 45201
+port = 36315
 testnet_genesis = false
 genesis_file_location = "genesis.blob"
 
 [admission_control]
-address = "::1"
-admission_control_service_port = 36076
+address = "0.0.0.0"
+admission_control_service_port = 40001
 need_to_check_mempool_before_validation = false
 
-[admission_control.upstream_proxy_timeout]
-secs = 1
-nanos = 0
-
 [debug_interface]
-admission_control_node_debug_port = 33453
-secret_service_node_debug_port = 36646
-storage_node_debug_port = 42775
-metrics_server_port = 36515
-address = "::1"
+admission_control_node_debug_port = 39963
+secret_service_node_debug_port = 33303
+storage_node_debug_port = 46191
+metrics_server_port = 41489
+address = "0.0.0.0"
 
 [storage]
 address = "localhost"
-port = 39905
-dir = "libradb/db"
+port = 34783
+dir = "/home/dev/libracfg/two/1/libradb/db"
 grpc_max_receive_len = 100000000
 
 [[networks]]
-peer_id = "1e5d5a74b0fd09f601ac0fca2fe7d213704e02e51943d18cf25a546b8416e9e1"
-listen_address = "/ip6/::1/tcp/39696"
-advertised_address = "/ip6/::1/tcp/39696"
+peer_id = "8deeeaed65f0cd7484a9e4e5ac51fbac548f2f71299a05e000156031ca78fb9f"
+listen_address = "/ip4/0.0.0.0/tcp/40002"
+advertised_address = "/ip4/0.0.0.0/tcp/40002"
 discovery_interval_ms = 1000
 connectivity_check_interval_ms = 5000
 enable_encryption_and_authentication = true
 is_permissioned = true
 role = "validator"
-network_keypairs_file = "1e5d5a74b0fd09f601ac0fca2fe7d213704e02e51943d18cf25a546b8416e9e1.node.network.keys.toml"
-network_peers_file = "1e5d5a74b0fd09f601ac0fca2fe7d213704e02e51943d18cf25a546b8416e9e1.network_peers.config.toml"
-seed_peers_file = "1e5d5a74b0fd09f601ac0fca2fe7d213704e02e51943d18cf25a546b8416e9e1.seed_peers.config.toml"
+network_keypairs_file = "8deeeaed65f0cd7484a9e4e5ac51fbac548f2f71299a05e000156031ca78fb9f.node.network.keys.toml"
+network_peers_file = "8deeeaed65f0cd7484a9e4e5ac51fbac548f2f71299a05e000156031ca78fb9f.network_peers.config.toml"
+seed_peers_file = "8deeeaed65f0cd7484a9e4e5ac51fbac548f2f71299a05e000156031ca78fb9f.seed_peers.config.toml"
 
 [consensus]
 max_block_size = 100
 proposer_type = "multiple_ordered_proposers"
 contiguous_rounds = 2
-consensus_keypair_file = "1e5d5a74b0fd09f601ac0fca2fe7d213704e02e51943d18cf25a546b8416e9e1.node.consensus.keys.toml"
+consensus_keypair_file = "8deeeaed65f0cd7484a9e4e5ac51fbac548f2f71299a05e000156031ca78fb9f.node.consensus.keys.toml"
 consensus_peers_file = "consensus_peers.config.toml"
 
 [mempool]
@@ -62,11 +58,12 @@ broadcast_transactions = true
 shared_mempool_tick_interval_ms = 50
 shared_mempool_batch_size = 100
 shared_mempool_max_concurrent_inbound_syncs = 100
-capacity = 1000000
+capacity = 10000000
 capacity_per_user = 100
+sequence_cache_capacity = 1000
 system_transaction_timeout_secs = 86400
 system_transaction_gc_interval_ms = 180000
-mempool_service_port = 35411
+mempool_service_port = 43079
 address = "localhost"
 
 [state_sync]
@@ -84,4 +81,4 @@ type = "Open"
 
 [secret_service]
 address = "localhost"
-secret_service_port = 35831
+secret_service_port = 38019
