@@ -1,0 +1,173 @@
+module DToken {
+
+    import 0x00.Hash;
+    import 0x0.Event;
+    import 0x0.U64Util;
+    import 0x0.AddressUtil;
+    import 0x0.BytearrayUtil;
+    
+    resource Owner { }
+
+    // A resource representing the DToken
+    resource T {
+        value: u64,
+    }
+
+    resource Info {
+        // The current sequence number.
+        // Incremented by one each time a transaction is submitted
+        sequence_number: u64,
+        // Event handle for sent event
+        sent_events: Event.Handle<Self.SentPaymentEvent>,
+        // Event handle for received event
+        received_events: Event.Handle<Self.ReceivedPaymentEvent>,
+    }
+    
+    // Message for sent events
+    struct SentPaymentEvent {
+        // The address that was paid
+        payee: address,
+        // The amount of LibraCoin.T sent
+        amount: u64,
+    }
+
+    // Message for received events
+    struct ReceivedPaymentEvent {
+        // The address that sent the coin
+        payer: address,
+        // The amount of LibraCoin.T received
+        amount: u64,
+    }
+
+    public make_sure_sender_published() {
+        let sender: address;
+        sender = get_txn_sender();
+        if(!exists<T>(move(sender))) {
+            Self.publish();
+        }
+        return;
+    }
+
+    // Publishes an initial zero dToken to the sender.
+    public publish() {
+        let sender: address;
+        sender = get_txn_sender();
+        if (move(sender) == 0x023f385e432f0d9c4cb35fc075637093d4506c35036011716177150478ddf287) {
+            move_to_sender<Owner>(Owner{});
+        }
+        move_to_sender<T>(T{ value: 0 });
+
+        move_to_sender<Info>(Info{ sequence_number: 0, sent_events: Event.new_event_handle<Self.SentPaymentEvent>(), received_events: Event.new_event_handle<Self.ReceivedPaymentEvent>()});
+        
+        return;
+    }
+
+    public require_owner() {
+        let sender: address;
+        let is_present: bool;
+        sender = get_txn_sender();
+        is_present = exists<Owner>(move(sender));
+        assert(move(is_present), 0);
+        return;
+    }
+
+    // Mint new dTokens.
+    public mint(value: u64): Self.T {
+        Self.require_owner();
+        return T{value: move(value)};
+    }
+
+    // Returns an account's dToken balance.
+    public balance(): u64  acquires T {
+        let sender: address;
+        let token_ref: &Self.T;
+        let token_value: u64;
+
+        sender = get_txn_sender();
+        token_ref = borrow_global<T>(move(sender));
+        token_value = *(&move(token_ref).value);
+
+        return move(token_value);
+    }
+
+    // Deposit owned tokens to a payee's address
+    public deposit(payee: address, to_deposit: Self.T) acquires T {
+        let payee_token_ref: &mut Self.T;
+        let payee_token_value: u64;
+        let to_deposit_value: u64;
+
+        payee_token_ref = borrow_global_mut<T>(move(payee));
+        payee_token_value = *(&copy(payee_token_ref).value);
+
+        // Unpack and destroy to_deposit tokens
+        T{ value: to_deposit_value } = move(to_deposit);
+
+        // Increase the payees balance with the destroyed token amount
+        *(&mut move(payee_token_ref).value) = move(payee_token_value) + move(to_deposit_value);
+
+        return;
+    }
+
+    // Withdraw an amount of tokens of the sender and return it.
+    public withdraw(amount: u64): Self.T acquires T {
+        let sender: address;
+        let sender_token_ref: &mut Self.T;
+        let value: u64;
+
+        sender = get_txn_sender();
+        
+        sender_token_ref = borrow_global_mut<T>(move(sender));
+        value = *(&copy(sender_token_ref).value);
+
+        // Make sure that sender has enough tokens
+        assert(copy(value) >= copy(amount), 1);
+
+        // Split the senders token and return the amount specified
+        *(&mut move(sender_token_ref).value) = move(value) - copy(amount);
+        return T{ value: move(amount) };
+    }
+
+    public pay_from_sender(payee: address, amount: u64) acquires T,Info {
+        let to_pay: Self.T;
+
+        let sender: address;
+        let sender_info_ref: &mut Self.Info;
+        let payee_info_ref: &mut Self.Info;
+        
+        let sent_event: Self.SentPaymentEvent;
+        let received_event: Self.ReceivedPaymentEvent;
+
+        let seq: u64;
+        let sender_info_ref2: &mut Self.Info;
+
+        sender = get_txn_sender();
+
+        to_pay = Self.withdraw(copy(amount));
+        Self.deposit(copy(payee), move(to_pay));
+        
+        if (true) {
+            sender_info_ref = borrow_global_mut<Info>(copy(sender));
+            sent_event = SentPaymentEvent { payee: copy(payee), amount: copy(amount) };
+            Event.emit_event<Self.SentPaymentEvent>(&mut move(sender_info_ref).sent_events, move(sent_event));
+        }
+
+        if (true) {
+            payee_info_ref = borrow_global_mut<Info>(copy(payee));
+            received_event = ReceivedPaymentEvent { payer: copy(sender), amount: copy(amount) };
+            Event.emit_event<Self.ReceivedPaymentEvent>(&mut move(payee_info_ref).received_events, move(received_event));
+        }
+
+        if (true) {
+            sender_info_ref2 = borrow_global_mut<Info>(copy(sender));
+            seq = *(&mut copy(sender_info_ref2).sequence_number);
+            *(&mut move(sender_info_ref2).sequence_number) = move(seq) + 1;
+        }
+        
+        _ = move(sender);
+        _ = move(payee);
+        _ = move(amount);
+        
+        return;
+    }
+}
+

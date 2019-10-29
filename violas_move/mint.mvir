@@ -1,0 +1,16 @@
+import 0x023f385e432f0d9c4cb35fc075637093d4506c35036011716177150478ddf287.DToken;
+
+main(payee: address, amount: u64) {
+
+    let sender: address;
+    let minted_tokens: DToken.T;
+
+    sender = get_txn_sender();
+
+    minted_tokens = DToken.mint(move(amount));
+
+    // Deposit the freshly minted tokens
+    DToken.deposit(move(payee), move(minted_tokens));
+
+    return;
+}

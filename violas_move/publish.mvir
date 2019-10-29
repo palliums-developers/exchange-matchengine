@@ -1,0 +1,6 @@
+import 0x023f385e432f0d9c4cb35fc075637093d4506c35036011716177150478ddf287.DToken;
+
+main() {
+    DToken.publish();
+    return;
+}
