@@ -1,5 +1,6 @@
 module DToken {
 
+    import 0x00.LibraAccount;
     import 0x00.Hash;
     import 0x0.Event;
     import 0x0.U64Util;
@@ -14,75 +15,98 @@ module DToken {
     }
 
     resource Info {
-        // The current sequence number.
-        // Incremented by one each time a transaction is submitted
-        sequence_number: u64,
-        // Event handle for sent event
-        sent_events: Event.Handle<Self.SentPaymentEvent>,
-        // Event handle for received event
-        received_events: Event.Handle<Self.ReceivedPaymentEvent>,
+        allinone_events: Event.Handle<Self.AllinoneEvent>,
+    }
+
+    resource Order {
+        token: Self.T,
+        price: u64,
+    }
+
+    struct AllinoneEvent {
+        etype: u64, 
+        sender: address,
+        receiver: address,
+        token: address,
+        amount: u64,
+        price: u64,        
     }
     
-    // Message for sent events
-    struct SentPaymentEvent {
-        // The address that was paid
-        payee: address,
-        // The amount of LibraCoin.T sent
-        amount: u64,
-    }
-
-    // Message for received events
-    struct ReceivedPaymentEvent {
-        // The address that sent the coin
-        payer: address,
-        // The amount of LibraCoin.T received
-        amount: u64,
-    }
-
-    public make_sure_sender_published() {
-        let sender: address;
-        sender = get_txn_sender();
-        if(!exists<T>(move(sender))) {
-            Self.publish();
-        }
-        return;
-    }
-
     // Publishes an initial zero dToken to the sender.
-    public publish() {
+    public publish() acquires Info {
+
         let sender: address;
         sender = get_txn_sender();
-        if (move(sender) == 0x023f385e432f0d9c4cb35fc075637093d4506c35036011716177150478ddf287) {
+
+        if(exists<T>(copy(sender))) {
+            return;
+        }
+
+        if (copy(sender) == 0x7257c2417e4d1038e1817c8f283ace2e1041b3396cdbb099eb357bbee024d614) {
             move_to_sender<Owner>(Owner{});
         }
+        
         move_to_sender<T>(T{ value: 0 });
 
-        move_to_sender<Info>(Info{ sequence_number: 0, sent_events: Event.new_event_handle<Self.SentPaymentEvent>(), received_events: Event.new_event_handle<Self.ReceivedPaymentEvent>()});
+        move_to_sender<Info>(Info{
+            allinone_events: Event.new_event_handle<Self.AllinoneEvent>(),
+        });
+
+        Self.emit_events(0, copy(sender), 0, 0);
         
         return;
     }
 
-    public require_owner() {
+    require_published() {
+        let sender: address;
+        let is_present: bool;
+        sender = get_txn_sender();
+        is_present = exists<T>(move(sender));
+        assert(move(is_present), 101);
+        return;
+    }
+    
+    require_owner() {
         let sender: address;
         let is_present: bool;
         sender = get_txn_sender();
         is_present = exists<Owner>(move(sender));
-        assert(move(is_present), 0);
+        assert(move(is_present), 102);
         return;
     }
 
     // Mint new dTokens.
-    public mint(value: u64): Self.T {
+    mint(value: u64): Self.T {
+        Self.require_published();
         Self.require_owner();
         return T{value: move(value)};
     }
 
+    public mint_to_address(payee: address, amount: u64) acquires T, Info {
+
+        let token: Self.T;
+        token = Self.mint(copy(amount));
+        
+        // Mint and deposit the coin
+        Self.deposit(copy(payee), move(token));
+
+        Self.emit_events(1, copy(payee), copy(amount), 0);
+        
+        return;
+    }
+    
+    value(coin_ref: &Self.T): u64 {
+        return *&move(coin_ref).value;
+    }
+    
     // Returns an account's dToken balance.
-    public balance(): u64  acquires T {
+    balance(): u64  acquires T {
         let sender: address;
         let token_ref: &Self.T;
         let token_value: u64;
 
+        Self.require_published();
+        
         sender = get_txn_sender();
         token_ref = borrow_global<T>(move(sender));
         token_value = *(&move(token_ref).value);
@@ -91,28 +115,39 @@ module DToken {
     }
 
     // Deposit owned tokens to a payee's address
-    public deposit(payee: address, to_deposit: Self.T) acquires T {
+    deposit(payee: address, to_deposit: Self.T) acquires T {
+        let sender: address;
+        let amount: u64;
+        
         let payee_token_ref: &mut Self.T;
         let payee_token_value: u64;
         let to_deposit_value: u64;
 
-        payee_token_ref = borrow_global_mut<T>(move(payee));
+        Self.require_published();
+
+        sender = get_txn_sender();
+        
+        payee_token_ref = borrow_global_mut<T>(copy(payee));
         payee_token_value = *(&copy(payee_token_ref).value);
 
         // Unpack and destroy to_deposit tokens
         T{ value: to_deposit_value } = move(to_deposit);
 
+        amount = copy(to_deposit_value);
+        
         // Increase the payees balance with the destroyed token amount
         *(&mut move(payee_token_ref).value) = move(payee_token_value) + move(to_deposit_value);
 
         return;
     }
-
+    
     // Withdraw an amount of tokens of the sender and return it.
-    public withdraw(amount: u64): Self.T acquires T {
+    withdraw(amount: u64): Self.T acquires T {
         let sender: address;
         let sender_token_ref: &mut Self.T;
         let value: u64;
+
+        Self.require_published();
 
         sender = get_txn_sender();
         
@@ -120,54 +155,153 @@ module DToken {
         value = *(&copy(sender_token_ref).value);
 
         // Make sure that sender has enough tokens
-        assert(copy(value) >= copy(amount), 1);
+        assert(copy(value) >= copy(amount), 103);
 
         // Split the senders token and return the amount specified
         *(&mut move(sender_token_ref).value) = move(value) - copy(amount);
         return T{ value: move(amount) };
     }
 
-    public pay_from_sender(payee: address, amount: u64) acquires T,Info {
+    public pay_from_sender(payee: address, amount: u64) acquires T, Info {
+        let sender: address;
         let to_pay: Self.T;
 
-        let sender: address;
-        let sender_info_ref: &mut Self.Info;
-        let payee_info_ref: &mut Self.Info;
-        
-        let sent_event: Self.SentPaymentEvent;
-        let received_event: Self.ReceivedPaymentEvent;
-
-        let seq: u64;
-        let sender_info_ref2: &mut Self.Info;
+        Self.require_published();
 
         sender = get_txn_sender();
-
+        
         to_pay = Self.withdraw(copy(amount));
         Self.deposit(copy(payee), move(to_pay));
-        
-        if (true) {
-            sender_info_ref = borrow_global_mut<Info>(copy(sender));
-            sent_event = SentPaymentEvent { payee: copy(payee), amount: copy(amount) };
-            Event.emit_event<Self.SentPaymentEvent>(&mut move(sender_info_ref).sent_events, move(sent_event));
-        }
 
-        if (true) {
-            payee_info_ref = borrow_global_mut<Info>(copy(payee));
-            received_event = ReceivedPaymentEvent { payer: copy(sender), amount: copy(amount) };
-            Event.emit_event<Self.ReceivedPaymentEvent>(&mut move(payee_info_ref).received_events, move(received_event));
-        }
-
-        if (true) {
-            sender_info_ref2 = borrow_global_mut<Info>(copy(sender));
-            seq = *(&mut copy(sender_info_ref2).sequence_number);
-            *(&mut move(sender_info_ref2).sequence_number) = move(seq) + 1;
-        }
-        
-        _ = move(sender);
-        _ = move(payee);
-        _ = move(amount);
+        Self.emit_events(2, copy(payee), copy(amount), 0);
         
         return;
     }
+
+
+    public make_order(amount: u64, price: u64) acquires T, Info {
+        let sender: address;
+        let token: Self.T;
+        let sender_info_ref: &mut Self.Info;
+
+        Self.require_published();
+
+        sender = get_txn_sender();
+        
+        token = Self.withdraw(copy(amount));
+        move_to_sender<Order>(Order { token: move(token), price: copy(price)});
+
+        Self.emit_events(3, copy(sender), copy(amount), copy(price));
+        
+        return;
+    }
+
+    public cancel_order() acquires T, Order, Info {
+        let sender: address;
+        let order: Self.Order;
+        let token: Self.T;
+        let price: u64;
+        let sender_info_ref: &mut Self.Info;
+        let amount: u64;
+        
+        Self.require_published();
+        
+        sender = get_txn_sender();
+        
+        order = move_from<Order>(copy(sender));
+
+        Order { token:token, price:price } =  move(order);
+
+        amount = Self.value(&token);
+
+        Self.deposit(copy(sender), move(token));
+
+        Self.emit_events(4, copy(sender), copy(amount), copy(price));
+        
+        return;
+    }
+    
+    // Currently only support buy whole order, not support split order.
+    public take_order(maker: address) acquires T, Order, Info {
+        let sender: address;
+        let order: Self.Order;
+        let token: Self.T;
+        let price: u64;
+
+        let sender_info_ref: &mut Self.Info;
+        let amount: u64;
+        
+        Self.require_published();
+        
+        sender = get_txn_sender();
+
+        order = move_from<Order>(copy(maker));
+        Order { token:token, price:price } = move(order);
+
+        amount = Self.value(&token);
+        
+        LibraAccount.pay_from_sender(copy(maker), copy(price));
+
+        Self.deposit(copy(sender), move(token));
+
+        Self.emit_events(5, copy(maker), copy(amount), copy(price));
+        
+        return;
+    }
+
+    emit_events(etype: u64, receiver: address, amount: u64, price: u64) acquires Info {
+
+        let sender: address;
+        let token: address;
+        
+        let allinone_event: Self.AllinoneEvent;
+        
+        let sender_info_ref: &mut Self.Info;
+        let receiver_info_ref: &mut Self.Info;
+        
+        sender = get_txn_sender();
+        token = 0x7257c2417e4d1038e1817c8f283ace2e1041b3396cdbb099eb357bbee024d614;
+
+        allinone_event = AllinoneEvent {
+            etype: copy(etype),
+            sender: copy(sender),
+            receiver: copy(receiver),
+            token: copy(token),
+            amount: move(amount),
+            price: move(price)
+        };
+
+        if(true) {
+            sender_info_ref = borrow_global_mut<Info>(copy(sender));
+            Event.emit_event<Self.AllinoneEvent>(&mut move(sender_info_ref).allinone_events, copy(allinone_event));
+        }
+
+        if(copy(etype) == 1) {
+            receiver_info_ref = borrow_global_mut<Info>(copy(receiver));  
+            Event.emit_event<Self.AllinoneEvent>(&mut move(receiver_info_ref).allinone_events, copy(allinone_event));
+        }
+
+        if(copy(etype) == 2) {
+            receiver_info_ref = borrow_global_mut<Info>(copy(receiver));  
+            Event.emit_event<Self.AllinoneEvent>(&mut move(receiver_info_ref).allinone_events, copy(allinone_event));
+        }
+
+        if(copy(etype) == 5) {
+            receiver_info_ref = borrow_global_mut<Info>(copy(receiver));  
+            Event.emit_event<Self.AllinoneEvent>(&mut move(receiver_info_ref).allinone_events, copy(allinone_event));
+        }
+        
+        return;
+    }
+    
 }
+
+
+
+
+
+
+
+
+
 
