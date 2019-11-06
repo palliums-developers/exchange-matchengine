@@ -168,7 +168,7 @@ module DToken {
         return T{ value: move(amount) };
     }
 
-    pay_from_sender(payee: address, amount: u64) acquires T, Info {
+    pay_from_sender(payee: address, amount: u64) acquires T {
         let sender: address;
         let to_pay: Self.T;
 
@@ -178,8 +178,6 @@ module DToken {
         
         to_pay = Self.withdraw(copy(amount));
         Self.deposit(copy(payee), move(to_pay));
-
-        Self.emit_events(2, copy(payee), copy(amount), 0);
         
         return;
     }
