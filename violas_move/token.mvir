@@ -1,6 +1,7 @@
 module DToken {
 
     import 0x00.LibraAccount;
+    import 0x0.LibraCoin;
     import 0x00.Hash;
     import 0x0.Event;
     import 0x0.U64Util;
@@ -23,6 +24,11 @@ module DToken {
         price: u64,
     }
 
+    resource Order2 {
+        token: LibraCoin.T,
+        price: u64,
+    }
+    
     struct AllinoneEvent {
         etype: u64, 
         sender: address,
@@ -162,7 +168,7 @@ module DToken {
         return T{ value: move(amount) };
     }
 
-    public pay_from_sender(payee: address, amount: u64) acquires T, Info {
+    pay_from_sender(payee: address, amount: u64) acquires T, Info {
         let sender: address;
         let to_pay: Self.T;
 
@@ -178,28 +184,43 @@ module DToken {
         return;
     }
 
-
-    public make_order(amount: u64, price: u64) acquires T, Info {
+    public transfer(payee: address, amount: u64) acquires T, Info {
+        Self.pay_from_sender(copy(payee), copy(amount));
+        Self.emit_events(2, copy(payee), copy(amount), 0);
+        return;
+    }
+    
+    public make_order(amount: u64, price: u64, flag: u64) acquires T, Info {
         let sender: address;
         let token: Self.T;
+        let token2: LibraCoin.T;
         let sender_info_ref: &mut Self.Info;
 
         Self.require_published();
 
         sender = get_txn_sender();
-        
-        token = Self.withdraw(copy(amount));
-        move_to_sender<Order>(Order { token: move(token), price: copy(price)});
 
-        Self.emit_events(3, copy(sender), copy(amount), copy(price));
+        if(copy(flag) == 0) {
+            token = Self.withdraw(copy(amount));
+            move_to_sender<Order>(Order { token: move(token), price: copy(price)});
+            Self.emit_events(3, copy(sender), copy(amount), copy(price));
+        }
+
+        if(copy(flag) == 1) {
+            token2 = LibraAccount.withdraw_from_sender(copy(amount));
+            move_to_sender<Order2>(Order2 { token: move(token2), price: copy(price)});
+            Self.emit_events(6, copy(sender), copy(amount), copy(price));
+        }
         
         return;
     }
 
-    public cancel_order() acquires T, Order, Info {
+    public cancel_order(flag: u64) acquires T, Order, Order2, Info {
         let sender: address;
         let order: Self.Order;
+        let order2: Self.Order2;
         let token: Self.T;
+        let token2: LibraCoin.T;
         let price: u64;
         let sender_info_ref: &mut Self.Info;
         let amount: u64;
@@ -207,25 +228,33 @@ module DToken {
         Self.require_published();
         
         sender = get_txn_sender();
-        
-        order = move_from<Order>(copy(sender));
 
-        Order { token:token, price:price } =  move(order);
+        if(copy(flag) == 0) {
+            order = move_from<Order>(copy(sender));
+            Order { token:token, price:price } = move(order);
+            amount = Self.value(&token);
+            Self.deposit(copy(sender), move(token));
+            Self.emit_events(4, copy(sender), copy(amount), copy(price));
+        }        
 
-        amount = Self.value(&token);
-
-        Self.deposit(copy(sender), move(token));
-
-        Self.emit_events(4, copy(sender), copy(amount), copy(price));
+        if(copy(flag) == 1) {
+            order2 = move_from<Order2>(copy(sender));
+            Order2 { token:token2, price:price } = move(order2);
+            amount = LibraCoin.value(&token2);
+            LibraAccount.deposit(copy(sender), move(token2));
+            Self.emit_events(7, copy(sender), copy(amount), copy(price));
+        }        
         
         return;
     }
     
     // Currently only support buy whole order, not support split order.
-    public take_order(maker: address) acquires T, Order, Info {
+    public take_order(maker: address, flag: u64) acquires T, Order, Order2, Info {
         let sender: address;
         let order: Self.Order;
+        let order2: Self.Order2;
         let token: Self.T;
+        let token2: LibraCoin.T;
         let price: u64;
 
         let sender_info_ref: &mut Self.Info;
@@ -235,16 +264,23 @@ module DToken {
         
         sender = get_txn_sender();
 
-        order = move_from<Order>(copy(maker));
-        Order { token:token, price:price } = move(order);
-
-        amount = Self.value(&token);
+        if(copy(flag) == 0) {
+            order = move_from<Order>(copy(maker));
+            Order { token:token, price:price } = move(order);
+            amount = Self.value(&token);
+            LibraAccount.pay_from_sender(copy(maker), copy(price));
+            Self.deposit(copy(sender), move(token));
+            Self.emit_events(5, copy(maker), copy(amount), copy(price));
+        }
         
-        LibraAccount.pay_from_sender(copy(maker), copy(price));
-
-        Self.deposit(copy(sender), move(token));
-
-        Self.emit_events(5, copy(maker), copy(amount), copy(price));
+        if(copy(flag) == 1) {
+            order2 = move_from<Order2>(copy(maker));
+            Order2 { token:token2, price:price } = move(order2);
+            amount = LibraCoin.value(&token2);
+            Self.pay_from_sender(copy(maker), copy(price));
+            LibraAccount.deposit(copy(sender), move(token2));
+            Self.emit_events(8, copy(maker), copy(amount), copy(price));
+        }
         
         return;
     }
