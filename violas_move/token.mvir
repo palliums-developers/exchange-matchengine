@@ -15,10 +15,18 @@ module DToken {
         value: u64,
     }
 
+    resource TokenAddr {
+        addr: address,
+    }
+    
     resource Info {
         allinone_events: Event.Handle<Self.AllinoneEvent>,
     }
 
+    resource OwnerData {
+        data: bytearray,
+    }
+    
     resource Order {
         token: Self.T,
         price: u64,
@@ -35,7 +43,8 @@ module DToken {
         receiver: address,
         token: address,
         amount: u64,
-        price: u64,        
+        price: u64,
+        data: bytearray,
     }
     
     // Publishes an initial zero dToken to the sender.
@@ -54,15 +63,45 @@ module DToken {
         
         move_to_sender<T>(T{ value: 0 });
 
+        move_to_sender<TokenAddr>(TokenAddr{ addr: 0x7257c2417e4d1038e1817c8f283ace2e1041b3396cdbb099eb357bbee024d614 });
+
         move_to_sender<Info>(Info{
             allinone_events: Event.new_event_handle<Self.AllinoneEvent>(),
         });
 
-        Self.emit_events(0, copy(sender), 0, 0);
+        Self.emit_events(0, copy(sender), 0, 0, h"");
         
         return;
     }
 
+    public owner_publish(data: bytearray) acquires Info {
+
+        let sender: address;
+        sender = get_txn_sender();
+
+        if(exists<T>(copy(sender))) {
+            return;
+        }
+
+        if (copy(sender) == 0x7257c2417e4d1038e1817c8f283ace2e1041b3396cdbb099eb357bbee024d614) {
+            move_to_sender<Owner>(Owner{});
+        }
+        
+        move_to_sender<T>(T{ value: 0 });
+
+        move_to_sender<TokenAddr>(TokenAddr{ addr: 0x7257c2417e4d1038e1817c8f283ace2e1041b3396cdbb099eb357bbee024d614 });
+
+        move_to_sender<Info>(Info{
+            allinone_events: Event.new_event_handle<Self.AllinoneEvent>(),
+        });
+
+        move_to_sender<OwnerData>(OwnerData{ data: copy(data) });
+        
+        Self.emit_events(9, copy(sender), 0, 0, move(data));
+        
+        return;
+    }
+    
     require_published() {
         let sender: address;
         let is_present: bool;
@@ -96,7 +135,7 @@ module DToken {
         // Mint and deposit the coin
         Self.deposit(copy(payee), move(token));
 
-        Self.emit_events(1, copy(payee), copy(amount), 0);
+        Self.emit_events(1, copy(payee), copy(amount), 0, h"");
         
         return;
     }
@@ -184,7 +223,13 @@ module DToken {
 
     public transfer(payee: address, amount: u64) acquires T, Info {
         Self.pay_from_sender(copy(payee), copy(amount));
-        Self.emit_events(2, copy(payee), copy(amount), 0);
+        Self.emit_events(2, copy(payee), copy(amount), 0, h"");
+        return;
+    }
+
+    public transfer_vcoin_with_data(payee: address, amount: u64, data: bytearray) acquires Info {
+        LibraAccount.pay_from_sender(copy(payee), copy(amount));
+        Self.emit_events(10, copy(payee), copy(amount), 0, move(data));
         return;
     }
     
@@ -201,13 +246,13 @@ module DToken {
         if(copy(flag) == 0) {
             token = Self.withdraw(copy(amount));
             move_to_sender<Order>(Order { token: move(token), price: copy(price)});
-            Self.emit_events(3, copy(sender), copy(amount), copy(price));
+            Self.emit_events(3, copy(sender), copy(amount), copy(price), h"");
         }
 
         if(copy(flag) == 1) {
             token2 = LibraAccount.withdraw_from_sender(copy(amount));
             move_to_sender<Order2>(Order2 { token: move(token2), price: copy(price)});
-            Self.emit_events(6, copy(sender), copy(amount), copy(price));
+            Self.emit_events(6, copy(sender), copy(amount), copy(price), h"");
         }
         
         return;
@@ -232,7 +277,7 @@ module DToken {
             Order { token:token, price:price } = move(order);
             amount = Self.value(&token);
             Self.deposit(copy(sender), move(token));
-            Self.emit_events(4, copy(sender), copy(amount), copy(price));
+            Self.emit_events(4, copy(sender), copy(amount), copy(price), h"");
         }        
 
         if(copy(flag) == 1) {
@@ -240,7 +285,7 @@ module DToken {
             Order2 { token:token2, price:price } = move(order2);
             amount = LibraCoin.value(&token2);
             LibraAccount.deposit(copy(sender), move(token2));
-            Self.emit_events(7, copy(sender), copy(amount), copy(price));
+            Self.emit_events(7, copy(sender), copy(amount), copy(price), h"");
         }        
         
         return;
@@ -268,7 +313,7 @@ module DToken {
             amount = Self.value(&token);
             LibraAccount.pay_from_sender(copy(maker), copy(price));
             Self.deposit(copy(sender), move(token));
-            Self.emit_events(5, copy(maker), copy(amount), copy(price));
+            Self.emit_events(5, copy(maker), copy(amount), copy(price), h"");
         }
         
         if(copy(flag) == 1) {
@@ -277,13 +322,20 @@ module DToken {
             amount = LibraCoin.value(&token2);
             Self.pay_from_sender(copy(maker), copy(price));
             LibraAccount.deposit(copy(sender), move(token2));
-            Self.emit_events(8, copy(maker), copy(amount), copy(price));
+            Self.emit_events(8, copy(maker), copy(amount), copy(price), h"");
         }
         
         return;
     }
 
-    emit_events(etype: u64, receiver: address, amount: u64, price: u64) acquires Info {
+    public record(data: bytearray) acquires Info {
+        let sender: address;
+        sender = get_txn_sender();
+        Self.emit_events(11, copy(sender), 0, 0, move(data));
+        return;
+    }
+    
+    emit_events(etype: u64, receiver: address, amount: u64, price: u64, data: bytearray) acquires Info {
 
         let sender: address;
         let token: address;
@@ -302,7 +354,8 @@ module DToken {
             receiver: copy(receiver),
             token: copy(token),
             amount: move(amount),
-            price: move(price)
+            price: move(price),
+            data: move(data),
         };
 
         if(true) {
@@ -310,22 +363,12 @@ module DToken {
             Event.emit_event<Self.AllinoneEvent>(&mut move(sender_info_ref).allinone_events, copy(allinone_event));
         }
 
-        if(copy(etype) == 1) {
-            receiver_info_ref = borrow_global_mut<Info>(copy(receiver));  
-            Event.emit_event<Self.AllinoneEvent>(&mut move(receiver_info_ref).allinone_events, copy(allinone_event));
-        }
-
-        if(copy(etype) == 2) {
-            receiver_info_ref = borrow_global_mut<Info>(copy(receiver));  
-            Event.emit_event<Self.AllinoneEvent>(&mut move(receiver_info_ref).allinone_events, copy(allinone_event));
-        }
-
-        if(copy(etype) == 5) {
-            receiver_info_ref = borrow_global_mut<Info>(copy(receiver));  
-            Event.emit_event<Self.AllinoneEvent>(&mut move(receiver_info_ref).allinone_events, copy(allinone_event));
-        }
-
-        if(copy(etype) == 8) {
+        if((copy(etype) == 1) ||
+           (copy(etype) == 2) ||
+           (copy(etype) == 5) ||
+           (copy(etype) == 8) ||
+           (copy(etype) == 10))
+        {
             receiver_info_ref = borrow_global_mut<Info>(copy(receiver));  
             Event.emit_event<Self.AllinoneEvent>(&mut move(receiver_info_ref).allinone_events, copy(allinone_event));
         }
