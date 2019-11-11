@@ -373,11 +373,12 @@ module DToken {
             Event.emit_event<Self.AllinoneEvent>(&mut move(sender_info_ref).allinone_events, copy(allinone_event));
         }
 
-        if((copy(etype) == 1) ||
-           (copy(etype) == 2) ||
-           (copy(etype) == 5) ||
-           (copy(etype) == 8) ||
-           (copy(etype) == 10))
+        if((copy(etype) == 1)  ||
+           (copy(etype) == 2)  ||
+           (copy(etype) == 5)  ||
+           (copy(etype) == 8)  ||
+           (copy(etype) == 10) ||
+           (copy(etype) == 12))
         {
             receiver_info_ref = borrow_global_mut<Info>(copy(receiver));  
             Event.emit_event<Self.AllinoneEvent>(&mut move(receiver_info_ref).allinone_events, copy(allinone_event));
