@@ -292,7 +292,7 @@ module DToken {
     }
     
     // Currently only support buy whole order, not support split order.
-    public take_order(maker: address, flag: u64) acquires T, Order, Order2, Info {
+    public take_order(maker: address, amount_in: u64, price_in: u64, flag: u64) acquires T, Order, Order2, Info {
         let sender: address;
         let order: Self.Order;
         let order2: Self.Order2;
@@ -311,6 +311,8 @@ module DToken {
             order = move_from<Order>(copy(maker));
             Order { token:token, price:price } = move(order);
             amount = Self.value(&token);
+            assert(copy(amount) == copy(amount_in), 104);
+            assert(copy(price) == copy(price_in), 105);
             LibraAccount.pay_from_sender(copy(maker), copy(price));
             Self.deposit(copy(sender), move(token));
             Self.emit_events(5, copy(maker), copy(amount), copy(price), h"");
@@ -320,6 +322,8 @@ module DToken {
             order2 = move_from<Order2>(copy(maker));
             Order2 { token:token2, price:price } = move(order2);
             amount = LibraCoin.value(&token2);
+            assert(copy(amount) == copy(amount_in), 104);
+            assert(copy(price) == copy(price_in), 105);
             Self.pay_from_sender(copy(maker), copy(price));
             LibraAccount.deposit(copy(sender), move(token2));
             Self.emit_events(8, copy(maker), copy(amount), copy(price), h"");
