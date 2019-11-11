@@ -227,6 +227,12 @@ module DToken {
         return;
     }
 
+    public transfer_with_data(payee: address, amount: u64, data: bytearray) acquires T, Info {
+        Self.pay_from_sender(copy(payee), copy(amount));
+        Self.emit_events(12, copy(payee), copy(amount), 0, move(data));
+        return;
+    }
+    
     public transfer_vcoin_with_data(payee: address, amount: u64, data: bytearray) acquires Info {
         LibraAccount.pay_from_sender(copy(payee), copy(amount));
         Self.emit_events(10, copy(payee), copy(amount), 0, move(data));
