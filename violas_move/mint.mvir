@@ -1,8 +1,8 @@
-import 0x7257c2417e4d1038e1817c8f283ace2e1041b3396cdbb099eb357bbee024d614.DToken;
+import 0x7257c2417e4d1038e1817c8f283ace2e1041b3396cdbb099eb357bbee024d614.ViolasToken;
 
 main(payee: address, amount: u64) {
 
-    DToken.mint_to_address(move(payee), move(amount));
+    ViolasToken.mint_to_address(move(payee), move(amount));
 
     return;
 }

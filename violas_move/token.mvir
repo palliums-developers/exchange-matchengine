@@ -1,4 +1,4 @@
-module DToken {
+module ViolasToken {
 
     import 0x00.LibraAccount;
     import 0x0.LibraCoin;
@@ -10,7 +10,7 @@ module DToken {
     
     resource Owner { }
 
-    // A resource representing the DToken
+    // A resource representing the ViolasToken
     resource T {
         value: u64,
     }
@@ -20,7 +20,7 @@ module DToken {
     }
     
     resource Info {
-        allinone_events: Event.Handle<Self.AllinoneEvent>,
+        allinone_events: Event.Handle<Self.AllInOneEvent>,
     }
 
     resource OwnerData {
@@ -37,7 +37,7 @@ module DToken {
         price: u64,
     }
     
-    struct AllinoneEvent {
+    struct AllInOneEvent {
         etype: u64, 
         sender: address,
         receiver: address,
@@ -66,7 +66,7 @@ module DToken {
         move_to_sender<TokenAddr>(TokenAddr{ addr: 0x7257c2417e4d1038e1817c8f283ace2e1041b3396cdbb099eb357bbee024d614 });
 
         move_to_sender<Info>(Info{
-            allinone_events: Event.new_event_handle<Self.AllinoneEvent>(),
+            allinone_events: Event.new_event_handle<Self.AllInOneEvent>(),
         });
 
         Self.emit_events(0, copy(sender), 0, 0, h"");
@@ -92,7 +92,7 @@ module DToken {
         move_to_sender<TokenAddr>(TokenAddr{ addr: 0x7257c2417e4d1038e1817c8f283ace2e1041b3396cdbb099eb357bbee024d614 });
 
         move_to_sender<Info>(Info{
-            allinone_events: Event.new_event_handle<Self.AllinoneEvent>(),
+            allinone_events: Event.new_event_handle<Self.AllInOneEvent>(),
         });
 
         move_to_sender<OwnerData>(OwnerData{ data: copy(data) });
@@ -350,7 +350,7 @@ module DToken {
         let sender: address;
         let token: address;
         
-        let allinone_event: Self.AllinoneEvent;
+        let allinone_event: Self.AllInOneEvent;
         
         let sender_info_ref: &mut Self.Info;
         let receiver_info_ref: &mut Self.Info;
@@ -358,7 +358,7 @@ module DToken {
         sender = get_txn_sender();
         token = 0x7257c2417e4d1038e1817c8f283ace2e1041b3396cdbb099eb357bbee024d614;
 
-        allinone_event = AllinoneEvent {
+        allinone_event = AllInOneEvent {
             etype: copy(etype),
             sender: copy(sender),
             receiver: copy(receiver),
@@ -370,7 +370,7 @@ module DToken {
 
         if(true) {
             sender_info_ref = borrow_global_mut<Info>(copy(sender));
-            Event.emit_event<Self.AllinoneEvent>(&mut move(sender_info_ref).allinone_events, copy(allinone_event));
+            Event.emit_event<Self.AllInOneEvent>(&mut move(sender_info_ref).allinone_events, copy(allinone_event));
         }
 
         if((copy(etype) == 1)  ||
@@ -381,7 +381,7 @@ module DToken {
            (copy(etype) == 12))
         {
             receiver_info_ref = borrow_global_mut<Info>(copy(receiver));  
-            Event.emit_event<Self.AllinoneEvent>(&mut move(receiver_info_ref).allinone_events, copy(allinone_event));
+            Event.emit_event<Self.AllInOneEvent>(&mut move(receiver_info_ref).allinone_events, copy(allinone_event));
         }
         
         return;
