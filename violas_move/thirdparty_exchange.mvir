@@ -1,0 +1,10 @@
+import 0x7257c2417e4d1038e1817c8f283ace2e1041b3396cdbb099eb357bbee024d614.ViolasToken as token1;
+import 0x023f385e432f0d9c4cb35fc075637093d4506c35036011716177150478ddf287.ViolasToken as token2;
+
+main(orderidx_a: u64, user_a: address, amount_a: u64,
+     orderidx_b: u64, user_b: address, amount_b: u64)
+{
+    token1.thirdparty_take_or_cancel_order(true, move(orderidx_a), copy(user_a), copy(user_b), 0x023f385e432f0d9c4cb35fc075637093d4506c35036011716177150478ddf287, copy(amount_a), copy(amount_b));
+    token2.thirdparty_take_or_cancel_order(true, move(orderidx_b), copy(user_b), copy(user_a), 0x7257c2417e4d1038e1817c8f283ace2e1041b3396cdbb099eb357bbee024d614, copy(amount_b), copy(amount_a));
+    return;
+}

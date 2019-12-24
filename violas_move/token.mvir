@@ -18,7 +18,7 @@ module ViolasToken {
     resource Info {
         magic: u64,
         token: address,
-        allinone_events: LibraAccount.EventHandle<Self.AllInOneEvent>,
+        violas_events: LibraAccount.EventHandle<Self.ViolasEvent>,
     }
 
     resource OwnerData {
@@ -27,30 +27,72 @@ module ViolasToken {
         bulletins: Vector.T<bytearray>,
     }
 
-    resource Order {
-        token: Self.T,
-        price: u64,
-    }
-
-    resource Order2 {
-        token: LibraCoin.T,
-        price: u64,
-    }
-
     resource OwnerOrder {
         owner: Self.Owner,
         buyer: address,
         price: u64,
     }
-    
-    struct AllInOneEvent {
-        etype: u64, 
+
+    struct ViolasEvent {
+        etype: u64,
         sender: address,
-        receiver: address,
-        token: address,
-        amount: u64,
+        seq: u64,
+        paras: bytearray,
+        data:  bytearray,
+    }
+    
+    //////////////////////////////////////////////////////////////////////////////////////////////////////////
+    //////////////////////////////////////////////////////////////////////////////////////////////////////////
+    
+    resource SCoin2VCoinOrder {
+        token: Self.T,
         price: u64,
-        data: bytearray,
+    }
+
+    resource VCoin2SCoinOrder {
+        token: LibraCoin.T,
+        price: u64,
+    }
+
+    // struct ThirdPartyOrder {
+    //     maker: address,
+    //     taker: address,
+    //     token: address,
+    //     amount: u64,
+    //     price: u64,
+    // }
+    
+    // resource GuaranteeDeposit {
+    //     deposit: Self.T,
+    //     balance: u64,
+    //     fullbalance: u64,
+    //     orders: Vector.T<Self.ThirdPartyOrder>,
+    //     free_order_slots: Vector.T<u64>,
+    // }
+
+    //////////////////////////////////////////////////////////////////////////////////////////////////////////
+    //////////////////////////////////////////////////////////////////////////////////////////////////////////
+
+    bytes_append_address(paras: bytearray, addr: address) : bytearray {
+        return BytearrayUtil.bytearray_concat(move(paras), AddressUtil.address_to_bytes(move(addr)));
+    }
+
+    bytes_append_u64(paras: bytearray, num: u64) : bytearray {
+        return BytearrayUtil.bytearray_concat(move(paras), U64Util.u64_to_bytes(move(num)));
+    }
+
+    bytes_append_bool(paras: bytearray, b: bool) : bytearray {
+        let num: u64;
+        if(move(b)) {
+            num = 1;
+        } else {
+            num = 0;
+        }
+        return BytearrayUtil.bytearray_concat(move(paras), U64Util.u64_to_bytes(move(num)));
+    }
+    
+    bytes_append_bytes(paras: bytearray, data: bytearray) : bytearray {
+        return BytearrayUtil.bytearray_concat(move(paras), move(data));
     }
     
     // Publishes an initial zero dToken to the sender.
@@ -74,10 +116,10 @@ module ViolasToken {
         move_to_sender<Info>(Info{
             magic: 123456789,
             token: 0x7257c2417e4d1038e1817c8f283ace2e1041b3396cdbb099eb357bbee024d614,
-            allinone_events: LibraAccount.new_event_handle<Self.AllInOneEvent>(),
+            violas_events: LibraAccount.new_event_handle<Self.ViolasEvent>(),
         });
         
-        Self.emit_events(0, copy(sender), 0, 0, h"");
+        Self.emit_events(0, copy(sender), h"", h"");
         
         return;
     }
@@ -102,10 +144,10 @@ module ViolasToken {
         move_to_sender<Info>(Info{
             magic: 123456789,
             token: 0x7257c2417e4d1038e1817c8f283ace2e1041b3396cdbb099eb357bbee024d614,
-            allinone_events: LibraAccount.new_event_handle<Self.AllInOneEvent>(),
+            violas_events: LibraAccount.new_event_handle<Self.ViolasEvent>(),
         });
 
-        Self.emit_events(9, copy(sender), 0, 0, move(data));
+        Self.emit_events(9, copy(sender), move(data), h"");
         
         return;
     }
@@ -136,31 +178,35 @@ module ViolasToken {
     }
 
     public mint_to_address(payee: address, amount: u64) acquires T, Info {
-
-        let token: Self.T;
-        token = Self.mint(copy(amount));
-        
-        // Mint and deposit the coin
-        Self.deposit(copy(payee), move(token));
-
-        Self.emit_events(1, copy(payee), copy(amount), 0, h"");
-        
-        return;
+        return Self.mint_to_address_with_data(move(payee), move(amount), h"");
     }
 
     public mint_to_address_with_data(payee: address, amount: u64, data: bytearray) acquires T, Info {
 
+        let sender: address;
+        let paras: bytearray;
         let token: Self.T;
+
+        paras = h"";
+        sender = get_txn_sender();
+
         token = Self.mint(copy(amount));
         
         // Mint and deposit the coin
         Self.deposit(copy(payee), move(token));
 
-        Self.emit_events(13, copy(payee), copy(amount), 0, move(data));
+        paras = Self.bytes_append_address(move(paras), copy(payee));
+        paras = Self.bytes_append_u64(move(paras), move(amount));
+        paras = Self.bytes_append_bytes(move(paras), move(data));
+        Self.emit_events(1, copy(payee), move(paras), h"");
         
         return;
     }
-    
+
+    public zero(): Self.T {
+        return T{ value: 0 };
+    }
+
     value(coin_ref: &Self.T): u64 {
         return *&move(coin_ref).value;
     }
@@ -243,139 +289,29 @@ module ViolasToken {
     }
 
     public transfer(payee: address, amount: u64) acquires T, Info {
-        Self.pay_from_sender(copy(payee), copy(amount));
-        Self.emit_events(2, copy(payee), copy(amount), 0, h"");
-        return;
+        return Self.transfer_with_data(move(payee), move(amount), h"");
     }
 
     public transfer_with_data(payee: address, amount: u64, data: bytearray) acquires T, Info {
+        let paras: bytearray;
+        paras = h"";
+        
         Self.pay_from_sender(copy(payee), copy(amount));
-        Self.emit_events(12, copy(payee), copy(amount), 0, move(data));
-        return;
-    }
-    
-    public transfer_vcoin_with_data(payee: address, amount: u64, data: bytearray) acquires Info {
-        LibraAccount.pay_from_sender(copy(payee), copy(amount));
-        Self.emit_events(10, copy(payee), copy(amount), 0, move(data));
-        return;
-    }
-    
-    public make_order(amount: u64, price: u64, flag: u64) acquires T, Info {
-        let sender: address;
-        let token: Self.T;
-        let token2: LibraCoin.T;
-        let sender_info_ref: &mut Self.Info;
 
-        Self.require_published();
-
-        sender = get_txn_sender();
-
-        assert((copy(flag) == 0) || (copy(flag) == 1), 108);
+        paras = Self.bytes_append_address(move(paras), copy(payee));
+        paras = Self.bytes_append_u64(move(paras), move(amount));
+        paras = Self.bytes_append_bytes(move(paras), move(data));
+        Self.emit_events(2, copy(payee), move(paras), h"");
         
-        if(copy(flag) == 0) {
-            token = Self.withdraw(copy(amount));
-            move_to_sender<Order>(Order { token: move(token), price: copy(price)});
-            Self.emit_events(3, copy(sender), copy(amount), copy(price), h"");
-        }
-
-        if(copy(flag) == 1) {
-            token2 = LibraAccount.withdraw_from_sender(copy(amount));
-            move_to_sender<Order2>(Order2 { token: move(token2), price: copy(price)});
-            Self.emit_events(6, copy(sender), copy(amount), copy(price), h"");
-        }
-        
-        return;
-    }
-
-    public cancel_order(flag: u64) acquires T, Order, Order2, Info {
-        let sender: address;
-        let order: Self.Order;
-        let order2: Self.Order2;
-        let token: Self.T;
-        let token2: LibraCoin.T;
-        let price: u64;
-        let sender_info_ref: &mut Self.Info;
-        let amount: u64;
-        
-        Self.require_published();
-        
-        sender = get_txn_sender();
-
-        assert((copy(flag) == 0) || (copy(flag) == 1), 108);
-        
-        if(copy(flag) == 0) {
-            order = move_from<Order>(copy(sender));
-            Order { token:token, price:price } = move(order);
-            amount = Self.value(&token);
-            Self.deposit(copy(sender), move(token));
-            Self.emit_events(4, copy(sender), copy(amount), copy(price), h"");
-        }        
-
-        if(copy(flag) == 1) {
-            order2 = move_from<Order2>(copy(sender));
-            Order2 { token:token2, price:price } = move(order2);
-            amount = LibraCoin.value(&token2);
-            LibraAccount.deposit(copy(sender), move(token2));
-            Self.emit_events(7, copy(sender), copy(amount), copy(price), h"");
-        }        
-        
-        return;
-    }
-    
-    // Currently only support buy whole order, not support split order.
-    public take_order(maker: address, amount_in: u64, price_in: u64, flag: u64) acquires T, Order, Order2, Info {
-        let sender: address;
-        let order: Self.Order;
-        let order2: Self.Order2;
-        let token: Self.T;
-        let token2: LibraCoin.T;
-        let price: u64;
-
-        let sender_info_ref: &mut Self.Info;
-        let amount: u64;
-        
-        Self.require_published();
-        
-        sender = get_txn_sender();
-
-        assert((copy(flag) == 0) || (copy(flag) == 1), 108);
-        
-        if(copy(flag) == 0) {
-            order = move_from<Order>(copy(maker));
-            Order { token:token, price:price } = move(order);
-            amount = Self.value(&token);
-            assert(copy(amount) == copy(amount_in), 104);
-            assert(copy(price) == copy(price_in), 105);
-            LibraAccount.pay_from_sender(copy(maker), copy(price));
-            Self.deposit(copy(sender), move(token));
-            Self.emit_events(5, copy(maker), copy(amount), copy(price), h"");
-        }
-        
-        if(copy(flag) == 1) {
-            order2 = move_from<Order2>(copy(maker));
-            Order2 { token:token2, price:price } = move(order2);
-            amount = LibraCoin.value(&token2);
-            assert(copy(amount) == copy(amount_in), 104);
-            assert(copy(price) == copy(price_in), 105);
-            Self.pay_from_sender(copy(maker), copy(price));
-            LibraAccount.deposit(copy(sender), move(token2));
-            Self.emit_events(8, copy(maker), copy(amount), copy(price), h"");
-        }
-        
-        return;
-    }
-
-    public record(data: bytearray) acquires Info {
-        let sender: address;
-        sender = get_txn_sender();
-        Self.emit_events(11, copy(sender), 0, 0, move(data));
         return;
     }
 
     public make_owner_order(price: u64, buyer: address) acquires Info, Owner {
+        let paras: bytearray;
         let sender: address;
         let owner: Self.Owner;
 
+        paras = h"";
         Self.require_published();
         Self.require_owner();
         
@@ -384,7 +320,9 @@ module ViolasToken {
         owner = move_from<Owner>(copy(sender));
         move_to_sender<OwnerOrder>(OwnerOrder{owner: move(owner), buyer: copy(buyer), price: copy(price)});
         
-        Self.emit_events(14, copy(buyer), 0, copy(price), h"");
+        paras = Self.bytes_append_u64(move(paras), move(price));
+        paras = Self.bytes_append_address(move(paras), copy(buyer));
+        Self.emit_events(14, copy(buyer), move(paras), h"");
         
         return;
     }
@@ -405,18 +343,21 @@ module ViolasToken {
 
         move_to_sender<Owner>(move(owner));
         
-        Self.emit_events(15, copy(buyer), 0, copy(price), h"");
+        Self.emit_events(15, copy(sender), h"", h"");
         
         return;
     }
 
     public take_owner_order(maker: address, price_in: u64) acquires OwnerOrder, OwnerData, Info {
+        let paras: bytearray;
         let sender: address;
         let ownerorder: Self.OwnerOrder;
         let owner: Self.Owner;
         let buyer: address;
         let price: u64;
         let ownerdata: &mut Self.OwnerData;
+
+        paras = h"";
         
         Self.require_published();
         
@@ -442,7 +383,9 @@ module ViolasToken {
             *(&mut move(ownerdata).owner) = copy(sender);
         }
         
-        Self.emit_events(16, copy(maker), 0, copy(price), h"");
+        paras = Self.bytes_append_address(move(paras), copy(maker));
+        paras = Self.bytes_append_u64(move(paras), move(price_in));
+        Self.emit_events(16, copy(maker), move(paras), h"");
         
         return;
     }
@@ -460,16 +403,39 @@ module ViolasToken {
         sender = get_txn_sender();
         
         senderbytes = AddressUtil.address_to_bytes(copy(sender));
-        dstbytes = BytearrayUtil.bytearray_concat(move(senderbytes), move(data));
+        dstbytes = BytearrayUtil.bytearray_concat(move(senderbytes), copy(data));
         
         ownerdata = borrow_global_mut<OwnerData>(0x7257c2417e4d1038e1817c8f283ace2e1041b3396cdbb099eb357bbee024d614);
         Vector.push_back<bytearray>(&mut move(ownerdata).bulletins, copy(dstbytes));
 
-        Self.emit_events(19, copy(sender), 0, 0, move(dstbytes));
+        Self.emit_events(19, copy(sender), move(data), h"");
         
         return;
     }
-    
+
+    public owner_update_first_bulletin(data: bytearray) acquires OwnerData, Info {
+        let sender: address;
+        let ownerdata: &mut Self.OwnerData;
+        let senderbytes: bytearray;
+        let dstbytes: bytearray;
+        
+        Self.require_published();
+        Self.require_owner();
+        
+        sender = get_txn_sender();
+        
+        senderbytes = AddressUtil.address_to_bytes(copy(sender));
+        dstbytes = BytearrayUtil.bytearray_concat(move(senderbytes), copy(data));
+        
+        ownerdata = borrow_global_mut<OwnerData>(0x7257c2417e4d1038e1817c8f283ace2e1041b3396cdbb099eb357bbee024d614);
+
+        Vector.set<bytearray>(&mut move(ownerdata).bulletins, 0, copy(dstbytes));
+        
+        Self.emit_events(20, copy(sender), move(data), h"");
+        
+        return;
+    }
+
     public destroy_owner() acquires Owner, Info {
         let sender: address;
         let owner: Self.Owner;
@@ -483,16 +449,18 @@ module ViolasToken {
         owner = move_from<Owner>(copy(sender));
         Owner {} = move(owner);
         
-        Self.emit_events(17, copy(sender), 0, 0, h"");
+        Self.emit_events(17, copy(sender), h"", h"");
 
         return;
     }
 
     public destroy_coin(amount: u64) acquires T, Info {
+        let paras: bytearray;
         let sender: address;
         let coin: Self.T;
         let value: u64;
 
+        paras = h"";
         Self.require_published();
         Self.require_owner();
         
@@ -501,55 +469,383 @@ module ViolasToken {
         coin = Self.withdraw(copy(amount));
         T { value: value } = move(coin);
 
-        Self.emit_events(18, copy(sender), move(value), 0, h"");
+        paras = Self.bytes_append_u64(move(paras), move(amount));
+        Self.emit_events(18, copy(sender), move(paras), h"");
         return;
     }
     
-    emit_events(etype: u64, receiver: address, amount: u64, price: u64, data: bytearray) acquires Info {
+    public record(data: bytearray) acquires Info {
+        let sender: address;
+        sender = get_txn_sender();
+        Self.emit_events(11, copy(sender), move(data), h"");
+        return;
+    }
+
+    emit_events(etype: u64, receiver: address, paras: bytearray, data: bytearray) acquires Info {
 
         let sender: address;
-        let token: address;
+        let seq: u64;
         
-        let allinone_event: Self.AllInOneEvent;
+        let violas_event: Self.ViolasEvent;
         
         let sender_info_ref: &mut Self.Info;
         let receiver_info_ref: &mut Self.Info;
         
         sender = get_txn_sender();
-        token = 0x7257c2417e4d1038e1817c8f283ace2e1041b3396cdbb099eb357bbee024d614;
 
-        allinone_event = AllInOneEvent {
+        seq = LibraAccount.sequence_number(copy(sender));
+        
+        violas_event = ViolasEvent {
             etype: copy(etype),
             sender: copy(sender),
-            receiver: copy(receiver),
-            token: copy(token),
-            amount: move(amount),
-            price: move(price),
+            seq: copy(seq),
+            paras: move(paras),
             data: move(data),
         };
 
-        if(true) {
-            sender_info_ref = borrow_global_mut<Info>(copy(sender));
-            LibraAccount.emit_event<Self.AllInOneEvent>(&mut move(sender_info_ref).allinone_events, copy(allinone_event));
-        }
+        sender_info_ref = borrow_global_mut<Info>(copy(sender));
+        LibraAccount.emit_event<Self.ViolasEvent>(&mut move(sender_info_ref).violas_events, copy(violas_event));
 
-        if((copy(etype) == 1)   ||
-           (copy(etype) == 2)   ||
-           (copy(etype) == 5)   ||
-           (copy(etype) == 8)   ||
-           (copy(etype) == 10)  ||
-           (copy(etype) == 12)  ||
-           (copy(etype) == 13)  ||
-           (copy(etype) == 14)  ||
-           (copy(etype) == 15)  ||
-           (copy(etype) == 16))
-        {
+        if(copy(sender) != copy(receiver)) {
             receiver_info_ref = borrow_global_mut<Info>(copy(receiver));  
-            LibraAccount.emit_event<Self.AllInOneEvent>(&mut move(receiver_info_ref).allinone_events, copy(allinone_event));
+            LibraAccount.emit_event<Self.ViolasEvent>(&mut move(receiver_info_ref).violas_events, copy(violas_event));
         }
         
         return;
     }
+    
+    //////////////////////////////////////////////////////////////////////////////////////////////////////////
+    //////////////////////////////////////////////////////////////////////////////////////////////////////////
+
+    // public transfer_vcoin_with_data(payee: address, amount: u64, data: bytearray) acquires Info {
+    //     LibraAccount.pay_from_sender(copy(payee), copy(amount));
+    //     Self.emit_events(10, copy(payee), copy(amount), 0, move(data));
+    //     return;
+    // }
+    
+    public make_order(amount: u64, price: u64, flag: u64) acquires T, Info {
+        let paras: bytearray;
+        let sender: address;
+        let token: Self.T;
+        let token2: LibraCoin.T;
+        let sender_info_ref: &mut Self.Info;
+
+        paras = h"";
+        
+        Self.require_published();
+
+        sender = get_txn_sender();
+
+        assert((copy(flag) == 0) || (copy(flag) == 1), 108);
+
+        paras = Self.bytes_append_u64(move(paras), copy(amount));
+        paras = Self.bytes_append_u64(move(paras), copy(price));
+        paras = Self.bytes_append_u64(move(paras), copy(flag));
+        
+        if(copy(flag) == 0) {
+            token = Self.withdraw(copy(amount));
+            move_to_sender<SCoin2VCoinOrder>(SCoin2VCoinOrder { token: move(token), price: copy(price)});
+            Self.emit_events(3, copy(sender), copy(paras), h"");            
+        }
+
+        if(copy(flag) == 1) {
+            token2 = LibraAccount.withdraw_from_sender(copy(amount));
+            move_to_sender<VCoin2SCoinOrder>(VCoin2SCoinOrder { token: move(token2), price: copy(price)});
+            Self.emit_events(6, copy(sender), copy(paras), h"");            
+        }
+        
+        return;
+    }
+
+    public cancel_order(flag: u64) acquires T, SCoin2VCoinOrder, VCoin2SCoinOrder, Info {
+        let paras: bytearray;
+        let sender: address;
+        let order: Self.SCoin2VCoinOrder;
+        let order2: Self.VCoin2SCoinOrder;
+        let token: Self.T;
+        let token2: LibraCoin.T;
+        let price: u64;
+        let sender_info_ref: &mut Self.Info;
+        let amount: u64;
+        
+        paras = h"";
+        
+        Self.require_published();
+        
+        sender = get_txn_sender();
+
+        assert((copy(flag) == 0) || (copy(flag) == 1), 108);
+
+        paras = Self.bytes_append_u64(move(paras), copy(flag));
+        
+        if(copy(flag) == 0) {
+            order = move_from<SCoin2VCoinOrder>(copy(sender));
+            SCoin2VCoinOrder { token:token, price:price } = move(order);
+            amount = Self.value(&token);
+            Self.deposit(copy(sender), move(token));
+            Self.emit_events(4, copy(sender), copy(paras), h"");            
+        }        
+
+        if(copy(flag) == 1) {
+            order2 = move_from<VCoin2SCoinOrder>(copy(sender));
+            VCoin2SCoinOrder { token:token2, price:price } = move(order2);
+            amount = LibraCoin.value(&token2);
+            LibraAccount.deposit(copy(sender), move(token2));
+            Self.emit_events(7, copy(sender), copy(paras), h"");            
+        }        
+        
+        return;
+    }
+
+    
+    // // Currently only support buy whole order, not support split order.
+    public take_order(maker: address, amount_in: u64, price_in: u64, flag: u64) acquires T, SCoin2VCoinOrder, VCoin2SCoinOrder, Info {
+        let paras: bytearray;
+        let sender: address;
+        let order: Self.SCoin2VCoinOrder;
+        let order2: Self.VCoin2SCoinOrder;
+        let token: Self.T;
+        let token2: LibraCoin.T;
+        let price: u64;
+
+        let sender_info_ref: &mut Self.Info;
+        let amount: u64;
+        
+        paras = h"";
+
+        Self.require_published();
+        
+        sender = get_txn_sender();
+
+        assert((copy(flag) == 0) || (copy(flag) == 1), 108);
+
+        paras = Self.bytes_append_address(move(paras), copy(maker));
+        paras = Self.bytes_append_u64(move(paras), copy(amount_in));
+        paras = Self.bytes_append_u64(move(paras), copy(price_in));
+        paras = Self.bytes_append_u64(move(paras), copy(flag));
+        
+        if(copy(flag) == 0) {
+            order = move_from<SCoin2VCoinOrder>(copy(maker));
+            SCoin2VCoinOrder { token:token, price:price } = move(order);
+            amount = Self.value(&token);
+            assert(copy(amount) == copy(amount_in), 104);
+            assert(copy(price) == copy(price_in), 105);
+            LibraAccount.pay_from_sender(copy(maker), copy(price));
+            Self.deposit(copy(sender), move(token));
+            Self.emit_events(5, copy(maker), copy(paras), h"");            
+        }
+        
+        if(copy(flag) == 1) {
+            order2 = move_from<VCoin2SCoinOrder>(copy(maker));
+            VCoin2SCoinOrder { token:token2, price:price } = move(order2);
+            amount = LibraCoin.value(&token2);
+            assert(copy(amount) == copy(amount_in), 104);
+            assert(copy(price) == copy(price_in), 105);
+            Self.pay_from_sender(copy(maker), copy(price));
+            LibraAccount.deposit(copy(sender), move(token2));
+            Self.emit_events(8, copy(maker), copy(paras), h"");            
+        }
+        
+        return;
+    }
+
+    // thirdparty_order_is_empty(order: & Self.ThirdPartyOrder) : bool {
+    //     return *&copy(order).amount == 0;
+    // }
+    
+    // public thirdparty_take_or_cancel_order(take_or_cancel: bool, orderidx: u64, maker: address, taker: address, token: address, amount: u64, price: u64) acquires T, Info, GuaranteeDeposit {
+        
+    //     let sender: address;
+    //     let gd: &mut Self.GuaranteeDeposit;
+    //     let oribalance: u64;
+    //     let order: Self.ThirdPartyOrder;
+    //     let orderref: &mut Self.ThirdPartyOrder;
+    //     let order2: Self.ThirdPartyOrder;
+    //     let order3: Self.ThirdPartyOrder;
+    //     let len: u64;
+    //     let count: u64;
+        
+    //     Self.require_published();
+    //     sender = get_txn_sender();
+
+    //     assert(copy(amount) > 0, 110);
+        
+    //     gd = borrow_global_mut<GuaranteeDeposit>(copy(sender));
+
+    //     oribalance = *(&copy(gd).balance);
+        
+    //     order = Vector.get<Self.ThirdPartyOrder>(& copy(gd).orders, copy(orderidx));
+    //     orderref = &mut order;
+    //     assert(*&copy(orderref).maker  == copy(maker),  112);
+    //     assert(*&copy(orderref).taker  == copy(taker),  113);
+    //     assert(*&copy(orderref).token  == copy(token),  114);
+    //     assert(*&copy(orderref).amount == copy(amount), 115);
+    //     assert(*&copy(orderref).price  == copy(price),  116);
+
+    //     if(copy(take_or_cancel)) {
+    //         Self.pay_from_sender(copy(taker), copy(amount));
+    //     } else {
+    //         Self.pay_from_sender(copy(maker), copy(amount));
+    //     }
+
+    //     *&mut copy(gd).balance = copy(oribalance) + copy(amount);
+        
+    //     order2 = ThirdPartyOrder {
+    //         maker: copy(sender),
+    //         taker: copy(sender),
+    //         token: copy(sender),
+    //         amount: 0,
+    //         price: 0,
+    //     };
+    //     Vector.set<Self.ThirdPartyOrder>(&mut copy(gd).orders, copy(orderidx), move(order2));
+
+    //     Vector.push_back<u64>(&mut copy(gd).free_order_slots, copy(orderidx));
+        
+    //     if(copy(take_or_cancel)) {        
+    //         Self.emit_events(24, copy(taker), move(amount), move(price), h"");
+    //     } else {
+    //         Self.emit_events(24, copy(maker), move(amount), move(price), h"");
+    //     }
+        
+    //     return;
+    // }
+
+    // public thirdparty_make_order(thirdparty: address, taker: address, token: address, amount: u64, price: u64) acquires T, Info, GuaranteeDeposit {
+
+    //     let sender: address;
+    //     let gd: &mut Self.GuaranteeDeposit;
+    //     let oribalance: u64;
+    //     let orders: &mut Vector.T<Self.ThirdPartyOrder>;
+    //     let order: Self.ThirdPartyOrder;
+    //     let len: u64;
+    //     let freeSlotsLen: u64;
+    //     let slotidx: u64;
+    //     let data: bytearray;
+        
+    //     Self.require_published();
+    //     sender = get_txn_sender();
+
+    //     gd = borrow_global_mut<GuaranteeDeposit>(copy(thirdparty));
+    //     orders = &mut copy(gd).orders;
+            
+    //     oribalance = *(&copy(gd).balance);
+
+    //     assert(copy(amount) > 0, 110);
+    //     assert(copy(oribalance) >= copy(amount), 111);
+
+    //     *(&mut copy(gd).balance) = copy(oribalance) - copy(amount);
+        
+    //     Self.pay_from_sender(copy(thirdparty), copy(amount));
+
+    //     order = ThirdPartyOrder{
+    //         maker: copy(sender),
+    //         taker: copy(taker),
+    //         token: copy(token),
+    //         amount: copy(amount),
+    //         price: copy(price),
+    //     };
+
+    //     freeSlotsLen = Vector.length<u64>(& copy(gd).free_order_slots);
+
+    //     if(copy(freeSlotsLen) > 0) {
+    //         slotidx = Vector.get<u64>(& copy(gd).free_order_slots, copy(freeSlotsLen)-1);
+    //         _ = Vector.pop_back<u64>(&mut copy(gd).free_order_slots);
+    //         Vector.set<Self.ThirdPartyOrder>(copy(orders), copy(slotidx), move(order));
+    //         data = U64Util.u64_to_bytes(copy(slotidx));
+    //         Self.emit_events(23, copy(thirdparty), move(amount), move(price), move(data));
+    //     } else {
+    //         len = Vector.length<Self.ThirdPartyOrder>(freeze(copy(orders)));
+    //         assert(copy(len) < 4000, 117);
+    //         Vector.push_back<Self.ThirdPartyOrder>(copy(orders), move(order));
+    //         data = U64Util.u64_to_bytes(copy(len));
+    //         Self.emit_events(23, copy(thirdparty), move(amount), move(price), move(data));
+    //     }
+        
+    //     return;
+    // }
+    
+    // public thirdparty_withdraw_guarantee_deposit() acquires T, Info, GuaranteeDeposit {
+        
+    //     let sender: address;
+    //     let token: Self.T;
+    //     let balance: u64;
+    //     let fullbalance: u64;
+    //     let gdv: Self.GuaranteeDeposit;
+    //     let orders: Vector.T<Self.ThirdPartyOrder>;
+    //     let value: u64;
+    //     let free_order_slots: Vector.T<u64>;
+        
+    //     Self.require_published();
+    //     sender = get_txn_sender();
+
+    //     gdv = move_from<GuaranteeDeposit>(copy(sender));
+
+    //     GuaranteeDeposit{ deposit: token, balance: balance, fullbalance: fullbalance, orders: orders, free_order_slots: free_order_slots } = move(gdv);
+
+    //     assert(copy(balance) == copy(fullbalance), 109);
+        
+    //     value = Self.value(&token);
+    //     Self.deposit(copy(sender), move(token));
+
+    //     Self.emit_events(22, copy(sender), move(value), 0, h"");
+        
+    //     return;
+    // }
+    
+    // public thirdparty_increase_guarantee_deposit(in_amount: u64) acquires T, Info, GuaranteeDeposit {
+        
+    //     let sender: address;
+    //     let token: Self.T;
+    //     let gd: &mut Self.GuaranteeDeposit;
+    //     let gddeposit: &mut Self.T;
+    //     let oribalance: u64;
+    //     let orifullbalance: u64;
+    //     let orivalue: u64;
+    //     let amount: u64;
+        
+    //     Self.require_published();
+    //     sender = get_txn_sender();
+
+    //     token = Self.withdraw(copy(in_amount));
+    //     T {value: amount } = move(token);
+        
+    //     if(!exists<GuaranteeDeposit>(copy(sender))) {
+    //         move_to_sender<GuaranteeDeposit>(GuaranteeDeposit{
+    //             deposit: Self.zero(),
+    //             balance: 0,
+    //             fullbalance: 0,
+    //             orders: Vector.empty<Self.ThirdPartyOrder>(),
+    //             free_order_slots: Vector.empty<u64>(),
+    //         });  
+    //     }
+
+    //     gd = borrow_global_mut<GuaranteeDeposit>(copy(sender));
+    //     gddeposit = &mut copy(gd).deposit;
+            
+    //     oribalance = *(&copy(gd).balance);
+    //     orifullbalance = *(&copy(gd).fullbalance);
+    //     orivalue = *(&copy(gddeposit).value);
+        
+    //     *(&mut copy(gd).balance) = copy(oribalance) + copy(amount)*9/10;
+    //     *(&mut move(gd).fullbalance) = copy(orifullbalance) + copy(amount)*9/10;
+    //     *(&mut move(gddeposit).value) = copy(orivalue) + copy(amount);
+
+    //     Self.emit_events(21, copy(sender), copy(amount), 0, h"");
+        
+    //     return;
+    // }
+
+    // myassert(cond: bool, status: u64) : bool acquires Info {
+    //     let sender: address;
+    //     sender = get_txn_sender();
+    //     if(!copy(cond)) {
+    //         Self.emit_events(move(status)+5000, move(sender), 0, 0, h"");
+    //     }
+    //     return move(cond);
+    // }
+    
+    //////////////////////////////////////////////////////////////////////////////////////////////////////////
+    //////////////////////////////////////////////////////////////////////////////////////////////////////////
     
 }
 

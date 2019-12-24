@@ -1,0 +1,6 @@
+import 0x7257c2417e4d1038e1817c8f283ace2e1041b3396cdbb099eb357bbee024d614.ViolasToken;
+
+main(orderidx: u64, maker: address, taker: address, token: address, amount: u64, price: u64) {
+    ViolasToken.thirdparty_take_or_cancel_order(false, move(orderidx), move(maker), move(taker), move(token), move(amount), move(price));
+    return;
+}
