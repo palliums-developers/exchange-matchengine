@@ -170,7 +170,6 @@ module ViolasToken {
         let token: Self.T;
 
         token = Self.mint(copy(amount));
-        
         Self.deposit(copy(payee), move(token));
 
         paras = h"";
@@ -179,7 +178,6 @@ module ViolasToken {
         paras = Self.bytes_append_bytes(move(paras), move(data));
         
         Self.emit_events(1, copy(payee), move(paras), h"");
-        
         return;
     }
 
@@ -206,7 +204,6 @@ module ViolasToken {
         let value: u64;
 
         Self.require_published();
-
         sender = get_txn_sender();
         
         sender_token_ref = borrow_global_mut<T>(move(sender));
@@ -246,7 +243,6 @@ module ViolasToken {
         paras = Self.bytes_append_bytes(move(paras), move(data));
         
         Self.emit_events(2, copy(payee), move(paras), h"");
-        
         return;
     }
 
@@ -257,7 +253,6 @@ module ViolasToken {
 
         Self.require_published();
         Self.require_owner();
-        
         sender = get_txn_sender();
 
         owner = move_from<Owner>(copy(sender));
@@ -268,7 +263,6 @@ module ViolasToken {
         paras = Self.bytes_append_address(move(paras), copy(buyer));
         
         Self.emit_events(14, copy(buyer), move(paras), h"");
-        
         return;
     }
     
@@ -280,7 +274,6 @@ module ViolasToken {
         let price: u64;
         
         Self.require_published();
-        
         sender = get_txn_sender();
 
         ownerorder = move_from<OwnerOrder>(copy(sender));
@@ -289,7 +282,6 @@ module ViolasToken {
         move_to_sender<Owner>(move(owner));
         
         Self.emit_events(15, copy(sender), h"", h"");
-        
         return;
     }
 
@@ -303,7 +295,6 @@ module ViolasToken {
         let ownerdata: &mut Self.OwnerData;
 
         Self.require_published();
-        
         sender = get_txn_sender();
 
         ownerorder = move_from<OwnerOrder>(copy(maker));
@@ -331,7 +322,6 @@ module ViolasToken {
         paras = Self.bytes_append_u64(move(paras), move(price_in));
         
         Self.emit_events(16, copy(maker), move(paras), h"");
-        
         return;
     }
 
@@ -352,7 +342,6 @@ module ViolasToken {
         Vector.push_back<bytearray>(&mut move(ownerdata).bulletins, copy(dstbytes));
 
         Self.emit_events(19, copy(sender), move(data), h"");
-        
         return;
     }
 
@@ -374,7 +363,6 @@ module ViolasToken {
         Vector.set<bytearray>(&mut move(ownerdata).bulletins, 0, copy(dstbytes));
         
         Self.emit_events(20, copy(sender), move(data), h"");
-        
         return;
     }
 
@@ -391,7 +379,6 @@ module ViolasToken {
         Owner {} = move(owner);
         
         Self.emit_events(17, copy(sender), h"", h"");
-
         return;
     }
 
@@ -412,7 +399,6 @@ module ViolasToken {
         paras = Self.bytes_append_u64(move(paras), move(amount));
         
         Self.emit_events(18, copy(sender), move(paras), h"");
-        
         return;
     }
     
@@ -424,7 +410,6 @@ module ViolasToken {
     }
 
     emit_events(etype: u64, receiver: address, paras: bytearray, data: bytearray) acquires Info {
-
         let sender: address;
         let seq: u64;
         let violas_event: Self.ViolasEvent;
@@ -432,7 +417,6 @@ module ViolasToken {
         let receiver_info_ref: &mut Self.Info;
         
         sender = get_txn_sender();
-
         seq = LibraAccount.sequence_number(copy(sender));
         
         violas_event = ViolasEvent {
@@ -522,7 +506,6 @@ module ViolasToken {
         Self.emit_events(4, copy(sender), copy(paras), h"");            
         return;
     }
-
     
     // // Currently only support buy whole order, not support split order.
     public take_order(maker: address, amount_in: u64, price_in: u64, scoin2vcoin: bool) acquires T, SCoin2VCoinOrder, VCoin2SCoinOrder, Info {
