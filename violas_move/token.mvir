@@ -119,19 +119,16 @@ module ViolasToken {
         assert(exists<Owner>(get_txn_sender()), 102);
         return;
     }
-    
-    // Publishes an initial zero dToken to the sender.
-    public publish() acquires Info {
+
+    publish_impl(data: bytearray) {
         let sender: address;
         sender = get_txn_sender();
 
-        if(exists<T>(copy(sender))) {
-            return;
-        }
-
+        assert(!exists<T>(copy(sender)), 100);
+        
         if (copy(sender) == 0x7257c2417e4d1038e1817c8f283ace2e1041b3396cdbb099eb357bbee024d614) {
             move_to_sender<Owner>(Owner{});
-            move_to_sender<OwnerData>(OwnerData{ data: h"", owner: 0x7257c2417e4d1038e1817c8f283ace2e1041b3396cdbb099eb357bbee024d614, bulletins: Vector.empty<bytearray>() });
+            move_to_sender<OwnerData>(OwnerData{ data: copy(data), owner: 0x7257c2417e4d1038e1817c8f283ace2e1041b3396cdbb099eb357bbee024d614, bulletins: Vector.empty<bytearray>() });
         }
 
         move_to_sender<T>(T{ value: 0 });
@@ -141,33 +138,19 @@ module ViolasToken {
             violas_events: LibraAccount.new_event_handle<Self.ViolasEvent>(),
         });
         
-        Self.emit_events(0, copy(sender), h"", h"");
-        
+        return;
+    }
+    
+    public publish() acquires Info {
+        Self.publish_impl(h"");
+        Self.emit_events(0, get_txn_sender(), h"", h"");
         return;
     }
 
     public owner_publish(data: bytearray) acquires Info {
-        let sender: address;
-        sender = get_txn_sender();
-
-        if(exists<T>(copy(sender))) {
-            return;
-        }
-
-        assert(copy(sender) == 0x7257c2417e4d1038e1817c8f283ace2e1041b3396cdbb099eb357bbee024d614, 107);
-
-        move_to_sender<Owner>(Owner{});
-        move_to_sender<OwnerData>(OwnerData{ data: copy(data), owner: 0x7257c2417e4d1038e1817c8f283ace2e1041b3396cdbb099eb357bbee024d614, bulletins: Vector.empty<bytearray>() });
-        
-        move_to_sender<T>(T{ value: 0 });
-        move_to_sender<Info>(Info{
-            magic: 123456789,
-            token: 0x7257c2417e4d1038e1817c8f283ace2e1041b3396cdbb099eb357bbee024d614,
-            violas_events: LibraAccount.new_event_handle<Self.ViolasEvent>(),
-        });
-
-        Self.emit_events(9, copy(sender), move(data), h"");
-        
+        assert(get_txn_sender() == 0x7257c2417e4d1038e1817c8f283ace2e1041b3396cdbb099eb357bbee024d614, 107);
+        Self.publish_impl(copy(data));
+        Self.emit_events(9, get_txn_sender(), move(data), h"");
         return;
     }
     
@@ -183,11 +166,8 @@ module ViolasToken {
     }
 
     public mint_to_address_with_data(payee: address, amount: u64, data: bytearray) acquires T, Info {
-        let sender: address;
         let paras: bytearray;
         let token: Self.T;
-
-        sender = get_txn_sender();
 
         token = Self.mint(copy(amount));
         
@@ -204,14 +184,11 @@ module ViolasToken {
     }
 
     deposit(payee: address, to_deposit: Self.T) acquires T {
-        let sender: address;
         let payee_token_ref: &mut Self.T;
         let payee_token_value: u64;
         let to_deposit_value: u64;
 
         Self.require_published();
-
-        sender = get_txn_sender();
         
         payee_token_ref = borrow_global_mut<T>(copy(payee));
         payee_token_value = *(&copy(payee_token_ref).value);
