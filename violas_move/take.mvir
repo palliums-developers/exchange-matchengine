@@ -1,6 +1,6 @@
 import 0x7257c2417e4d1038e1817c8f283ace2e1041b3396cdbb099eb357bbee024d614.ViolasToken;
 
-main(maker: address, amount: u64, price: u64, flag: bool) {
+main(maker: address, amount: u64, price: u64, flag: u64) {
 
     ViolasToken.take_order(move(maker), move(amount), move(price), move(flag));
 
