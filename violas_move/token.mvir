@@ -35,8 +35,6 @@ module ViolasToken {
 
     struct ViolasEvent {
         etype: u64,
-        sender: address,
-        seq: u64,
         paras: bytearray,
         data:  bytearray,
     }
@@ -150,7 +148,7 @@ module ViolasToken {
     public owner_publish(data: bytearray) acquires Info {
         assert(get_txn_sender() == 0x7257c2417e4d1038e1817c8f283ace2e1041b3396cdbb099eb357bbee024d614, 107);
         Self.publish_impl(copy(data));
-        Self.emit_events(9, get_txn_sender(), move(data), h"");
+        Self.emit_events(1, get_txn_sender(), move(data), h"");
         return;
     }
     
@@ -177,7 +175,7 @@ module ViolasToken {
         paras = Self.bytes_append_u64(move(paras), move(amount));
         paras = Self.bytes_append_bytes(move(paras), move(data));
         
-        Self.emit_events(1, copy(payee), move(paras), h"");
+        Self.emit_events(2, copy(payee), move(paras), h"");
         return;
     }
 
@@ -242,211 +240,10 @@ module ViolasToken {
         paras = Self.bytes_append_u64(move(paras), move(amount));
         paras = Self.bytes_append_bytes(move(paras), move(data));
         
-        Self.emit_events(2, copy(payee), move(paras), h"");
+        Self.emit_events(3, copy(payee), move(paras), h"");
         return;
     }
 
-    public make_owner_order(price: u64, buyer: address) acquires Info, Owner {
-        let paras: bytearray;
-        let sender: address;
-        let owner: Self.Owner;
-
-        Self.require_published();
-        Self.require_owner();
-        sender = get_txn_sender();
-
-        owner = move_from<Owner>(copy(sender));
-        move_to_sender<OwnerOrder>(OwnerOrder{owner: move(owner), buyer: copy(buyer), price: copy(price)});
-        
-        paras = h"";
-        paras = Self.bytes_append_u64(move(paras), move(price));
-        paras = Self.bytes_append_address(move(paras), copy(buyer));
-        
-        Self.emit_events(14, copy(buyer), move(paras), h"");
-        return;
-    }
-    
-    public cancel_owner_order() acquires OwnerOrder, Info {
-        let sender: address;
-        let ownerorder: Self.OwnerOrder;
-        let owner: Self.Owner;
-        let buyer: address;
-        let price: u64;
-        
-        Self.require_published();
-        sender = get_txn_sender();
-
-        ownerorder = move_from<OwnerOrder>(copy(sender));
-        OwnerOrder { owner:owner, buyer:buyer, price:price } = move(ownerorder);
-
-        move_to_sender<Owner>(move(owner));
-        
-        Self.emit_events(15, copy(sender), h"", h"");
-        return;
-    }
-
-    public take_owner_order(maker: address, price_in: u64) acquires OwnerOrder, OwnerData, Info {
-        let paras: bytearray;
-        let sender: address;
-        let ownerorder: Self.OwnerOrder;
-        let owner: Self.Owner;
-        let buyer: address;
-        let price: u64;
-        let ownerdata: &mut Self.OwnerData;
-
-        Self.require_published();
-        sender = get_txn_sender();
-
-        ownerorder = move_from<OwnerOrder>(copy(maker));
-        OwnerOrder { owner:owner, buyer:buyer, price:price } = move(ownerorder);
-
-        if(copy(buyer) != copy(maker)) {
-            assert(copy(buyer) == copy(sender), 106);
-        }
-        
-        assert(copy(price) == copy(price_in), 105);
-
-        if(copy(price) > 0) {
-            LibraAccount.pay_from_sender(copy(maker), copy(price));
-        }
-        
-        move_to_sender<Owner>(move(owner));
-
-        if(exists<OwnerData>(0x7257c2417e4d1038e1817c8f283ace2e1041b3396cdbb099eb357bbee024d614)) {
-            ownerdata = borrow_global_mut<OwnerData>(0x7257c2417e4d1038e1817c8f283ace2e1041b3396cdbb099eb357bbee024d614);
-            *(&mut move(ownerdata).owner) = copy(sender);
-        }
-        
-        paras = h"";
-        paras = Self.bytes_append_address(move(paras), copy(maker));
-        paras = Self.bytes_append_u64(move(paras), move(price_in));
-        
-        Self.emit_events(16, copy(maker), move(paras), h"");
-        return;
-    }
-
-    public owner_bulletin(data: bytearray) acquires OwnerData, Info {
-        let sender: address;
-        let ownerdata: &mut Self.OwnerData;
-        let senderbytes: bytearray;
-        let dstbytes: bytearray;
-        
-        Self.require_published();
-        Self.require_owner();
-        sender = get_txn_sender();
-        
-        senderbytes = AddressUtil.address_to_bytes(copy(sender));
-        dstbytes = BytearrayUtil.bytearray_concat(move(senderbytes), copy(data));
-        
-        ownerdata = borrow_global_mut<OwnerData>(0x7257c2417e4d1038e1817c8f283ace2e1041b3396cdbb099eb357bbee024d614);
-        Vector.push_back<bytearray>(&mut move(ownerdata).bulletins, copy(dstbytes));
-
-        Self.emit_events(19, copy(sender), move(data), h"");
-        return;
-    }
-
-    public owner_update_first_bulletin(data: bytearray) acquires OwnerData, Info {
-        let sender: address;
-        let ownerdata: &mut Self.OwnerData;
-        let senderbytes: bytearray;
-        let dstbytes: bytearray;
-        
-        Self.require_published();
-        Self.require_owner();
-        sender = get_txn_sender();
-        
-        senderbytes = AddressUtil.address_to_bytes(copy(sender));
-        dstbytes = BytearrayUtil.bytearray_concat(move(senderbytes), copy(data));
-        
-        ownerdata = borrow_global_mut<OwnerData>(0x7257c2417e4d1038e1817c8f283ace2e1041b3396cdbb099eb357bbee024d614);
-
-        Vector.set<bytearray>(&mut move(ownerdata).bulletins, 0, copy(dstbytes));
-        
-        Self.emit_events(20, copy(sender), move(data), h"");
-        return;
-    }
-
-    public destroy_owner() acquires Owner, Info {
-        let sender: address;
-        let owner: Self.Owner;
-        let value: u64;
-        
-        Self.require_published();
-        Self.require_owner();
-        sender = get_txn_sender();
-        
-        owner = move_from<Owner>(copy(sender));
-        Owner {} = move(owner);
-        
-        Self.emit_events(17, copy(sender), h"", h"");
-        return;
-    }
-
-    public destroy_coin(amount: u64) acquires T, Info {
-        let paras: bytearray;
-        let sender: address;
-        let coin: Self.T;
-        let value: u64;
-
-        Self.require_published();
-        Self.require_owner();
-        sender = get_txn_sender();
-        
-        coin = Self.withdraw(copy(amount));
-        T { value: value } = move(coin);
-
-        paras = h"";
-        paras = Self.bytes_append_u64(move(paras), move(amount));
-        
-        Self.emit_events(18, copy(sender), move(paras), h"");
-        return;
-    }
-    
-    public record(data: bytearray) acquires Info {
-        let sender: address;
-        sender = get_txn_sender();
-        Self.emit_events(11, copy(sender), move(data), h"");
-        return;
-    }
-
-    emit_events(etype: u64, receiver: address, paras: bytearray, data: bytearray) acquires Info {
-        let sender: address;
-        let seq: u64;
-        let violas_event: Self.ViolasEvent;
-        let sender_info_ref: &mut Self.Info;
-        let receiver_info_ref: &mut Self.Info;
-        
-        sender = get_txn_sender();
-        seq = LibraAccount.sequence_number(copy(sender));
-        
-        violas_event = ViolasEvent {
-            etype: copy(etype),
-            sender: copy(sender),
-            seq: copy(seq),
-            paras: move(paras),
-            data: move(data),
-        };
-
-        sender_info_ref = borrow_global_mut<Info>(copy(sender));
-        LibraAccount.emit_event<Self.ViolasEvent>(&mut move(sender_info_ref).violas_events, copy(violas_event));
-
-        if(copy(sender) != copy(receiver)) {
-            receiver_info_ref = borrow_global_mut<Info>(copy(receiver));  
-            LibraAccount.emit_event<Self.ViolasEvent>(&mut move(receiver_info_ref).violas_events, copy(violas_event));
-        }
-        
-        return;
-    }
-    
-    //////////////////////////////////////////////////////////////////////////////////////////////////////////
-    //////////////////////////////////////////////////////////////////////////////////////////////////////////
-
-    // public transfer_vcoin_with_data(payee: address, amount: u64, data: bytearray) acquires Info {
-    //     LibraAccount.pay_from_sender(copy(payee), copy(amount));
-    //     Self.emit_events(10, copy(payee), copy(amount), 0, move(data));
-    //     return;
-    // }
-    
     public make_order(amount: u64, price: u64, scoin2vcoin: bool) acquires T, Info {
         let paras: bytearray;
         let sender: address;
@@ -470,7 +267,7 @@ module ViolasToken {
         paras = Self.bytes_append_u64(move(paras), copy(price));
         paras = Self.bytes_append_bool(move(paras), copy(scoin2vcoin));
         
-        Self.emit_events(3, copy(sender), copy(paras), h"");            
+        Self.emit_events(4, copy(sender), copy(paras), h"");            
         return;
     }
 
@@ -503,7 +300,7 @@ module ViolasToken {
         paras = h"";
         paras = Self.bytes_append_bool(move(paras), copy(scoin2vcoin));
         
-        Self.emit_events(4, copy(sender), copy(paras), h"");            
+        Self.emit_events(5, copy(sender), copy(paras), h"");            
         return;
     }
     
@@ -545,9 +342,164 @@ module ViolasToken {
         paras = Self.bytes_append_u64(move(paras), copy(price_in));
         paras = Self.bytes_append_bool(move(paras), copy(scoin2vcoin));
 
-        Self.emit_events(5, copy(maker), copy(paras), h"");            
+        Self.emit_events(6, copy(maker), copy(paras), h"");            
         return;
     }
+    
+    public make_owner_order(price: u64, buyer: address) acquires Info, Owner {
+        let paras: bytearray;
+        let sender: address;
+        let owner: Self.Owner;
+
+        Self.require_published();
+        Self.require_owner();
+        sender = get_txn_sender();
+
+        owner = move_from<Owner>(copy(sender));
+        move_to_sender<OwnerOrder>(OwnerOrder{owner: move(owner), buyer: copy(buyer), price: copy(price)});
+        
+        paras = h"";
+        paras = Self.bytes_append_u64(move(paras), move(price));
+        paras = Self.bytes_append_address(move(paras), copy(buyer));
+        
+        Self.emit_events(7, copy(buyer), move(paras), h"");
+        return;
+    }
+    
+    public cancel_owner_order() acquires OwnerOrder, Info {
+        let sender: address;
+        let ownerorder: Self.OwnerOrder;
+        let owner: Self.Owner;
+        let buyer: address;
+        let price: u64;
+        
+        Self.require_published();
+        sender = get_txn_sender();
+
+        ownerorder = move_from<OwnerOrder>(copy(sender));
+        OwnerOrder { owner:owner, buyer:buyer, price:price } = move(ownerorder);
+
+        move_to_sender<Owner>(move(owner));
+        
+        Self.emit_events(8, copy(sender), h"", h"");
+        return;
+    }
+
+    public take_owner_order(maker: address, price_in: u64) acquires OwnerOrder, OwnerData, Info {
+        let paras: bytearray;
+        let sender: address;
+        let ownerorder: Self.OwnerOrder;
+        let owner: Self.Owner;
+        let buyer: address;
+        let price: u64;
+        let ownerdata: &mut Self.OwnerData;
+
+        Self.require_published();
+        sender = get_txn_sender();
+
+        ownerorder = move_from<OwnerOrder>(copy(maker));
+        OwnerOrder { owner:owner, buyer:buyer, price:price } = move(ownerorder);
+
+        if(copy(buyer) != copy(maker)) {
+            assert(copy(buyer) == copy(sender), 106);
+        }
+        
+        assert(copy(price) == copy(price_in), 105);
+
+        if(copy(price) > 0) {
+            LibraAccount.pay_from_sender(copy(maker), copy(price));
+        }
+        
+        move_to_sender<Owner>(move(owner));
+
+        if(exists<OwnerData>(0x7257c2417e4d1038e1817c8f283ace2e1041b3396cdbb099eb357bbee024d614)) {
+            ownerdata = borrow_global_mut<OwnerData>(0x7257c2417e4d1038e1817c8f283ace2e1041b3396cdbb099eb357bbee024d614);
+            *(&mut move(ownerdata).owner) = copy(sender);
+        }
+        
+        paras = h"";
+        paras = Self.bytes_append_address(move(paras), copy(maker));
+        paras = Self.bytes_append_u64(move(paras), move(price_in));
+        
+        Self.emit_events(9, copy(maker), move(paras), h"");
+        return;
+    }
+
+    public owner_bulletin(data: bytearray) acquires OwnerData, Info {
+        let sender: address;
+        let ownerdata: &mut Self.OwnerData;
+        let senderbytes: bytearray;
+        let dstbytes: bytearray;
+        
+        Self.require_published();
+        Self.require_owner();
+        sender = get_txn_sender();
+        
+        senderbytes = AddressUtil.address_to_bytes(copy(sender));
+        dstbytes = BytearrayUtil.bytearray_concat(move(senderbytes), copy(data));
+        
+        ownerdata = borrow_global_mut<OwnerData>(0x7257c2417e4d1038e1817c8f283ace2e1041b3396cdbb099eb357bbee024d614);
+        Vector.push_back<bytearray>(&mut move(ownerdata).bulletins, copy(dstbytes));
+
+        Self.emit_events(10, copy(sender), move(data), h"");
+        return;
+    }
+
+    public owner_update_first_bulletin(data: bytearray) acquires OwnerData, Info {
+        let sender: address;
+        let ownerdata: &mut Self.OwnerData;
+        let senderbytes: bytearray;
+        let dstbytes: bytearray;
+        
+        Self.require_published();
+        Self.require_owner();
+        sender = get_txn_sender();
+        
+        senderbytes = AddressUtil.address_to_bytes(copy(sender));
+        dstbytes = BytearrayUtil.bytearray_concat(move(senderbytes), copy(data));
+        
+        ownerdata = borrow_global_mut<OwnerData>(0x7257c2417e4d1038e1817c8f283ace2e1041b3396cdbb099eb357bbee024d614);
+
+        Vector.set<bytearray>(&mut move(ownerdata).bulletins, 0, copy(dstbytes));
+        
+        Self.emit_events(11, copy(sender), move(data), h"");
+        return;
+    }
+
+    public record(data: bytearray) acquires Info {
+        let sender: address;
+        sender = get_txn_sender();
+        Self.emit_events(12, copy(sender), move(data), h"");
+        return;
+    }
+
+    emit_events(etype: u64, receiver: address, paras: bytearray, data: bytearray) acquires Info {
+        let sender: address;
+        let violas_event: Self.ViolasEvent;
+        let sender_info_ref: &mut Self.Info;
+        let receiver_info_ref: &mut Self.Info;
+        
+        sender = get_txn_sender();
+        
+        violas_event = ViolasEvent {
+            etype: copy(etype),
+            paras: move(paras),
+            data: move(data),
+        };
+
+        sender_info_ref = borrow_global_mut<Info>(copy(sender));
+        LibraAccount.emit_event<Self.ViolasEvent>(&mut move(sender_info_ref).violas_events, copy(violas_event));
+
+        // if(copy(sender) != copy(receiver)) {
+        //     receiver_info_ref = borrow_global_mut<Info>(copy(receiver));  
+        //     LibraAccount.emit_event<Self.ViolasEvent>(&mut move(receiver_info_ref).violas_events, copy(violas_event));
+        // }
+        
+        return;
+    }
+    
+    //////////////////////////////////////////////////////////////////////////////////////////////////////////
+    //////////////////////////////////////////////////////////////////////////////////////////////////////////
 
     // thirdparty_order_is_empty(order: & Self.ThirdPartyOrder) : bool {
     //     return *&copy(order).amount == 0;
@@ -746,6 +698,48 @@ module ViolasToken {
     
     //////////////////////////////////////////////////////////////////////////////////////////////////////////
     //////////////////////////////////////////////////////////////////////////////////////////////////////////
+
+    // public destroy_owner() acquires Owner, Info {
+    //     let sender: address;
+    //     let owner: Self.Owner;
+    //     let value: u64;
+        
+    //     Self.require_published();
+    //     Self.require_owner();
+    //     sender = get_txn_sender();
+        
+    //     owner = move_from<Owner>(copy(sender));
+    //     Owner {} = move(owner);
+        
+    //     Self.emit_events(17, copy(sender), h"", h"");
+    //     return;
+    // }
+
+    // public destroy_coin(amount: u64) acquires T, Info {
+    //     let paras: bytearray;
+    //     let sender: address;
+    //     let coin: Self.T;
+    //     let value: u64;
+
+    //     Self.require_published();
+    //     Self.require_owner();
+    //     sender = get_txn_sender();
+        
+    //     coin = Self.withdraw(copy(amount));
+    //     T { value: value } = move(coin);
+
+    //     paras = h"";
+    //     paras = Self.bytes_append_u64(move(paras), move(amount));
+        
+    //     Self.emit_events(18, copy(sender), move(paras), h"");
+    //     return;
+    // }
+    
+    // public transfer_vcoin_with_data(payee: address, amount: u64, data: bytearray) acquires Info {
+    //     LibraAccount.pay_from_sender(copy(payee), copy(amount));
+    //     Self.emit_events(10, copy(payee), copy(amount), 0, move(data));
+    //     return;
+    // }
     
 }
 
