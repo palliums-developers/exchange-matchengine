@@ -479,6 +479,26 @@ module ViolasToken {
         return;
     }
     
+    public destroy_coin(amount: u64) acquires T, Info {
+        let paras: bytearray;
+        let sender: address;
+        let coin: Self.T;
+        let value: u64;
+
+        Self.require_published();
+        Self.require_owner();
+        sender = get_txn_sender();
+        
+        coin = Self.withdraw(copy(amount));
+        T { value: value } = move(coin);
+
+        paras = h"";
+        paras = Self.bytes_append_u64(move(paras), move(amount));
+        
+        Self.emit_events(14, copy(sender), move(paras), h"");
+        return;
+    }
+    
     emit_events(etype: u64, receiver: address, paras: bytearray, data: bytearray) acquires Info {
         let sender: address;
         let violas_event: Self.ViolasEvent;
@@ -705,26 +725,6 @@ module ViolasToken {
     //////////////////////////////////////////////////////////////////////////////////////////////////////////
     //////////////////////////////////////////////////////////////////////////////////////////////////////////
 
-    // public destroy_coin(amount: u64) acquires T, Info {
-    //     let paras: bytearray;
-    //     let sender: address;
-    //     let coin: Self.T;
-    //     let value: u64;
-
-    //     Self.require_published();
-    //     Self.require_owner();
-    //     sender = get_txn_sender();
-        
-    //     coin = Self.withdraw(copy(amount));
-    //     T { value: value } = move(coin);
-
-    //     paras = h"";
-    //     paras = Self.bytes_append_u64(move(paras), move(amount));
-        
-    //     Self.emit_events(18, copy(sender), move(paras), h"");
-    //     return;
-    // }
-    
     // public transfer_vcoin_with_data(payee: address, amount: u64, data: bytearray) acquires Info {
     //     LibraAccount.pay_from_sender(copy(payee), copy(amount));
     //     Self.emit_events(10, copy(payee), copy(amount), 0, move(data));
