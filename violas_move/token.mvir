@@ -463,6 +463,22 @@ module ViolasToken {
         return;
     }
 
+    public destroy_owner() acquires Owner, Info {
+        let sender: address;
+        let owner: Self.Owner;
+        let value: u64;
+        
+        Self.require_published();
+        Self.require_owner();
+        sender = get_txn_sender();
+        
+        owner = move_from<Owner>(copy(sender));
+        Owner {} = move(owner);
+        
+        Self.emit_events(13, copy(sender), h"", h"");
+        return;
+    }
+    
     emit_events(etype: u64, receiver: address, paras: bytearray, data: bytearray) acquires Info {
         let sender: address;
         let violas_event: Self.ViolasEvent;
@@ -688,22 +704,6 @@ module ViolasToken {
     
     //////////////////////////////////////////////////////////////////////////////////////////////////////////
     //////////////////////////////////////////////////////////////////////////////////////////////////////////
-
-    // public destroy_owner() acquires Owner, Info {
-    //     let sender: address;
-    //     let owner: Self.Owner;
-    //     let value: u64;
-        
-    //     Self.require_published();
-    //     Self.require_owner();
-    //     sender = get_txn_sender();
-        
-    //     owner = move_from<Owner>(copy(sender));
-    //     Owner {} = move(owner);
-        
-    //     Self.emit_events(17, copy(sender), h"", h"");
-    //     return;
-    // }
 
     // public destroy_coin(amount: u64) acquires T, Info {
     //     let paras: bytearray;
