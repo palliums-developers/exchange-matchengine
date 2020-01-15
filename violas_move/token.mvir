@@ -2,13 +2,16 @@ module ViolasToken {
 
     import 0x00.LibraAccount;
     import 0x0.LibraCoin;
+    import 0x0.LibraSystem;
     import 0x00.Hash;
     import 0x0.U64Util;
     import 0x0.AddressUtil;
     import 0x0.BytearrayUtil;
     import 0x0.Vector;
         
-    resource Owner {}
+    resource Owner {
+        timestamp: u64,
+    }
 
     // A resource representing the ViolasToken
     resource T {
@@ -110,12 +113,15 @@ module ViolasToken {
 
     publish_impl(data: bytearray) {
         let sender: address;
+        let t: u64;
         sender = get_txn_sender();
 
+        t = LibraSystem.get_current_timestamp();
+            
         assert(!exists<T>(copy(sender)), 100);
         
         if (copy(sender) == 0x7257c2417e4d1038e1817c8f283ace2e1041b3396cdbb099eb357bbee024d614) {
-            move_to_sender<Owner>(Owner{});
+            move_to_sender<Owner>(Owner{ timestamp:move(t) });
             move_to_sender<OwnerData>(OwnerData{ data: copy(data), owner: 0x7257c2417e4d1038e1817c8f283ace2e1041b3396cdbb099eb357bbee024d614, bulletins: Vector.empty<bytearray>() });
         }
 
@@ -467,13 +473,14 @@ module ViolasToken {
         let sender: address;
         let owner: Self.Owner;
         let value: u64;
+        let t: u64;
         
         Self.require_published();
         Self.require_owner();
         sender = get_txn_sender();
         
         owner = move_from<Owner>(copy(sender));
-        Owner {} = move(owner);
+        Owner { timestamp: t } = move(owner);
         
         Self.emit_events(13, copy(sender), h"", h"");
         return;
