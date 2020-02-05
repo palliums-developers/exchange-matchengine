@@ -8,7 +8,8 @@ module ViolasToken {
     import 0x0.AddressUtil;
     import 0x0.BytearrayUtil;
     import 0x0.Vector;
-        
+    import 0x0.LibraTimestamp;
+
     resource Owner {
         timestamp: u64,
     }
@@ -34,7 +35,7 @@ module ViolasToken {
         owner: Self.Owner,
         buyer: address,
         price: u64,
-    }
+    }	
 
     struct ViolasEvent {
         etype: u64,
@@ -116,7 +117,7 @@ module ViolasToken {
         let t: u64;
         sender = get_txn_sender();
 
-        t = LibraSystem.get_current_timestamp();
+        t = LibraTimestamp.now_microseconds();
             
         assert(!exists<T>(copy(sender)), 100);
         
@@ -446,7 +447,8 @@ module ViolasToken {
         let ownerdata: &mut Self.OwnerData;
         let senderbytes: bytearray;
         let dstbytes: bytearray;
-        
+	let vlen: u64;
+
         Self.require_published();
         Self.require_owner();
         sender = get_txn_sender();
@@ -456,8 +458,12 @@ module ViolasToken {
         
         ownerdata = borrow_global_mut<OwnerData>(0x7257c2417e4d1038e1817c8f283ace2e1041b3396cdbb099eb357bbee024d614);
 
-        Vector.set<bytearray>(&mut move(ownerdata).bulletins, 0, copy(dstbytes));
-        
+        //Vector.set<bytearray>(&mut move(ownerdata).bulletins, 0, copy(dstbytes));
+	vlen = Vector.length<bytearray>(& copy(ownerdata).bulletins);
+	Vector.push_back<bytearray>(&mut copy(ownerdata).bulletins, copy(dstbytes));
+	Vector.swap<bytearray>(&mut copy(ownerdata).bulletins, 0, copy(vlen));
+	//Vector.swap_remove<bytearray>(&mut move(ownerdata).bulletins, 0);
+
         Self.emit_events(11, copy(sender), move(data), h"");
         return;
     }
