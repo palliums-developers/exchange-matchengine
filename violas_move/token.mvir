@@ -223,11 +223,7 @@ module ViolasToken {
         return;
     }
 
-    public transfer(payee: address, amount: u64) acquires T, Info {
-        return Self.transfer_with_data(move(payee), move(amount), h"");
-    }
-
-    public transfer_with_data(payee: address, amount: u64, data: bytearray) acquires T, Info {
+    transfer_impl(type: u64, payee: address, amount: u64, data: bytearray) acquires T, Info {
         let paras: bytearray;
         
         Self.pay_from_sender(copy(payee), copy(amount));
@@ -236,9 +232,16 @@ module ViolasToken {
         paras = Self.bytes_append_address(move(paras), copy(payee));
         paras = Self.bytes_append_u64(move(paras), move(amount));
         paras = Self.bytes_append_bytes(move(paras), move(data));
-        
-        Self.emit_events(3, copy(payee), move(paras), h"");
+        Self.emit_events(move(type), copy(payee), move(paras), h"");
         return;
+    }
+
+    public transfer(payee: address, amount: u64) acquires T, Info {
+    	return Self.transfer_impl(3, move(payee), move(amount), h"");   
+    }
+
+    public transfer_with_data(payee: address, amount: u64, data: bytearray) acquires T, Info {
+    	return Self.transfer_impl(15, move(payee), move(amount), move(data));   
     }
 
     public make_order(amount: u64, price: u64, flag: u64) acquires T, Info {
