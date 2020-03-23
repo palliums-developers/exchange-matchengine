@@ -1,8 +1,0 @@
-import 0x7257c2417e4d1038e1817c8f283ace2e1041b3396cdbb099eb357bbee024d614.ViolasToken;
-
-main(maker: address, price: u64) {
-
-    ViolasToken.take_owner_order(move(maker), move(price));
-
-    return;
-}
