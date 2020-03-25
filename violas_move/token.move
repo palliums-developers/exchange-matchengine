@@ -134,11 +134,12 @@ module ViolasToken {
 	require_published();
 	require_supervisor();
 	let tokeninfos = borrow_global_mut<TokenInfoStore>(contract_address());
+	let len = Vector::length(&tokeninfos.tokens);
 	Vector::push_back(&mut tokeninfos.tokens, TokenInfo { owner: owner, data: *&tokendata, bulletin_first: Vector::empty(), bulletins: Vector::empty() });
 	
 	let v = AddressUtil::address_to_bytes(owner);
 	Vector::append(&mut v, tokendata);
-	emit_events(1, v, Vector::empty());
+	emit_events(1, v, U64Util::u64_to_bytes(len));
     }
 
     public fun mint(tokenidx: u64, payee: address, amount: u64, data: vector<u8>) acquires TokenInfoStore, Tokens, UserInfo {
@@ -172,8 +173,8 @@ module ViolasToken {
 	let t = withdraw(idxa, amounta);
 	let info = borrow_global_mut<UserInfo>(Transaction::sender());
 	let len = Vector::length(&info.orders);
-	let idx = len - 1;
-	
+	let idx = len;
+
 	Vector::push_back(&mut info.orders, Order { t: t, peer_token_idx: idxb, peer_token_amount: amountb});	    
 	
 	if(!Vector::is_empty(&info.order_freeslots)) {
