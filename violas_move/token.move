@@ -52,7 +52,7 @@ module ViolasToken {
 	data:  vector<u8>,
     }
 
-    fun token_address() : address {
+    fun contract_address() : address {
 	0x7257c2417e4d1038e1817c8f283ace2e1041b3396cdbb099eb357bbee024d61
     }
     
@@ -65,7 +65,7 @@ module ViolasToken {
     }
     
     fun require_owner(tokenidx: u64) acquires TokenInfoStore {
-	let tokeninfos = borrow_global_mut<TokenInfoStore>(token_address());
+	let tokeninfos = borrow_global_mut<TokenInfoStore>(contract_address());
 	let len = Vector::length(&tokeninfos.tokens);
 	Transaction::assert(tokenidx < len , 103);
 	let token = Vector::borrow(&tokeninfos.tokens, tokenidx);
@@ -73,7 +73,7 @@ module ViolasToken {
     }
 
     fun extend_user_tokens(payee: address) acquires TokenInfoStore, Tokens {
-	let tokeninfos = borrow_global_mut<TokenInfoStore>(token_address());
+	let tokeninfos = borrow_global_mut<TokenInfoStore>(contract_address());
 	let tokencnt = Vector::length(&tokeninfos.tokens);
 	let tokens = borrow_global_mut<Tokens>(payee);
 	let usercnt = Vector::length(&tokens.ts);
@@ -122,7 +122,7 @@ module ViolasToken {
 	    order_freeslots: Vector::empty(),
 	});
 
-	if(sender == token_address()) {
+	if(sender == contract_address()) {
 	    move_to_sender<Supervisor>(Supervisor{});
 	    move_to_sender<TokenInfoStore>(TokenInfoStore{ tokens: Vector::empty() });
 	};
@@ -133,7 +133,7 @@ module ViolasToken {
     public fun create_token(owner: address, tokendata: vector<u8>) acquires TokenInfoStore, UserInfo {
 	require_published();
 	require_supervisor();
-	let tokeninfos = borrow_global_mut<TokenInfoStore>(token_address());
+	let tokeninfos = borrow_global_mut<TokenInfoStore>(contract_address());
 	Vector::push_back(&mut tokeninfos.tokens, TokenInfo { owner: owner, data: *&tokendata, bulletin_first: Vector::empty(), bulletins: Vector::empty() });
 	let v = AddressUtil::address_to_bytes(owner);
 	Vector::append(&mut v, tokendata);
@@ -251,7 +251,7 @@ module ViolasToken {
     public fun move_owner(tokenidx: u64, new_owner: address, data: vector<u8>) acquires TokenInfoStore, UserInfo {
 	require_published();
 	require_owner(tokenidx);
-	let tokeninfos = borrow_global_mut<TokenInfoStore>(token_address());
+	let tokeninfos = borrow_global_mut<TokenInfoStore>(contract_address());
 	let token = Vector::borrow_mut(&mut tokeninfos.tokens, tokenidx);
 	token.owner = new_owner;
 
@@ -264,7 +264,7 @@ module ViolasToken {
     public fun update_first_bulletin(tokenidx: u64, data: vector<u8>) acquires TokenInfoStore, UserInfo {
 	require_published();
 	require_owner(tokenidx);
-	let tokeninfos = borrow_global_mut<TokenInfoStore>(token_address());
+	let tokeninfos = borrow_global_mut<TokenInfoStore>(contract_address());
 	let token = Vector::borrow_mut(&mut tokeninfos.tokens, tokenidx);
 	token.bulletin_first = *&data;
 	
@@ -276,7 +276,7 @@ module ViolasToken {
     public fun append_bulletin(tokenidx: u64, data: vector<u8>) acquires TokenInfoStore, UserInfo {
 	require_published();
 	require_owner(tokenidx);
-	let tokeninfos = borrow_global_mut<TokenInfoStore>(token_address());
+	let tokeninfos = borrow_global_mut<TokenInfoStore>(contract_address());
 	let token = Vector::borrow_mut(&mut tokeninfos.tokens, tokenidx);
 	Vector::push_back(&mut token.bulletins, *&data);
 
@@ -288,7 +288,7 @@ module ViolasToken {
     public fun destroy_owner(tokenidx: u64, data: vector<u8>) acquires TokenInfoStore, UserInfo{
 	require_published();
 	require_owner(tokenidx);
-	let tokeninfos = borrow_global_mut<TokenInfoStore>(token_address());
+	let tokeninfos = borrow_global_mut<TokenInfoStore>(contract_address());
 	let token = Vector::borrow_mut(&mut tokeninfos.tokens, tokenidx);
 	token.owner = 0x0;
 
