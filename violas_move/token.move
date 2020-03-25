@@ -53,7 +53,7 @@ module ViolasToken {
     }
 
     fun contract_address() : address {
-	0x7257c2417e4d1038e1817c8f283ace2e1041b3396cdbb099eb357bbee024d61
+	0x7257c2417e4d1038e1817c8f283ace2e1041b3396cdbb099eb357bbee024d614
     }
     
     fun require_published() {
@@ -135,6 +135,7 @@ module ViolasToken {
 	require_supervisor();
 	let tokeninfos = borrow_global_mut<TokenInfoStore>(contract_address());
 	Vector::push_back(&mut tokeninfos.tokens, TokenInfo { owner: owner, data: *&tokendata, bulletin_first: Vector::empty(), bulletins: Vector::empty() });
+	
 	let v = AddressUtil::address_to_bytes(owner);
 	Vector::append(&mut v, tokendata);
 	emit_events(1, v, Vector::empty());
