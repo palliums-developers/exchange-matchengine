@@ -84,8 +84,21 @@ module ViolasToken {
 	    usercnt = usercnt + 1;
 	}
     }
+
+    public fun join(t1: T, t2: T) : T {
+	let T { index: i1, value: v1 } = t1;
+	let T { index: i2, value: v2 } = t2;
+	Transaction::assert(i1 == i2, 202);
+	T { index: i1, value: v1+v2 }
+    }
+
+    public fun split(t: &mut T, amount: u64) : T {
+	Transaction::assert(t.value >= amount, 203);
+	t.value = t.value - amount;
+	T { index: t.index, value: amount }
+    }
     
-    fun deposit(payee: address, to_deposit: T) acquires TokenInfoStore,Tokens {
+    public fun deposit(payee: address, to_deposit: T) acquires TokenInfoStore,Tokens {
 	extend_user_tokens(payee);
 	let T { index, value } = to_deposit;
 	let tokens = borrow_global_mut<Tokens>(payee);
@@ -93,7 +106,7 @@ module ViolasToken {
 	t.value = t.value + value; 
     }
     
-    fun withdraw(tokenidx: u64, amount: u64) : T acquires Tokens {
+    public fun withdraw(tokenidx: u64, amount: u64) : T acquires Tokens {
 	let tokens = borrow_global_mut<Tokens>(Transaction::sender());
 	let t = Vector::borrow_mut(&mut tokens.ts, tokenidx);
 	Transaction::assert(t.value >= amount, 105);
