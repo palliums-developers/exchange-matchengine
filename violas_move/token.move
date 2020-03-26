@@ -110,6 +110,19 @@ module ViolasToken {
 	LibraAccount::emit_event<ViolasEvent>(&mut info.violas_events, ViolasEvent{ etype: etype, paras: paras, data: data});
     }
 
+    public fun balance(tokenidx: u64) : u64 acquires Tokens {
+	let tokens = borrow_global<Tokens>(Transaction::sender());
+	if(tokenidx < Vector::length(&tokens.ts)) {
+	    let t = Vector::borrow(& tokens.ts, tokenidx);
+	    t.value
+	} else { 0 }
+    }
+
+    public fun token_count() : u64 acquires TokenInfoStore {
+	let tokeninfos = borrow_global<TokenInfoStore>(contract_address());
+	Vector::length(&tokeninfos.tokens)
+    }
+    
     public fun publish(userdata: vector<u8>) acquires UserInfo {
 	let sender = Transaction::sender();
 	Transaction::assert(!exists<Tokens>(sender), 106);
@@ -130,7 +143,7 @@ module ViolasToken {
 	emit_events(0, userdata, Vector::empty());
     }
 
-    public fun create_token(owner: address, tokendata: vector<u8>) acquires TokenInfoStore, UserInfo {
+    public fun create_token(owner: address, tokendata: vector<u8>) : u64 acquires TokenInfoStore, UserInfo {
 	require_published();
 	require_supervisor();
 	let tokeninfos = borrow_global_mut<TokenInfoStore>(contract_address());
@@ -140,6 +153,7 @@ module ViolasToken {
 	let v = AddressUtil::address_to_bytes(owner);
 	Vector::append(&mut v, tokendata);
 	emit_events(1, v, U64Util::u64_to_bytes(len));
+	len
     }
 
     public fun mint(tokenidx: u64, payee: address, amount: u64, data: vector<u8>) acquires TokenInfoStore, Tokens, UserInfo {
@@ -166,7 +180,7 @@ module ViolasToken {
 	emit_events(3, v, Vector::empty());
     }
 
-    public fun make_order(idxa: u64, amounta: u64, idxb: u64, amountb: u64, data: vector<u8>) acquires Tokens, UserInfo {
+    public fun make_order(idxa: u64, amounta: u64, idxb: u64, amountb: u64, data: vector<u8>) : u64 acquires Tokens, UserInfo {
 	require_published();
 	Transaction::assert(amounta > 0, 201);
 
@@ -189,6 +203,8 @@ module ViolasToken {
 	Vector::append(&mut v, U64Util::u64_to_bytes(amountb));
 	Vector::append(&mut v, data);
 	emit_events(4, v, U64Util::u64_to_bytes(idx));
+
+	idx
     }
 
     public fun cancel_order(orderidx: u64, idxa: u64, amounta: u64, idxb: u64, amountb: u64, data: vector<u8>) acquires TokenInfoStore,Tokens, UserInfo {
