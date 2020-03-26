@@ -37,6 +37,7 @@ module ViolasToken {
 
     resource struct TokenInfo {
 	owner: address,
+	total_supply: u64,
 	data: vector<u8>,
 	bulletin_first: vector<u8>,
 	bulletins: vector<vector<u8>>,
@@ -122,6 +123,12 @@ module ViolasToken {
 	let tokeninfos = borrow_global<TokenInfoStore>(contract_address());
 	Vector::length(&tokeninfos.tokens)
     }
+
+    public fun total_supply(tokenidx: u64) : u64 acquires TokenInfoStore {
+	let tokeninfos = borrow_global<TokenInfoStore>(contract_address());
+	let token = Vector::borrow(& tokeninfos.tokens, tokenidx);
+	token.total_supply
+    }
     
     public fun publish(userdata: vector<u8>) acquires UserInfo {
 	let sender = Transaction::sender();
@@ -148,7 +155,7 @@ module ViolasToken {
 	require_supervisor();
 	let tokeninfos = borrow_global_mut<TokenInfoStore>(contract_address());
 	let len = Vector::length(&tokeninfos.tokens);
-	Vector::push_back(&mut tokeninfos.tokens, TokenInfo { owner: owner, data: *&tokendata, bulletin_first: Vector::empty(), bulletins: Vector::empty() });
+	Vector::push_back(&mut tokeninfos.tokens, TokenInfo { owner: owner, total_supply: 0, data: *&tokendata, bulletin_first: Vector::empty(), bulletins: Vector::empty() });
 	
 	let v = AddressUtil::address_to_bytes(owner);
 	Vector::append(&mut v, tokendata);
@@ -161,6 +168,10 @@ module ViolasToken {
 	require_owner(tokenidx);
 	let t = T{ index: tokenidx, value: amount };
 	deposit(payee, t);
+
+	let tokeninfos = borrow_global_mut<TokenInfoStore>(contract_address());
+	let token = Vector::borrow_mut(&mut tokeninfos.tokens, tokenidx);
+	token.total_supply = token.total_supply + amount;
 
 	let v = U64Util::u64_to_bytes(tokenidx);
 	Vector::append(&mut v, AddressUtil::address_to_bytes(payee));
