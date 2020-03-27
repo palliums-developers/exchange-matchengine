@@ -127,6 +127,10 @@ module ViolasToken {
     public fun zero(tokenidx: u64) : T {
 	T { index: tokenidx, value: 0 }
     }
+
+    public fun value(coin_ref: &T): u64 {
+    	coin_ref.value
+    }
     
     public fun balance(tokenidx: u64) : u64 acquires Tokens {
 	let tokens = borrow_global<Tokens>(Transaction::sender());
@@ -358,9 +362,5 @@ module ViolasToken {
 	require_published();
 	emit_events(12, data, Vector::empty());
     }
-
-    // fun value(coin_ref: &T): u64 {
-    // 	coin_ref.value
-    // }
 }
 
