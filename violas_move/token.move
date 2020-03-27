@@ -92,6 +92,12 @@ module ViolasToken {
 	T { index: i1, value: v1+v2 }
     }
 
+    public fun join2(t1: &mut T, t2: T) {
+	let T { index: i2, value: v2 } = t2;
+	Transaction::assert(t1.index == i2, 202);
+	t1.value = t1.value + v2;
+    }
+    
     public fun split(t: &mut T, amount: u64) : T {
 	Transaction::assert(t.value >= amount, 203);
 	t.value = t.value - amount;
