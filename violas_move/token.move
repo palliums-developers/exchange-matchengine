@@ -124,6 +124,10 @@ module ViolasToken {
 	LibraAccount::emit_event<ViolasEvent>(&mut info.violas_events, ViolasEvent{ etype: etype, paras: paras, data: data});
     }
 
+    public fun zero(tokenidx: u64) : T {
+	T { index: tokenidx, value: 0 }
+    }
+    
     public fun balance(tokenidx: u64) : u64 acquires Tokens {
 	let tokens = borrow_global<Tokens>(Transaction::sender());
 	if(tokenidx < Vector::length(&tokens.ts)) {
