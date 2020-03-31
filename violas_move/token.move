@@ -1,4 +1,4 @@
-address 0x7257c2417e4d1038e1817c8f283ace2e1041b3396cdbb099eb357bbee024d614:
+address 0x7257c2417e4d1038e1817c8f283ace2e:
 
 module ViolasToken {
     use 0x0::LibraAccount;
@@ -54,7 +54,7 @@ module ViolasToken {
     }
 
     fun contract_address() : address {
-	0x7257c2417e4d1038e1817c8f283ace2e1041b3396cdbb099eb357bbee024d614
+	0x7257c2417e4d1038e1817c8f283ace2e
     }
     
     fun require_published() {
@@ -218,91 +218,91 @@ module ViolasToken {
 	emit_events(3, v, Vector::empty());
     }
 
-    public fun make_order(idxa: u64, amounta: u64, idxb: u64, amountb: u64, data: vector<u8>) : u64 acquires Tokens, UserInfo {
-	require_published();
-	Transaction::assert(amounta > 0, 201);
+    // public fun make_order(idxa: u64, amounta: u64, idxb: u64, amountb: u64, data: vector<u8>) : u64 acquires Tokens, UserInfo {
+    // 	require_published();
+    // 	Transaction::assert(amounta > 0, 201);
 
-	let t = withdraw(idxa, amounta);
-	let info = borrow_global_mut<UserInfo>(Transaction::sender());
-	let len = Vector::length(&info.orders);
-	let idx = len;
+    // 	let t = withdraw(idxa, amounta);
+    // 	let info = borrow_global_mut<UserInfo>(Transaction::sender());
+    // 	let len = Vector::length(&info.orders);
+    // 	let idx = len;
 
-	Vector::push_back(&mut info.orders, Order { t: t, peer_token_idx: idxb, peer_token_amount: amountb});	    
+    // 	Vector::push_back(&mut info.orders, Order { t: t, peer_token_idx: idxb, peer_token_amount: amountb});	    
 	
-	if(!Vector::is_empty(&info.order_freeslots)) {
-	    idx = Vector::pop_back(&mut info.order_freeslots);
-	    let order = Vector::swap_remove(&mut info.orders, idx);
-	    let Order { t: T { index:_, value:_ }, peer_token_idx:_, peer_token_amount:_ } = order;
-	};
+    // 	if(!Vector::is_empty(&info.order_freeslots)) {
+    // 	    idx = Vector::pop_back(&mut info.order_freeslots);
+    // 	    let order = Vector::swap_remove(&mut info.orders, idx);
+    // 	    let Order { t: T { index:_, value:_ }, peer_token_idx:_, peer_token_amount:_ } = order;
+    // 	};
 	
-	let v = U64Util::u64_to_bytes(idxa);
-	Vector::append(&mut v, U64Util::u64_to_bytes(amounta));
-	Vector::append(&mut v, U64Util::u64_to_bytes(idxb));
-	Vector::append(&mut v, U64Util::u64_to_bytes(amountb));
-	Vector::append(&mut v, data);
-	emit_events(4, v, U64Util::u64_to_bytes(idx));
+    // 	let v = U64Util::u64_to_bytes(idxa);
+    // 	Vector::append(&mut v, U64Util::u64_to_bytes(amounta));
+    // 	Vector::append(&mut v, U64Util::u64_to_bytes(idxb));
+    // 	Vector::append(&mut v, U64Util::u64_to_bytes(amountb));
+    // 	Vector::append(&mut v, data);
+    // 	emit_events(4, v, U64Util::u64_to_bytes(idx));
 
-	idx
-    }
+    // 	idx
+    // }
 
-    public fun cancel_order(orderidx: u64, idxa: u64, amounta: u64, idxb: u64, amountb: u64, data: vector<u8>) acquires TokenInfoStore,Tokens, UserInfo {
-	require_published();
-	let info = borrow_global_mut<UserInfo>(Transaction::sender());
+    // public fun cancel_order(orderidx: u64, idxa: u64, amounta: u64, idxb: u64, amountb: u64, data: vector<u8>) acquires TokenInfoStore,Tokens, UserInfo {
+    // 	require_published();
+    // 	let info = borrow_global_mut<UserInfo>(Transaction::sender());
 	
-	Vector::push_back(&mut info.orders, Order { t: T{ index: 0, value: 0}, peer_token_idx: 0, peer_token_amount: 0});	    
-	Vector::push_back(&mut info.order_freeslots, orderidx);
-	let order = Vector::swap_remove(&mut info.orders, orderidx);
+    // 	Vector::push_back(&mut info.orders, Order { t: T{ index: 0, value: 0}, peer_token_idx: 0, peer_token_amount: 0});	    
+    // 	Vector::push_back(&mut info.order_freeslots, orderidx);
+    // 	let order = Vector::swap_remove(&mut info.orders, orderidx);
 	
-	Transaction::assert(order.t.index == idxa, 107);
-	Transaction::assert(order.t.value == amounta, 108);
-	Transaction::assert(order.peer_token_idx == idxb, 109);
-	Transaction::assert(order.peer_token_amount == amountb, 110);
+    // 	Transaction::assert(order.t.index == idxa, 107);
+    // 	Transaction::assert(order.t.value == amounta, 108);
+    // 	Transaction::assert(order.peer_token_idx == idxb, 109);
+    // 	Transaction::assert(order.peer_token_amount == amountb, 110);
 	
-	let Order { t: t, peer_token_idx:_, peer_token_amount:_ } = order;
-	deposit(Transaction::sender(), t);
+    // 	let Order { t: t, peer_token_idx:_, peer_token_amount:_ } = order;
+    // 	deposit(Transaction::sender(), t);
 	
-	let v = U64Util::u64_to_bytes(idxa);
-	Vector::append(&mut v, U64Util::u64_to_bytes(amounta));
-	Vector::append(&mut v, U64Util::u64_to_bytes(idxb));
-	Vector::append(&mut v, U64Util::u64_to_bytes(amountb));
-	Vector::append(&mut v, data);
-	emit_events(5, v, Vector::empty());
-    }
+    // 	let v = U64Util::u64_to_bytes(idxa);
+    // 	Vector::append(&mut v, U64Util::u64_to_bytes(amounta));
+    // 	Vector::append(&mut v, U64Util::u64_to_bytes(idxb));
+    // 	Vector::append(&mut v, U64Util::u64_to_bytes(amountb));
+    // 	Vector::append(&mut v, data);
+    // 	emit_events(5, v, Vector::empty());
+    // }
     
-    public fun take_order(maker: address, orderidx: u64, idxa: u64, amounta: u64, idxb: u64, amountb: u64, data: vector<u8>) acquires TokenInfoStore, Tokens, UserInfo {
-	require_published();
-	let info = borrow_global_mut<UserInfo>(maker);
-	let len = Vector::length(&info.orders);
-	Vector::push_back(&mut info.orders, Order { t: T {index: idxa, value: 0}, peer_token_idx: idxb, peer_token_amount: amountb });
+    // public fun take_order(maker: address, orderidx: u64, idxa: u64, amounta: u64, idxb: u64, amountb: u64, data: vector<u8>) acquires TokenInfoStore, Tokens, UserInfo {
+    // 	require_published();
+    // 	let info = borrow_global_mut<UserInfo>(maker);
+    // 	let len = Vector::length(&info.orders);
+    // 	Vector::push_back(&mut info.orders, Order { t: T {index: idxa, value: 0}, peer_token_idx: idxb, peer_token_amount: amountb });
 
-	let order = Vector::swap_remove(&mut info.orders, orderidx);
+    // 	let order = Vector::swap_remove(&mut info.orders, orderidx);
 	
-	Transaction::assert(order.t.index == idxa, 111);
-	Transaction::assert(order.t.value == amounta, 112);
-	Transaction::assert(order.peer_token_idx == idxb, 113);
-	Transaction::assert(order.peer_token_amount == amountb, 114);
+    // 	Transaction::assert(order.t.index == idxa, 111);
+    // 	Transaction::assert(order.t.value == amounta, 112);
+    // 	Transaction::assert(order.peer_token_idx == idxb, 113);
+    // 	Transaction::assert(order.peer_token_amount == amountb, 114);
 
-	pay_from_sender(idxb, maker, amountb);
-	let Order { t: t, peer_token_idx:_, peer_token_amount:_ } = order;
-	deposit(Transaction::sender(), t );
+    // 	pay_from_sender(idxb, maker, amountb);
+    // 	let Order { t: t, peer_token_idx:_, peer_token_amount:_ } = order;
+    // 	deposit(Transaction::sender(), t );
 
 	
-	if(len == orderidx+1) {
-	    let o = Vector::pop_back(&mut info.orders);
-	    let Order { t: T { index:_, value:_ }, peer_token_idx:_, peer_token_amount:_ } = o;
-	} else {
-	    Vector::push_back(&mut info.order_freeslots, orderidx);
-	};
+    // 	if(len == orderidx+1) {
+    // 	    let o = Vector::pop_back(&mut info.orders);
+    // 	    let Order { t: T { index:_, value:_ }, peer_token_idx:_, peer_token_amount:_ } = o;
+    // 	} else {
+    // 	    Vector::push_back(&mut info.order_freeslots, orderidx);
+    // 	};
 
-	let v = AddressUtil::address_to_bytes(maker);
-	Vector::append(&mut v, U64Util::u64_to_bytes(orderidx));
-	Vector::append(&mut v, U64Util::u64_to_bytes(idxa));
-	Vector::append(&mut v, U64Util::u64_to_bytes(amounta));
-	Vector::append(&mut v, U64Util::u64_to_bytes(idxb));
-	Vector::append(&mut v, U64Util::u64_to_bytes(amountb));
-	Vector::append(&mut v, data);
-	emit_events(6, v, Vector::empty());
-    }
+    // 	let v = AddressUtil::address_to_bytes(maker);
+    // 	Vector::append(&mut v, U64Util::u64_to_bytes(orderidx));
+    // 	Vector::append(&mut v, U64Util::u64_to_bytes(idxa));
+    // 	Vector::append(&mut v, U64Util::u64_to_bytes(amounta));
+    // 	Vector::append(&mut v, U64Util::u64_to_bytes(idxb));
+    // 	Vector::append(&mut v, U64Util::u64_to_bytes(amountb));
+    // 	Vector::append(&mut v, data);
+    // 	emit_events(6, v, Vector::empty());
+    // }
     
     public fun move_owner(tokenidx: u64, new_owner: address, data: vector<u8>) acquires TokenInfoStore, UserInfo {
 	require_published();
@@ -317,56 +317,56 @@ module ViolasToken {
 	emit_events(7, v, Vector::empty());
     }
 
-    public fun update_first_bulletin(tokenidx: u64, data: vector<u8>) acquires TokenInfoStore, UserInfo {
-	require_published();
-	require_owner(tokenidx);
-	let tokeninfos = borrow_global_mut<TokenInfoStore>(contract_address());
-	let token = Vector::borrow_mut(&mut tokeninfos.tokens, tokenidx);
-	token.bulletin_first = *&data;
+    // public fun update_first_bulletin(tokenidx: u64, data: vector<u8>) acquires TokenInfoStore, UserInfo {
+    // 	require_published();
+    // 	require_owner(tokenidx);
+    // 	let tokeninfos = borrow_global_mut<TokenInfoStore>(contract_address());
+    // 	let token = Vector::borrow_mut(&mut tokeninfos.tokens, tokenidx);
+    // 	token.bulletin_first = *&data;
 	
-	let v = U64Util::u64_to_bytes(tokenidx);
-	Vector::append(&mut v, data);
-	emit_events(8, v, Vector::empty());
-    }
+    // 	let v = U64Util::u64_to_bytes(tokenidx);
+    // 	Vector::append(&mut v, data);
+    // 	emit_events(8, v, Vector::empty());
+    // }
 
-    public fun append_bulletin(tokenidx: u64, data: vector<u8>) acquires TokenInfoStore, UserInfo {
-	require_published();
-	require_owner(tokenidx);
-	let tokeninfos = borrow_global_mut<TokenInfoStore>(contract_address());
-	let token = Vector::borrow_mut(&mut tokeninfos.tokens, tokenidx);
-	Vector::push_back(&mut token.bulletins, *&data);
+    // public fun append_bulletin(tokenidx: u64, data: vector<u8>) acquires TokenInfoStore, UserInfo {
+    // 	require_published();
+    // 	require_owner(tokenidx);
+    // 	let tokeninfos = borrow_global_mut<TokenInfoStore>(contract_address());
+    // 	let token = Vector::borrow_mut(&mut tokeninfos.tokens, tokenidx);
+    // 	Vector::push_back(&mut token.bulletins, *&data);
 
-	let v = U64Util::u64_to_bytes(tokenidx);
-	Vector::append(&mut v, data);
-	emit_events(9, v, Vector::empty());
-    }
+    // 	let v = U64Util::u64_to_bytes(tokenidx);
+    // 	Vector::append(&mut v, data);
+    // 	emit_events(9, v, Vector::empty());
+    // }
 
-    public fun destroy_owner(tokenidx: u64, data: vector<u8>) acquires TokenInfoStore, UserInfo{
-	require_published();
-	require_owner(tokenidx);
-	let tokeninfos = borrow_global_mut<TokenInfoStore>(contract_address());
-	let token = Vector::borrow_mut(&mut tokeninfos.tokens, tokenidx);
-	token.owner = 0x0;
+    // public fun destroy_owner(tokenidx: u64, data: vector<u8>) acquires TokenInfoStore, UserInfo{
+    // 	require_published();
+    // 	require_owner(tokenidx);
+    // 	let tokeninfos = borrow_global_mut<TokenInfoStore>(contract_address());
+    // 	let token = Vector::borrow_mut(&mut tokeninfos.tokens, tokenidx);
+    // 	token.owner = 0x0;
 
-	let v = U64Util::u64_to_bytes(tokenidx);
-	Vector::append(&mut v, data);
-	emit_events(10, v, Vector::empty());
-    }
+    // 	let v = U64Util::u64_to_bytes(tokenidx);
+    // 	Vector::append(&mut v, data);
+    // 	emit_events(10, v, Vector::empty());
+    // }
     
-    public fun destroy_coin(tokenidx: u64, amount: u64, data: vector<u8>) acquires TokenInfoStore, Tokens, UserInfo{
-	require_published();
-	require_owner(tokenidx);
-	T { index: _, value: _ } = withdraw(tokenidx, amount);
+    // public fun destroy_coin(tokenidx: u64, amount: u64, data: vector<u8>) acquires TokenInfoStore, Tokens, UserInfo{
+    // 	require_published();
+    // 	require_owner(tokenidx);
+    // 	T { index: _, value: _ } = withdraw(tokenidx, amount);
 	
-	let v = U64Util::u64_to_bytes(tokenidx);
-	Vector::append(&mut v, U64Util::u64_to_bytes(amount));
-	Vector::append(&mut v, data);
-	emit_events(11, v, Vector::empty());
-    }
+    // 	let v = U64Util::u64_to_bytes(tokenidx);
+    // 	Vector::append(&mut v, U64Util::u64_to_bytes(amount));
+    // 	Vector::append(&mut v, data);
+    // 	emit_events(11, v, Vector::empty());
+    // }
 
-    public fun record(data: vector<u8>) acquires UserInfo {
-	require_published();
-	emit_events(12, data, Vector::empty());
-    }
+    // public fun record(data: vector<u8>) acquires UserInfo {
+    // 	require_published();
+    // 	emit_events(12, data, Vector::empty());
+    // }
 }
 
