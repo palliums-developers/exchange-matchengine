@@ -3,9 +3,8 @@ address 0x7257c2417e4d1038e1817c8f283ace2e:
 module ViolasToken {
     use 0x0::LibraAccount;
     use 0x0::Transaction;
-    use 0x0::U64Util;
-    use 0x0::AddressUtil;
     use 0x0::Vector;
+    use 0x0::LCS;
     // use 0x0::LibraTransactionTimeout;
     // use 0x0::LibraCoin;
     // use 0x0::Hash;
@@ -184,9 +183,9 @@ module ViolasToken {
 	let len = Vector::length(&tokeninfos.tokens);
 	Vector::push_back(&mut tokeninfos.tokens, TokenInfo { owner: owner, total_supply: 0, data: *&tokendata, bulletin_first: Vector::empty(), bulletins: Vector::empty() });
 	
-	let v = AddressUtil::address_to_bytes(owner);
+	let v = LCS::to_bytes(&owner);
 	Vector::append(&mut v, tokendata);
-	emit_events(1, v, U64Util::u64_to_bytes(len));
+	emit_events(1, v, LCS::to_bytes(&len));
 	len
     }
 
@@ -200,9 +199,9 @@ module ViolasToken {
 	let token = Vector::borrow_mut(&mut tokeninfos.tokens, tokenidx);
 	token.total_supply = token.total_supply + amount;
 
-	let v = U64Util::u64_to_bytes(tokenidx);
-	Vector::append(&mut v, AddressUtil::address_to_bytes(payee));
-	Vector::append(&mut v, U64Util::u64_to_bytes(amount));
+	let v = LCS::to_bytes(&tokenidx);
+	Vector::append(&mut v, LCS::to_bytes(&payee));
+	Vector::append(&mut v, LCS::to_bytes(&amount));
 	Vector::append(&mut v, data);
 	emit_events(2, v, Vector::empty());
     }
@@ -211,9 +210,9 @@ module ViolasToken {
 	require_published();
 	pay_from_sender(tokenidx, payee, amount);
 	
-	let v = U64Util::u64_to_bytes(tokenidx);
-	Vector::append(&mut v, AddressUtil::address_to_bytes(payee));
-	Vector::append(&mut v, U64Util::u64_to_bytes(amount));
+	let v = LCS::to_bytes(&tokenidx);
+	Vector::append(&mut v, LCS::to_bytes(&payee));
+	Vector::append(&mut v, LCS::to_bytes(&amount));
 	Vector::append(&mut v, data);
 	emit_events(3, v, Vector::empty());
     }
@@ -235,12 +234,12 @@ module ViolasToken {
     // 	    let Order { t: T { index:_, value:_ }, peer_token_idx:_, peer_token_amount:_ } = order;
     // 	};
 	
-    // 	let v = U64Util::u64_to_bytes(idxa);
-    // 	Vector::append(&mut v, U64Util::u64_to_bytes(amounta));
-    // 	Vector::append(&mut v, U64Util::u64_to_bytes(idxb));
-    // 	Vector::append(&mut v, U64Util::u64_to_bytes(amountb));
+    // 	let v = LCS::to_bytes(&idxa);
+    // 	Vector::append(&mut v, LCS::to_bytes(&amounta));
+    // 	Vector::append(&mut v, LCS::to_bytes(&idxb));
+    // 	Vector::append(&mut v, LCS::to_bytes(&amountb));
     // 	Vector::append(&mut v, data);
-    // 	emit_events(4, v, U64Util::u64_to_bytes(idx));
+    // 	emit_events(4, v, LCS::to_bytes(&idx));
 
     // 	idx
     // }
@@ -261,10 +260,10 @@ module ViolasToken {
     // 	let Order { t: t, peer_token_idx:_, peer_token_amount:_ } = order;
     // 	deposit(Transaction::sender(), t);
 	
-    // 	let v = U64Util::u64_to_bytes(idxa);
-    // 	Vector::append(&mut v, U64Util::u64_to_bytes(amounta));
-    // 	Vector::append(&mut v, U64Util::u64_to_bytes(idxb));
-    // 	Vector::append(&mut v, U64Util::u64_to_bytes(amountb));
+    // 	let v = LCS::to_bytes(&idxa);
+    // 	Vector::append(&mut v, LCS::to_bytes(&amounta));
+    // 	Vector::append(&mut v, LCS::to_bytes(&idxb));
+    // 	Vector::append(&mut v, LCS::to_bytes(&amountb));
     // 	Vector::append(&mut v, data);
     // 	emit_events(5, v, Vector::empty());
     // }
@@ -294,12 +293,12 @@ module ViolasToken {
     // 	    Vector::push_back(&mut info.order_freeslots, orderidx);
     // 	};
 
-    // 	let v = AddressUtil::address_to_bytes(maker);
-    // 	Vector::append(&mut v, U64Util::u64_to_bytes(orderidx));
-    // 	Vector::append(&mut v, U64Util::u64_to_bytes(idxa));
-    // 	Vector::append(&mut v, U64Util::u64_to_bytes(amounta));
-    // 	Vector::append(&mut v, U64Util::u64_to_bytes(idxb));
-    // 	Vector::append(&mut v, U64Util::u64_to_bytes(amountb));
+    // 	let v = LCS::to_bytes(&maker);
+    // 	Vector::append(&mut v, LCS::to_bytes(&orderidx));
+    // 	Vector::append(&mut v, LCS::to_bytes(&idxa));
+    // 	Vector::append(&mut v, LCS::to_bytes(&amounta));
+    // 	Vector::append(&mut v, LCS::to_bytes(&idxb));
+    // 	Vector::append(&mut v, LCS::to_bytes(&amountb));
     // 	Vector::append(&mut v, data);
     // 	emit_events(6, v, Vector::empty());
     // }
@@ -311,8 +310,8 @@ module ViolasToken {
 	let token = Vector::borrow_mut(&mut tokeninfos.tokens, tokenidx);
 	token.owner = new_owner;
 
-	let v = U64Util::u64_to_bytes(tokenidx);
-	Vector::append(&mut v, AddressUtil::address_to_bytes(new_owner));
+	let v = LCS::to_bytes(&tokenidx);
+	Vector::append(&mut v, LCS::to_bytes(&new_owner));
 	Vector::append(&mut v, data);
 	emit_events(7, v, Vector::empty());
     }
@@ -324,7 +323,7 @@ module ViolasToken {
     // 	let token = Vector::borrow_mut(&mut tokeninfos.tokens, tokenidx);
     // 	token.bulletin_first = *&data;
 	
-    // 	let v = U64Util::u64_to_bytes(tokenidx);
+    // 	let v = LCS::to_bytes(&tokenidx);
     // 	Vector::append(&mut v, data);
     // 	emit_events(8, v, Vector::empty());
     // }
@@ -336,7 +335,7 @@ module ViolasToken {
     // 	let token = Vector::borrow_mut(&mut tokeninfos.tokens, tokenidx);
     // 	Vector::push_back(&mut token.bulletins, *&data);
 
-    // 	let v = U64Util::u64_to_bytes(tokenidx);
+    // 	let v = LCS::to_bytes(&tokenidx);
     // 	Vector::append(&mut v, data);
     // 	emit_events(9, v, Vector::empty());
     // }
@@ -348,7 +347,7 @@ module ViolasToken {
     // 	let token = Vector::borrow_mut(&mut tokeninfos.tokens, tokenidx);
     // 	token.owner = 0x0;
 
-    // 	let v = U64Util::u64_to_bytes(tokenidx);
+    // 	let v = LCS::to_bytes(&tokenidx);
     // 	Vector::append(&mut v, data);
     // 	emit_events(10, v, Vector::empty());
     // }
@@ -358,8 +357,8 @@ module ViolasToken {
     // 	require_owner(tokenidx);
     // 	T { index: _, value: _ } = withdraw(tokenidx, amount);
 	
-    // 	let v = U64Util::u64_to_bytes(tokenidx);
-    // 	Vector::append(&mut v, U64Util::u64_to_bytes(amount));
+    // 	let v = LCS::to_bytes(&tokenidx);
+    // 	Vector::append(&mut v, LCS::to_bytes(&amount));
     // 	Vector::append(&mut v, data);
     // 	emit_events(11, v, Vector::empty());
     // }
