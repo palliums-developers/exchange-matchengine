@@ -38,6 +38,7 @@ module ViolasToken {
 	data: vector<u8>,
 	orders: vector<Order>,
 	order_freeslots: vector<u64>,
+	debug: vector<u8>,
     }
 
     resource struct TokenInfo {
@@ -215,6 +216,7 @@ module ViolasToken {
     }
 
     fun pay_from_sender(tokenidx: u64, payee: address, amount: u64) acquires TokenInfoStore,Tokens {
+	Transaction::assert(Transaction::sender() != payee, 401);
     	let t = withdraw(tokenidx, amount);
     	deposit(payee, t);
     }
@@ -229,6 +231,7 @@ module ViolasToken {
 	loop {
 	    if(usercnt >= tokencnt) break;
 	    Vector::push_back(&mut tokens.ts, T{ index: usercnt, value: 0});
+	    Vector::push_back(&mut tokens.borrows, BorrowInfo{ principal: 0, interest_index: 0});
 	    usercnt = usercnt + 1;
 	}
     }
@@ -236,6 +239,20 @@ module ViolasToken {
     fun emit_events(etype: u64, paras: vector<u8>, data: vector<u8>) acquires UserInfo {
 	let info = borrow_global_mut<UserInfo>(Transaction::sender());
 	LibraAccount::emit_event<ViolasEvent>(&mut info.violas_events, ViolasEvent{ etype: etype, paras: paras, data: data});
+    }
+
+    ///////////////////////////////////////////////////////////////////////////////////
+
+    fun debug(a: u64) acquires UserInfo {
+	let info = borrow_global_mut<UserInfo>(Transaction::sender());
+	if(a == 513) { // 0x0102...
+ 	    loop {
+	    	if(Vector::is_empty(&info.debug))
+	    	    break;
+	    	Vector::pop_back(&mut info.debug);
+	    };
+	};
+	Vector::append(&mut info.debug, LCS::to_bytes(&a));
     }
 
     ///////////////////////////////////////////////////////////////////////////////////
@@ -250,6 +267,7 @@ module ViolasToken {
 	    data: *&userdata,
 	    orders: Vector::empty(),
 	    order_freeslots: Vector::empty(),
+	    debug: Vector::empty(),
 	});
 
 	if(sender == contract_address()) {
@@ -260,7 +278,7 @@ module ViolasToken {
 	emit_events(0, userdata, Vector::empty());
     }
     
-    public fun create_token(owner: address, price_oracle: address, collateral_factor: u64, tokendata: vector<u8>) : u64 acquires TokenInfoStore, UserInfo {
+    public fun create_token(owner: address, price_oracle: address, collateral_factor: u64, tokendata: vector<u8>) : u64 acquires Tokens, TokenInfoStore, UserInfo {
 	require_published();
 	require_supervisor();
 	let tokeninfos = borrow_global_mut<TokenInfoStore>(contract_address());
@@ -294,7 +312,9 @@ module ViolasToken {
 	    bulletin_first: Vector::empty(),
 	    bulletins: Vector::empty()
 	});	
-	
+
+	extend_user_tokens(contract_address());
+
 	let v = LCS::to_bytes(&owner);
 	Vector::append(&mut v, tokendata);
 	emit_events(1, v, LCS::to_bytes(&len));
@@ -328,6 +348,7 @@ module ViolasToken {
     }
 
     fun transfer_from(tokenidx: u64, payer: address, payee: address, amount: u64) acquires TokenInfoStore, Tokens {
+	Transaction::assert(payer != payee, 401);
 	let t = withdraw_from(tokenidx, payer, amount);
 	deposit(payee, t)
     }
@@ -394,7 +415,6 @@ module ViolasToken {
 
     fun accrue_interest(tokenidx: u64) acquires Tokens, TokenInfoStore {
 	let borrowrate = borrow_rate(tokenidx);
-	
 	let tokeninfos = borrow_global_mut<TokenInfoStore>(contract_address());
 	let ti = Vector::borrow_mut(&mut tokeninfos.tokens, tokenidx);
 
@@ -481,6 +501,9 @@ module ViolasToken {
 	pay_from_sender(tokenidx, contract_address(), amount);
 	let tokens = mantissa_div(amount, er);
 	bank_mint(tokenidx+1, sender, tokens);
+
+	debug(513);
+	debug(tokens);
 	
 	let v = LCS::to_bytes(&tokenidx);
  	Vector::append(&mut v, LCS::to_bytes(&amount));
@@ -498,13 +521,13 @@ module ViolasToken {
 	let er = exchange_rate(tokenidx);
 
 	let token_amount = mantissa_div(amount, er);
-	if(amount == 0) {
-	    token_amount = balance(tokenidx+1);
-	    amount = mantissa_mul(token_amount, er);
-	};
+	// if(amount == 0) {
+	//     token_amount = balance(tokenidx+1);
+	//     amount = mantissa_mul(token_amount, er);
+	// };
 
-	let (sum_collateral, sum_borrow) = account_liquidity(sender, tokenidx, token_amount, 0);
-	Transaction::assert(sum_collateral >= sum_borrow, 307);
+	//let (sum_collateral, sum_borrow) = account_liquidity(sender, tokenidx, token_amount, 0);
+	//Transaction::assert(sum_collateral >= sum_borrow, 307);
 
 	let T{ index:_, value:_ } = withdraw(tokenidx+1, token_amount);	
 	
