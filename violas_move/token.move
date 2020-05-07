@@ -503,7 +503,6 @@ module ViolasToken {
 	require_published();
 	require_first_tokenidx(tokenidx);
 	
-	Transaction::assert(tokenidx % 2 == 0, 115);
 	let tokeninfos = borrow_global_mut<TokenInfoStore>(contract_address());
 	let ti = Vector::borrow_mut(&mut tokeninfos.tokens, tokenidx);
 	Transaction::assert(ti.price_oracle == Transaction::sender(), 116);
@@ -682,6 +681,20 @@ module ViolasToken {
  	Vector::append(&mut v, LCS::to_bytes(&collateral_tokenidx));
  	Vector::append(&mut v, data);
 	emit_events(11, v, Vector::empty());
+    }
+
+    public fun update_collateral_factor(tokenidx: u64, factor: u64) acquires TokenInfoStore, UserInfo {
+	require_published();
+	require_first_tokenidx(tokenidx);
+	require_supervisor();
+	
+	let tokeninfos = borrow_global_mut<TokenInfoStore>(contract_address());
+	let ti = Vector::borrow_mut(&mut tokeninfos.tokens, tokenidx);
+	ti.collateral_factor = factor;
+
+	let v = LCS::to_bytes(&tokenidx);
+	Vector::append(&mut v, LCS::to_bytes(&factor));
+	emit_events(12, v, Vector::empty());
     }
     
     ///////////////////////////////////////////////////////////////////////////////////
