@@ -1,12 +1,18 @@
 address 0x7257c2417e4d1038e1817c8f283ace2e:
 
 module ViolasToken {
-    // use 0x0::LibraAccount;
+    use 0x0::Libra;
+    use 0x0::LibraAccount;
     use 0x0::Transaction;
     use 0x0::Event;
     use 0x0::Vector;
     use 0x0::LCS;
     use 0x0::LibraTimestamp;
+
+    resource struct LibraToken<Token> {
+	coin: Libra::T<Token>,
+	index: u64,
+    }
 
     resource struct T {
 	index: u64,
@@ -281,6 +287,15 @@ module ViolasToken {
 
 	emit_events(0, userdata, Vector::empty());
     }
+
+    public fun register_libra_token<CoinType>(price_oracle: address, collateral_factor: u64, tokendata: vector<u8>) : u64 acquires TokenInfoStore, Tokens, UserInfo {
+	require_published();
+	require_supervisor();
+	let tokeninfos = borrow_global_mut<TokenInfoStore>(contract_address());
+	let len = Vector::length(&tokeninfos.tokens);
+	move_to_sender<LibraToken<CoinType>>(LibraToken<CoinType> { coin: Libra::zero<CoinType>(), index: len });
+	create_token(0x0, price_oracle, collateral_factor, tokendata)
+    }
     
     public fun create_token(owner: address, price_oracle: address, collateral_factor: u64, tokendata: vector<u8>) : u64 acquires Tokens, TokenInfoStore, UserInfo {
 	require_published();
@@ -355,6 +370,13 @@ module ViolasToken {
 	ti.total_supply = ti.total_supply + amount;
     }
 
+    fun bank_burn( t: T) acquires TokenInfoStore {
+	let T { index: tokenidx, value: amount } = t;
+	let tokeninfos = borrow_global_mut<TokenInfoStore>(contract_address());
+	let ti = Vector::borrow_mut(&mut tokeninfos.tokens, tokenidx);
+	ti.total_supply = ti.total_supply - amount;
+    }
+    
     fun transfer_from(tokenidx: u64, payer: address, payee: address, amount: u64) acquires TokenInfoStore, Tokens {
 	Transaction::assert(payer != payee, 114);
 	let t = withdraw_from(tokenidx, payer, amount);
@@ -391,16 +413,16 @@ module ViolasToken {
 	emit_events(4, v, Vector::empty());
     }
 
-    public fun move_supervisor(new_supervisor: address, data: vector<u8>) acquires TokenInfoStore, UserInfo {
-	require_published();
-	require_supervisor();
-	let tokeninfos = borrow_global_mut<TokenInfoStore>(contract_address());
-	tokeninfos.supervisor = new_supervisor;
+    // public fun move_supervisor(new_supervisor: address, data: vector<u8>) acquires TokenInfoStore, UserInfo {
+    // 	require_published();
+    // 	require_supervisor();
+    // 	let tokeninfos = borrow_global_mut<TokenInfoStore>(contract_address());
+    // 	tokeninfos.supervisor = new_supervisor;
 
-	let v = LCS::to_bytes(&new_supervisor);
-	Vector::append(&mut v, data);
-	emit_events(5, v, Vector::empty());
-    }
+    // 	let v = LCS::to_bytes(&new_supervisor);
+    // 	Vector::append(&mut v, data);
+    // 	emit_events(5, v, Vector::empty());
+    // }
     
     ///////////////////////////////////////////////////////////////////////////////////
 
@@ -695,6 +717,29 @@ module ViolasToken {
 	let v = LCS::to_bytes(&tokenidx);
 	Vector::append(&mut v, LCS::to_bytes(&factor));
 	emit_events(12, v, Vector::empty());
+    }
+
+    public fun enter_bank<CoinType>(amount: u64) acquires LibraToken, TokenInfoStore, Tokens, UserInfo {
+	let to_deposit = LibraAccount::withdraw_from_sender<CoinType>(amount);
+	let libratoken = borrow_global_mut<LibraToken<CoinType>>(contract_address());
+	Libra::deposit(&mut libratoken.coin, to_deposit);
+	bank_mint(libratoken.index, Transaction::sender(), amount);
+
+	let v = LCS::to_bytes(&libratoken.index);
+	Vector::append(&mut v, LCS::to_bytes(&amount));
+	emit_events(13, v, Vector::empty());
+    }
+
+    public fun exit_bank<CoinType>(amount: u64) acquires LibraToken, TokenInfoStore, Tokens, UserInfo {
+	let libratoken = borrow_global_mut<LibraToken<CoinType>>(contract_address());
+	let to_deposit = Libra::withdraw(&mut libratoken.coin, amount);
+	LibraAccount::deposit_to_sender(to_deposit);
+	let t = withdraw(libratoken.index, amount);
+	bank_burn(t);
+
+	let v = LCS::to_bytes(&libratoken.index);
+	Vector::append(&mut v, LCS::to_bytes(&amount));
+	emit_events(14, v, Vector::empty());
     }
     
     ///////////////////////////////////////////////////////////////////////////////////
