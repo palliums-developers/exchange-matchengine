@@ -1,4 +1,4 @@
-address 0x7257c2417e4d1038e1817c8f283ace2e:
+address 0x7257c2417e4d1038e1817c8f283ace2e {
 
 module ViolasToken {
     use 0x0::Libra;
@@ -116,9 +116,9 @@ module ViolasToken {
 	Transaction::assert(tokenidx % 2 == 0, 105);
     }
 
-    fun require_second_tokenidx(tokenidx: u64) {
-	Transaction::assert(tokenidx % 2 == 1, 106);
-    }
+    // fun require_second_tokenidx(tokenidx: u64) {
+    // 	Transaction::assert(tokenidx % 2 == 1, 106);
+    // }
 
     fun require_price(tokenidx: u64) acquires TokenInfoStore {
 	let tokeninfos = borrow_global<TokenInfoStore>(contract_address());
@@ -252,17 +252,17 @@ module ViolasToken {
 
     ///////////////////////////////////////////////////////////////////////////////////
 
-    fun debug(a: u64) acquires UserInfo {
-	let info = borrow_global_mut<UserInfo>(Transaction::sender());
-	if(a == 513) { // 0x0102...
- 	    loop {
-	    	if(Vector::is_empty(&info.debug))
-	    	    break;
-	    	Vector::pop_back(&mut info.debug);
-	    };
-	};
-	Vector::append(&mut info.debug, LCS::to_bytes(&a));
-    }
+    // fun debug(a: u64) acquires UserInfo {
+    // 	let info = borrow_global_mut<UserInfo>(Transaction::sender());
+    // 	if(a == 513) { // 0x0102...
+    // 	    loop {
+    // 	    	if(Vector::is_empty(&info.debug))
+    // 	    	    break;
+    // 	    	Vector::pop_back(&mut info.debug);
+    // 	    };
+    // 	};
+    // 	Vector::append(&mut info.debug, LCS::to_bytes(&a));
+    // }
 
     ///////////////////////////////////////////////////////////////////////////////////
     
@@ -399,19 +399,19 @@ module ViolasToken {
 	emit_events(3, v, Vector::empty());
     }
 
-    public fun move_owner(tokenidx: u64, new_owner: address, data: vector<u8>) acquires TokenInfoStore, UserInfo {
-	require_published();
-	require_first_tokenidx(tokenidx);
-	require_owner(tokenidx);
-	let tokeninfos = borrow_global_mut<TokenInfoStore>(contract_address());
-	let ti = Vector::borrow_mut(&mut tokeninfos.tokens, tokenidx);
-	ti.owner = new_owner;
+    // public fun move_owner(tokenidx: u64, new_owner: address, data: vector<u8>) acquires TokenInfoStore, UserInfo {
+    // 	require_published();
+    // 	require_first_tokenidx(tokenidx);
+    // 	require_owner(tokenidx);
+    // 	let tokeninfos = borrow_global_mut<TokenInfoStore>(contract_address());
+    // 	let ti = Vector::borrow_mut(&mut tokeninfos.tokens, tokenidx);
+    // 	ti.owner = new_owner;
 
-	let v = LCS::to_bytes(&tokenidx);
-	Vector::append(&mut v, LCS::to_bytes(&new_owner));
-	Vector::append(&mut v, data);
-	emit_events(4, v, Vector::empty());
-    }
+    // 	let v = LCS::to_bytes(&tokenidx);
+    // 	Vector::append(&mut v, LCS::to_bytes(&new_owner));
+    // 	Vector::append(&mut v, data);
+    // 	emit_events(4, v, Vector::empty());
+    // }
 
     // public fun move_supervisor(new_supervisor: address, data: vector<u8>) acquires TokenInfoStore, UserInfo {
     // 	require_published();
@@ -550,8 +550,8 @@ module ViolasToken {
 	let tokens = mantissa_div(amount, er);
 	bank_mint(tokenidx+1, sender, tokens);
 
-	debug(513);
-	debug(tokens);
+	//debug(513);
+	//debug(tokens);
 	
 	let v = LCS::to_bytes(&tokenidx);
  	Vector::append(&mut v, LCS::to_bytes(&amount));
@@ -883,3 +883,4 @@ module ViolasToken {
     // }
 }
 
+}
