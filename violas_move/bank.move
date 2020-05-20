@@ -129,7 +129,7 @@ module ViolasToken {
     ///////////////////////////////////////////////////////////////////////////////////
     
     public fun zero(tokenidx: u64) : T {
-	T { index: tokenidx, value: 0 }
+    	T { index: tokenidx, value: 0 }
     }
 
     public fun value(coin_ref: &T): u64 {
@@ -137,22 +137,22 @@ module ViolasToken {
     }
     
     public fun join(t1: T, t2: T) : T {
-	let T { index: i1, value: v1 } = t1;
-	let T { index: i2, value: v2 } = t2;
-	Transaction::assert(i1 == i2, 108);
-	T { index: i1, value: v1+v2 }
+    	let T { index: i1, value: v1 } = t1;
+    	let T { index: i2, value: v2 } = t2;
+    	Transaction::assert(i1 == i2, 108);
+    	T { index: i1, value: v1+v2 }
     }
 
     public fun join2(t1: &mut T, t2: T) {
-	let T { index: i2, value: v2 } = t2;
-	Transaction::assert(t1.index == i2, 109);
-	t1.value = t1.value + v2;
+    	let T { index: i2, value: v2 } = t2;
+    	Transaction::assert(t1.index == i2, 109);
+    	t1.value = t1.value + v2;
     }
     
     public fun split(t: &mut T, amount: u64) : T {
-	Transaction::assert(t.value >= amount, 110);
-	t.value = t.value - amount;
-	T { index: t.index, value: amount }
+    	Transaction::assert(t.value >= amount, 110);
+    	t.value = t.value - amount;
+    	T { index: t.index, value: amount }
     }
 
     ///////////////////////////////////////////////////////////////////////////////////
@@ -204,7 +204,7 @@ module ViolasToken {
     
     ///////////////////////////////////////////////////////////////////////////////////
     
-    public fun deposit(payee: address, to_deposit: T) acquires TokenInfoStore,Tokens {
+    fun deposit(payee: address, to_deposit: T) acquires TokenInfoStore,Tokens {
 	extend_user_tokens(payee);
 	let T { index, value } = to_deposit;
 	let tokens = borrow_global_mut<Tokens>(payee);
@@ -220,7 +220,7 @@ module ViolasToken {
 	T { index: tokenidx, value: amount }
     }
     
-    public fun withdraw(tokenidx: u64, amount: u64) : T acquires Tokens {
+    fun withdraw(tokenidx: u64, amount: u64) : T acquires Tokens {
 	withdraw_from(tokenidx, Transaction::sender(), amount)
     }
 
@@ -520,8 +520,14 @@ module ViolasToken {
     }
     
     ///////////////////////////////////////////////////////////////////////////////////
+
+
+    public fun update_price<CoinType>(price: u64) acquires TokenInfoStore, UserInfo, LibraToken {
+	let libratoken = borrow_global<LibraToken<CoinType>>(contract_address());
+	update_price_index(libratoken.index, price);
+    }
     
-    public fun update_price(tokenidx: u64, price: u64) acquires TokenInfoStore, UserInfo {
+    public fun update_price_index(tokenidx: u64, price: u64) acquires TokenInfoStore, UserInfo {
 	require_published();
 	require_first_tokenidx(tokenidx);
 	
@@ -535,7 +541,12 @@ module ViolasToken {
 	emit_events(6, v, Vector::empty());
     }
 
-    public fun lock(tokenidx: u64, amount: u64, data: vector<u8>) acquires Tokens, TokenInfoStore, UserInfo {
+    public fun lock<CoinType>(amount: u64, data: vector<u8>) acquires Tokens, TokenInfoStore, UserInfo, LibraToken {
+	let libratoken = borrow_global<LibraToken<CoinType>>(contract_address());
+	lock_index(libratoken.index, amount, data);
+    }
+    
+    public fun lock_index(tokenidx: u64, amount: u64, data: vector<u8>) acquires Tokens, TokenInfoStore, UserInfo {
 	require_published();
 	require_first_tokenidx(tokenidx);
 	require_price(tokenidx);
@@ -559,7 +570,12 @@ module ViolasToken {
 	emit_events(7, v, Vector::empty());
     }
 
-    public fun redeem(tokenidx: u64, amount: u64, data: vector<u8>) acquires Tokens, TokenInfoStore, UserInfo {
+    public fun redeem<CoinType>(amount: u64, data: vector<u8>) acquires Tokens, TokenInfoStore, UserInfo, LibraToken {
+	let libratoken = borrow_global<LibraToken<CoinType>>(contract_address());
+	redeem_index(libratoken.index, amount, data);
+    }
+    
+    public fun redeem_index(tokenidx: u64, amount: u64, data: vector<u8>) acquires Tokens, TokenInfoStore, UserInfo {
 	require_published();
 	require_first_tokenidx(tokenidx);
 	require_price(tokenidx);
@@ -593,8 +609,13 @@ module ViolasToken {
  	Vector::append(&mut v, data);
 	emit_events(8, v, Vector::empty());
     }
+
+    public fun borrow<CoinType>(amount: u64, data: vector<u8>) acquires Tokens, TokenInfoStore, UserInfo, LibraToken {
+	let libratoken = borrow_global<LibraToken<CoinType>>(contract_address());
+	borrow_index(libratoken.index, amount, data);
+    }
     
-    public fun borrow(tokenidx: u64, amount: u64, data: vector<u8>) acquires Tokens, TokenInfoStore, UserInfo {
+    public fun borrow_index(tokenidx: u64, amount: u64, data: vector<u8>) acquires Tokens, TokenInfoStore, UserInfo {
 	require_published();
 	require_first_tokenidx(tokenidx);
 	require_price(tokenidx);
@@ -643,8 +664,13 @@ module ViolasToken {
 	    
 	pay_from_sender(tokenidx, contract_address(), amount);
     }
+
+    public fun repay_borrow<CoinType>(amount: u64, data: vector<u8>) acquires Tokens, TokenInfoStore, UserInfo, LibraToken {
+	let libratoken = borrow_global<LibraToken<CoinType>>(contract_address());
+	repay_borrow_index(libratoken.index, amount, data);
+    }
     
-    public fun repay_borrow(tokenidx: u64, amount: u64, data: vector<u8>) acquires Tokens, TokenInfoStore, UserInfo {
+    public fun repay_borrow_index(tokenidx: u64, amount: u64, data: vector<u8>) acquires Tokens, TokenInfoStore, UserInfo {
 	require_published();
 	require_first_tokenidx(tokenidx);
 	require_price(tokenidx);
@@ -660,7 +686,13 @@ module ViolasToken {
 	emit_events(10, v, Vector::empty());
     }
 
-    public fun liquidate_borrow(tokenidx: u64, borrower: address, amount: u64, collateral_tokenidx: u64, data: vector<u8>) acquires Tokens, TokenInfoStore, UserInfo {
+    public fun liquidate_borrow<CoinType1, CoinType2>(borrower: address, amount: u64, data: vector<u8>) acquires Tokens, TokenInfoStore, UserInfo, LibraToken {
+	let libratoken1 = borrow_global<LibraToken<CoinType1>>(contract_address());
+	let libratoken2 = borrow_global<LibraToken<CoinType2>>(contract_address());
+	liquidate_borrow_index(libratoken1.index, borrower, amount, libratoken2.index, data);
+    }
+    
+    public fun liquidate_borrow_index(tokenidx: u64, borrower: address, amount: u64, collateral_tokenidx: u64, data: vector<u8>) acquires Tokens, TokenInfoStore, UserInfo {
 	require_published();
 	require_first_tokenidx(tokenidx);
 	require_first_tokenidx(collateral_tokenidx);
@@ -705,7 +737,12 @@ module ViolasToken {
 	emit_events(11, v, Vector::empty());
     }
 
-    public fun update_collateral_factor(tokenidx: u64, factor: u64) acquires TokenInfoStore, UserInfo {
+    public fun update_collateral_factor<CoinType>(factor: u64) acquires TokenInfoStore, UserInfo, LibraToken {
+	let libratoken = borrow_global<LibraToken<CoinType>>(contract_address());
+	update_collateral_factor_index(libratoken.index, factor);
+    }
+
+    public fun update_collateral_factor_index(tokenidx: u64, factor: u64) acquires TokenInfoStore, UserInfo {
 	require_published();
 	require_first_tokenidx(tokenidx);
 	require_supervisor();
