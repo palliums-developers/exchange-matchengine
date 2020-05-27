@@ -1,6 +1,6 @@
 address 0x7257c2417e4d1038e1817c8f283ace2e {
 
-module ViolasToken {
+module ViolasBank {
     use 0x0::Libra;
     use 0x0::LibraAccount;
     use 0x0::Transaction;
@@ -44,6 +44,7 @@ module ViolasToken {
     }
 
     resource struct TokenInfo {
+	currency_code: vector<u8>,
 	owner: address,
 	total_supply: u64,
 	total_reserves: u64,
@@ -294,16 +295,18 @@ module ViolasToken {
 	let tokeninfos = borrow_global_mut<TokenInfoStore>(contract_address());
 	let len = Vector::length(&tokeninfos.tokens);
 	move_to_sender<LibraToken<CoinType>>(LibraToken<CoinType> { coin: Libra::zero<CoinType>(), index: len });
-	create_token(0x0, price_oracle, collateral_factor, tokendata)
+	create_token(Libra::currency_code<CoinType>(), 0x0, price_oracle, collateral_factor, tokendata)
     }
     
-    public fun create_token(owner: address, price_oracle: address, collateral_factor: u64, tokendata: vector<u8>) : u64 acquires Tokens, TokenInfoStore, UserInfo {
+    public fun create_token(currency_code: vector<u8>, owner: address, price_oracle: address, collateral_factor: u64, tokendata: vector<u8>) : u64 acquires Tokens, TokenInfoStore, UserInfo {
 	require_published();
 	require_supervisor();
 	let tokeninfos = borrow_global_mut<TokenInfoStore>(contract_address());
 	let len = Vector::length(&tokeninfos.tokens);
 	let mantissa_one = new_mantissa(1, 1);
+
 	Vector::push_back(&mut tokeninfos.tokens, TokenInfo {
+	    currency_code: currency_code,
 	    owner: owner,
 	    total_supply: 0,
 	    total_reserves: 0,
@@ -318,6 +321,7 @@ module ViolasToken {
 	    bulletins: Vector::empty()
 	});
 	Vector::push_back(&mut tokeninfos.tokens, TokenInfo {
+	    currency_code: Vector::empty(),
 	    owner: 0x0,
 	    total_supply: 0,
 	    total_reserves: 0,
