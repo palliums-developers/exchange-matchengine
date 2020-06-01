@@ -267,13 +267,13 @@ module ViolasBank {
 
     ///////////////////////////////////////////////////////////////////////////////////
     
-    public fun publish(userdata: vector<u8>) acquires Tokens, TokenInfoStore, UserInfo {
+    public fun publish(account: &signer, userdata: vector<u8>) acquires Tokens, TokenInfoStore, UserInfo {
 	let sender = Transaction::sender();
 	Transaction::assert(!exists<Tokens>(sender), 113);
 	move_to_sender<Tokens>(Tokens{ ts: Vector::empty(), borrows: Vector::empty() });
 
 	move_to_sender<UserInfo>(UserInfo{
-	    violas_events: Event::new_event_handle<ViolasEvent>(),
+	    violas_events: Event::new_event_handle<ViolasEvent>(account),
 	    data: *&userdata,
 	    orders: Vector::empty(),
 	    order_freeslots: Vector::empty(),

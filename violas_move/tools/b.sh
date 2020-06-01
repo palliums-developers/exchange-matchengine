@@ -3,161 +3,55 @@ addr=$1
 rm -f *.move
 rm -f *.mv
 rm -f *.mv.1
-cp /home/ops/lmf/github.com/exchange-matchengine/violas_move/*.move ./
+cp /home/ops/lmf/exchange-matchengine/violas_move/*.move ./
 
-sed -i "s/7257c2417e4d1038e1817c8f283ace2e1041b3396cdbb099eb357bbee024d614/$addr/g" *.move
+sed -i "s/7257c2417e4d1038e1817c8f283ace2e/$addr/g" *.move
 
-../move-build -f token.move -s 0x$addr \
-	      -d \
-	      modules/libra_account.move \
-	      modules/libra_coin.move \
-	      modules/vector.move \
-	      modules/transaction.move \
-	      modules/u64_util.move \
-	      modules/libra_time.move \
-	      modules/address_util.move \
-	      modules/hash.move \
-	      modules/libra_transaction_timeout.move 
+../move-build bank.move -s 0x$addr -d /home/ops/lmf/move/stdlib/modules/signer.move /home/ops/lmf/move/stdlib/modules/libra_time.move /home/ops/lmf/move/stdlib/modules/libra_version.move /home/ops/lmf/move/stdlib/modules/testnet.move /home/ops/lmf/move/stdlib/modules/libra_configs.move /home/ops/lmf/move/stdlib/modules/account_limits.move /home/ops/lmf/move/stdlib/modules/sliding_nonce.move /home/ops/lmf/move/stdlib/modules/authenticator.move /home/ops/lmf/move/stdlib/modules/vector.move /home/ops/lmf/move/stdlib/modules/hash.move /home/ops/lmf/move/stdlib/modules/coin1.move /home/ops/lmf/move/stdlib/modules/empty.move /home/ops/lmf/move/stdlib/modules/compare.move /home/ops/lmf/move/stdlib/modules/transaction.move /home/ops/lmf/move/stdlib/modules/lbr.move /home/ops/lmf/move/stdlib/modules/lcs.move /home/ops/lmf/move/stdlib/modules/coin2.move /home/ops/lmf/move/stdlib/modules/offer.move /home/ops/lmf/move/stdlib/modules/transaction_fee.move /home/ops/lmf/move/stdlib/modules/fixedpoint32.move /home/ops/lmf/move/stdlib/modules/libra_account.move /home/ops/lmf/move/stdlib/modules/libra_transaction_timeout.move /home/ops/lmf/move/stdlib/modules/libra_writeset_manager.move /home/ops/lmf/move/stdlib/modules/registered_currencies.move /home/ops/lmf/move/stdlib/modules/association.move /home/ops/lmf/move/stdlib/modules/shared_ed25519_public_key.move /home/ops/lmf/move/stdlib/modules/event.move /home/ops/lmf/move/stdlib/modules/option.move /home/ops/lmf/move/stdlib/modules/debug.move /home/ops/lmf/move/stdlib/modules/signature.move /home/ops/lmf/move/stdlib/modules/genesis.move /home/ops/lmf/move/stdlib/modules/vasp.move /home/ops/lmf/move/stdlib/modules/libra_system.move /home/ops/lmf/move/stdlib/modules/libra_vm_config.move /home/ops/lmf/move/stdlib/modules/libra_block.move /home/ops/lmf/move/stdlib/modules/unhosted.move /home/ops/lmf/move/stdlib/modules/validator_config.move /home/ops/lmf/move/stdlib/modules/libra.move  
 
+mv move_build_output/modules/0_ViolasBank.mv bank.mv 
 
-mv output/transaction_0_module_ViolasToken.mv token.mv
+../move-build publish.move -s 0x$addr -d /home/ops/lmf/move/stdlib/modules/signer.move /home/ops/lmf/move/stdlib/modules/libra_time.move /home/ops/lmf/move/stdlib/modules/libra_version.move /home/ops/lmf/move/stdlib/modules/testnet.move /home/ops/lmf/move/stdlib/modules/libra_configs.move /home/ops/lmf/move/stdlib/modules/account_limits.move /home/ops/lmf/move/stdlib/modules/sliding_nonce.move /home/ops/lmf/move/stdlib/modules/authenticator.move /home/ops/lmf/move/stdlib/modules/vector.move /home/ops/lmf/move/stdlib/modules/hash.move /home/ops/lmf/move/stdlib/modules/coin1.move /home/ops/lmf/move/stdlib/modules/empty.move /home/ops/lmf/move/stdlib/modules/compare.move /home/ops/lmf/move/stdlib/modules/transaction.move /home/ops/lmf/move/stdlib/modules/lbr.move /home/ops/lmf/move/stdlib/modules/lcs.move /home/ops/lmf/move/stdlib/modules/coin2.move /home/ops/lmf/move/stdlib/modules/offer.move /home/ops/lmf/move/stdlib/modules/transaction_fee.move /home/ops/lmf/move/stdlib/modules/fixedpoint32.move /home/ops/lmf/move/stdlib/modules/libra_account.move /home/ops/lmf/move/stdlib/modules/libra_transaction_timeout.move /home/ops/lmf/move/stdlib/modules/libra_writeset_manager.move /home/ops/lmf/move/stdlib/modules/registered_currencies.move /home/ops/lmf/move/stdlib/modules/association.move /home/ops/lmf/move/stdlib/modules/shared_ed25519_public_key.move /home/ops/lmf/move/stdlib/modules/event.move /home/ops/lmf/move/stdlib/modules/option.move /home/ops/lmf/move/stdlib/modules/debug.move /home/ops/lmf/move/stdlib/modules/signature.move /home/ops/lmf/move/stdlib/modules/genesis.move /home/ops/lmf/move/stdlib/modules/vasp.move /home/ops/lmf/move/stdlib/modules/libra_system.move /home/ops/lmf/move/stdlib/modules/libra_vm_config.move /home/ops/lmf/move/stdlib/modules/libra_block.move /home/ops/lmf/move/stdlib/modules/unhosted.move /home/ops/lmf/move/stdlib/modules/validator_config.move /home/ops/lmf/move/stdlib/modules/libra.move bank.move 
 
-../move-build -f publish.move -s 0x$addr \
-	      -d \
-	      modules/libra_account.move \
-	      modules/libra_coin.move \
-	      modules/vector.move \
-	      modules/transaction.move \
-	      modules/u64_util.move \
-	      modules/libra_time.move \
-	      modules/address_util.move \
-	      modules/hash.move \
-	      modules/libra_transaction_timeout.move \
-	      token.move
+mv move_build_output/scripts/main.mv publish.mv 
 
-mv output/transaction_0_script.mv publish.mv
+../move-build register_libra_token.move -s 0x$addr -d /home/ops/lmf/move/stdlib/modules/signer.move /home/ops/lmf/move/stdlib/modules/libra_time.move /home/ops/lmf/move/stdlib/modules/libra_version.move /home/ops/lmf/move/stdlib/modules/testnet.move /home/ops/lmf/move/stdlib/modules/libra_configs.move /home/ops/lmf/move/stdlib/modules/account_limits.move /home/ops/lmf/move/stdlib/modules/sliding_nonce.move /home/ops/lmf/move/stdlib/modules/authenticator.move /home/ops/lmf/move/stdlib/modules/vector.move /home/ops/lmf/move/stdlib/modules/hash.move /home/ops/lmf/move/stdlib/modules/coin1.move /home/ops/lmf/move/stdlib/modules/empty.move /home/ops/lmf/move/stdlib/modules/compare.move /home/ops/lmf/move/stdlib/modules/transaction.move /home/ops/lmf/move/stdlib/modules/lbr.move /home/ops/lmf/move/stdlib/modules/lcs.move /home/ops/lmf/move/stdlib/modules/coin2.move /home/ops/lmf/move/stdlib/modules/offer.move /home/ops/lmf/move/stdlib/modules/transaction_fee.move /home/ops/lmf/move/stdlib/modules/fixedpoint32.move /home/ops/lmf/move/stdlib/modules/libra_account.move /home/ops/lmf/move/stdlib/modules/libra_transaction_timeout.move /home/ops/lmf/move/stdlib/modules/libra_writeset_manager.move /home/ops/lmf/move/stdlib/modules/registered_currencies.move /home/ops/lmf/move/stdlib/modules/association.move /home/ops/lmf/move/stdlib/modules/shared_ed25519_public_key.move /home/ops/lmf/move/stdlib/modules/event.move /home/ops/lmf/move/stdlib/modules/option.move /home/ops/lmf/move/stdlib/modules/debug.move /home/ops/lmf/move/stdlib/modules/signature.move /home/ops/lmf/move/stdlib/modules/genesis.move /home/ops/lmf/move/stdlib/modules/vasp.move /home/ops/lmf/move/stdlib/modules/libra_system.move /home/ops/lmf/move/stdlib/modules/libra_vm_config.move /home/ops/lmf/move/stdlib/modules/libra_block.move /home/ops/lmf/move/stdlib/modules/unhosted.move /home/ops/lmf/move/stdlib/modules/validator_config.move /home/ops/lmf/move/stdlib/modules/libra.move bank.move 
 
-../move-build -f mint.move -s 0x$addr \
-	      -d \
-	      modules/libra_account.move \
-	      modules/libra_coin.move \
-	      modules/vector.move \
-	      modules/transaction.move \
-	      modules/u64_util.move \
-	      modules/libra_time.move \
-	      modules/address_util.move \
-	      modules/hash.move \
-	      modules/libra_transaction_timeout.move \
-	      token.move
+mv move_build_output/scripts/main.mv register_libra_token.mv 
 
-mv output/transaction_0_script.mv mint.mv
+../move-build enter_bank.move -s 0x$addr -d /home/ops/lmf/move/stdlib/modules/signer.move /home/ops/lmf/move/stdlib/modules/libra_time.move /home/ops/lmf/move/stdlib/modules/libra_version.move /home/ops/lmf/move/stdlib/modules/testnet.move /home/ops/lmf/move/stdlib/modules/libra_configs.move /home/ops/lmf/move/stdlib/modules/account_limits.move /home/ops/lmf/move/stdlib/modules/sliding_nonce.move /home/ops/lmf/move/stdlib/modules/authenticator.move /home/ops/lmf/move/stdlib/modules/vector.move /home/ops/lmf/move/stdlib/modules/hash.move /home/ops/lmf/move/stdlib/modules/coin1.move /home/ops/lmf/move/stdlib/modules/empty.move /home/ops/lmf/move/stdlib/modules/compare.move /home/ops/lmf/move/stdlib/modules/transaction.move /home/ops/lmf/move/stdlib/modules/lbr.move /home/ops/lmf/move/stdlib/modules/lcs.move /home/ops/lmf/move/stdlib/modules/coin2.move /home/ops/lmf/move/stdlib/modules/offer.move /home/ops/lmf/move/stdlib/modules/transaction_fee.move /home/ops/lmf/move/stdlib/modules/fixedpoint32.move /home/ops/lmf/move/stdlib/modules/libra_account.move /home/ops/lmf/move/stdlib/modules/libra_transaction_timeout.move /home/ops/lmf/move/stdlib/modules/libra_writeset_manager.move /home/ops/lmf/move/stdlib/modules/registered_currencies.move /home/ops/lmf/move/stdlib/modules/association.move /home/ops/lmf/move/stdlib/modules/shared_ed25519_public_key.move /home/ops/lmf/move/stdlib/modules/event.move /home/ops/lmf/move/stdlib/modules/option.move /home/ops/lmf/move/stdlib/modules/debug.move /home/ops/lmf/move/stdlib/modules/signature.move /home/ops/lmf/move/stdlib/modules/genesis.move /home/ops/lmf/move/stdlib/modules/vasp.move /home/ops/lmf/move/stdlib/modules/libra_system.move /home/ops/lmf/move/stdlib/modules/libra_vm_config.move /home/ops/lmf/move/stdlib/modules/libra_block.move /home/ops/lmf/move/stdlib/modules/unhosted.move /home/ops/lmf/move/stdlib/modules/validator_config.move /home/ops/lmf/move/stdlib/modules/libra.move bank.move 
 
-../move-build -f transfer.move -s 0x$addr \
-	      -d \
-	      modules/libra_account.move \
-	      modules/libra_coin.move \
-	      modules/vector.move \
-	      modules/transaction.move \
-	      modules/u64_util.move \
-	      modules/libra_time.move \
-	      modules/address_util.move \
-	      modules/hash.move \
-	      modules/libra_transaction_timeout.move \
-	      token.move
+mv move_build_output/scripts/main.mv enter_bank.mv 
 
-mv output/transaction_0_script.mv transfer.mv
+../move-build exit_bank.move -s 0x$addr -d /home/ops/lmf/move/stdlib/modules/signer.move /home/ops/lmf/move/stdlib/modules/libra_time.move /home/ops/lmf/move/stdlib/modules/libra_version.move /home/ops/lmf/move/stdlib/modules/testnet.move /home/ops/lmf/move/stdlib/modules/libra_configs.move /home/ops/lmf/move/stdlib/modules/account_limits.move /home/ops/lmf/move/stdlib/modules/sliding_nonce.move /home/ops/lmf/move/stdlib/modules/authenticator.move /home/ops/lmf/move/stdlib/modules/vector.move /home/ops/lmf/move/stdlib/modules/hash.move /home/ops/lmf/move/stdlib/modules/coin1.move /home/ops/lmf/move/stdlib/modules/empty.move /home/ops/lmf/move/stdlib/modules/compare.move /home/ops/lmf/move/stdlib/modules/transaction.move /home/ops/lmf/move/stdlib/modules/lbr.move /home/ops/lmf/move/stdlib/modules/lcs.move /home/ops/lmf/move/stdlib/modules/coin2.move /home/ops/lmf/move/stdlib/modules/offer.move /home/ops/lmf/move/stdlib/modules/transaction_fee.move /home/ops/lmf/move/stdlib/modules/fixedpoint32.move /home/ops/lmf/move/stdlib/modules/libra_account.move /home/ops/lmf/move/stdlib/modules/libra_transaction_timeout.move /home/ops/lmf/move/stdlib/modules/libra_writeset_manager.move /home/ops/lmf/move/stdlib/modules/registered_currencies.move /home/ops/lmf/move/stdlib/modules/association.move /home/ops/lmf/move/stdlib/modules/shared_ed25519_public_key.move /home/ops/lmf/move/stdlib/modules/event.move /home/ops/lmf/move/stdlib/modules/option.move /home/ops/lmf/move/stdlib/modules/debug.move /home/ops/lmf/move/stdlib/modules/signature.move /home/ops/lmf/move/stdlib/modules/genesis.move /home/ops/lmf/move/stdlib/modules/vasp.move /home/ops/lmf/move/stdlib/modules/libra_system.move /home/ops/lmf/move/stdlib/modules/libra_vm_config.move /home/ops/lmf/move/stdlib/modules/libra_block.move /home/ops/lmf/move/stdlib/modules/unhosted.move /home/ops/lmf/move/stdlib/modules/validator_config.move /home/ops/lmf/move/stdlib/modules/libra.move bank.move 
 
-../move-build -f create_token.move -s 0x$addr \
-	      -d \
-	      modules/libra_account.move \
-	      modules/libra_coin.move \
-	      modules/vector.move \
-	      modules/transaction.move \
-	      modules/u64_util.move \
-	      modules/libra_time.move \
-	      modules/address_util.move \
-	      modules/hash.move \
-	      modules/libra_transaction_timeout.move \
-	      token.move
+mv move_build_output/scripts/main.mv exit_bank.mv 
 
-mv output/transaction_0_script.mv create_token.mv
+../move-build update_price.move -s 0x$addr -d /home/ops/lmf/move/stdlib/modules/signer.move /home/ops/lmf/move/stdlib/modules/libra_time.move /home/ops/lmf/move/stdlib/modules/libra_version.move /home/ops/lmf/move/stdlib/modules/testnet.move /home/ops/lmf/move/stdlib/modules/libra_configs.move /home/ops/lmf/move/stdlib/modules/account_limits.move /home/ops/lmf/move/stdlib/modules/sliding_nonce.move /home/ops/lmf/move/stdlib/modules/authenticator.move /home/ops/lmf/move/stdlib/modules/vector.move /home/ops/lmf/move/stdlib/modules/hash.move /home/ops/lmf/move/stdlib/modules/coin1.move /home/ops/lmf/move/stdlib/modules/empty.move /home/ops/lmf/move/stdlib/modules/compare.move /home/ops/lmf/move/stdlib/modules/transaction.move /home/ops/lmf/move/stdlib/modules/lbr.move /home/ops/lmf/move/stdlib/modules/lcs.move /home/ops/lmf/move/stdlib/modules/coin2.move /home/ops/lmf/move/stdlib/modules/offer.move /home/ops/lmf/move/stdlib/modules/transaction_fee.move /home/ops/lmf/move/stdlib/modules/fixedpoint32.move /home/ops/lmf/move/stdlib/modules/libra_account.move /home/ops/lmf/move/stdlib/modules/libra_transaction_timeout.move /home/ops/lmf/move/stdlib/modules/libra_writeset_manager.move /home/ops/lmf/move/stdlib/modules/registered_currencies.move /home/ops/lmf/move/stdlib/modules/association.move /home/ops/lmf/move/stdlib/modules/shared_ed25519_public_key.move /home/ops/lmf/move/stdlib/modules/event.move /home/ops/lmf/move/stdlib/modules/option.move /home/ops/lmf/move/stdlib/modules/debug.move /home/ops/lmf/move/stdlib/modules/signature.move /home/ops/lmf/move/stdlib/modules/genesis.move /home/ops/lmf/move/stdlib/modules/vasp.move /home/ops/lmf/move/stdlib/modules/libra_system.move /home/ops/lmf/move/stdlib/modules/libra_vm_config.move /home/ops/lmf/move/stdlib/modules/libra_block.move /home/ops/lmf/move/stdlib/modules/unhosted.move /home/ops/lmf/move/stdlib/modules/validator_config.move /home/ops/lmf/move/stdlib/modules/libra.move bank.move 
 
-../move-build -f make_order.move -s 0x$addr \
-	      -d \
-	      modules/libra_account.move \
-	      modules/libra_coin.move \
-	      modules/vector.move \
-	      modules/transaction.move \
-	      modules/u64_util.move \
-	      modules/libra_time.move \
-	      modules/address_util.move \
-	      modules/hash.move \
-	      modules/libra_transaction_timeout.move \
-	      token.move
+mv move_build_output/scripts/main.mv update_price.mv 
 
-mv output/transaction_0_script.mv make_order.mv
+../move-build update_collateral_factor.move -s 0x$addr -d /home/ops/lmf/move/stdlib/modules/signer.move /home/ops/lmf/move/stdlib/modules/libra_time.move /home/ops/lmf/move/stdlib/modules/libra_version.move /home/ops/lmf/move/stdlib/modules/testnet.move /home/ops/lmf/move/stdlib/modules/libra_configs.move /home/ops/lmf/move/stdlib/modules/account_limits.move /home/ops/lmf/move/stdlib/modules/sliding_nonce.move /home/ops/lmf/move/stdlib/modules/authenticator.move /home/ops/lmf/move/stdlib/modules/vector.move /home/ops/lmf/move/stdlib/modules/hash.move /home/ops/lmf/move/stdlib/modules/coin1.move /home/ops/lmf/move/stdlib/modules/empty.move /home/ops/lmf/move/stdlib/modules/compare.move /home/ops/lmf/move/stdlib/modules/transaction.move /home/ops/lmf/move/stdlib/modules/lbr.move /home/ops/lmf/move/stdlib/modules/lcs.move /home/ops/lmf/move/stdlib/modules/coin2.move /home/ops/lmf/move/stdlib/modules/offer.move /home/ops/lmf/move/stdlib/modules/transaction_fee.move /home/ops/lmf/move/stdlib/modules/fixedpoint32.move /home/ops/lmf/move/stdlib/modules/libra_account.move /home/ops/lmf/move/stdlib/modules/libra_transaction_timeout.move /home/ops/lmf/move/stdlib/modules/libra_writeset_manager.move /home/ops/lmf/move/stdlib/modules/registered_currencies.move /home/ops/lmf/move/stdlib/modules/association.move /home/ops/lmf/move/stdlib/modules/shared_ed25519_public_key.move /home/ops/lmf/move/stdlib/modules/event.move /home/ops/lmf/move/stdlib/modules/option.move /home/ops/lmf/move/stdlib/modules/debug.move /home/ops/lmf/move/stdlib/modules/signature.move /home/ops/lmf/move/stdlib/modules/genesis.move /home/ops/lmf/move/stdlib/modules/vasp.move /home/ops/lmf/move/stdlib/modules/libra_system.move /home/ops/lmf/move/stdlib/modules/libra_vm_config.move /home/ops/lmf/move/stdlib/modules/libra_block.move /home/ops/lmf/move/stdlib/modules/unhosted.move /home/ops/lmf/move/stdlib/modules/validator_config.move /home/ops/lmf/move/stdlib/modules/libra.move bank.move 
 
-../move-build -f cancel_order.move -s 0x$addr \
-	      -d \
-	      modules/libra_account.move \
-	      modules/libra_coin.move \
-	      modules/vector.move \
-	      modules/transaction.move \
-	      modules/u64_util.move \
-	      modules/libra_time.move \
-	      modules/address_util.move \
-	      modules/hash.move \
-	      modules/libra_transaction_timeout.move \
-	      token.move
+mv move_build_output/scripts/main.mv update_collateral_factor.mv 
 
-mv output/transaction_0_script.mv cancel_order.mv
+../move-build lock.move -s 0x$addr -d /home/ops/lmf/move/stdlib/modules/signer.move /home/ops/lmf/move/stdlib/modules/libra_time.move /home/ops/lmf/move/stdlib/modules/libra_version.move /home/ops/lmf/move/stdlib/modules/testnet.move /home/ops/lmf/move/stdlib/modules/libra_configs.move /home/ops/lmf/move/stdlib/modules/account_limits.move /home/ops/lmf/move/stdlib/modules/sliding_nonce.move /home/ops/lmf/move/stdlib/modules/authenticator.move /home/ops/lmf/move/stdlib/modules/vector.move /home/ops/lmf/move/stdlib/modules/hash.move /home/ops/lmf/move/stdlib/modules/coin1.move /home/ops/lmf/move/stdlib/modules/empty.move /home/ops/lmf/move/stdlib/modules/compare.move /home/ops/lmf/move/stdlib/modules/transaction.move /home/ops/lmf/move/stdlib/modules/lbr.move /home/ops/lmf/move/stdlib/modules/lcs.move /home/ops/lmf/move/stdlib/modules/coin2.move /home/ops/lmf/move/stdlib/modules/offer.move /home/ops/lmf/move/stdlib/modules/transaction_fee.move /home/ops/lmf/move/stdlib/modules/fixedpoint32.move /home/ops/lmf/move/stdlib/modules/libra_account.move /home/ops/lmf/move/stdlib/modules/libra_transaction_timeout.move /home/ops/lmf/move/stdlib/modules/libra_writeset_manager.move /home/ops/lmf/move/stdlib/modules/registered_currencies.move /home/ops/lmf/move/stdlib/modules/association.move /home/ops/lmf/move/stdlib/modules/shared_ed25519_public_key.move /home/ops/lmf/move/stdlib/modules/event.move /home/ops/lmf/move/stdlib/modules/option.move /home/ops/lmf/move/stdlib/modules/debug.move /home/ops/lmf/move/stdlib/modules/signature.move /home/ops/lmf/move/stdlib/modules/genesis.move /home/ops/lmf/move/stdlib/modules/vasp.move /home/ops/lmf/move/stdlib/modules/libra_system.move /home/ops/lmf/move/stdlib/modules/libra_vm_config.move /home/ops/lmf/move/stdlib/modules/libra_block.move /home/ops/lmf/move/stdlib/modules/unhosted.move /home/ops/lmf/move/stdlib/modules/validator_config.move /home/ops/lmf/move/stdlib/modules/libra.move bank.move 
 
-../move-build -f take_order.move -s 0x$addr \
-	      -d \
-	      modules/libra_account.move \
-	      modules/libra_coin.move \
-	      modules/vector.move \
-	      modules/transaction.move \
-	      modules/u64_util.move \
-	      modules/libra_time.move \
-	      modules/address_util.move \
-	      modules/hash.move \
-	      modules/libra_transaction_timeout.move \
-	      token.move
+mv move_build_output/scripts/main.mv lock.mv 
 
-mv output/transaction_0_script.mv take_order.mv
+../move-build redeem.move -s 0x$addr -d /home/ops/lmf/move/stdlib/modules/signer.move /home/ops/lmf/move/stdlib/modules/libra_time.move /home/ops/lmf/move/stdlib/modules/libra_version.move /home/ops/lmf/move/stdlib/modules/testnet.move /home/ops/lmf/move/stdlib/modules/libra_configs.move /home/ops/lmf/move/stdlib/modules/account_limits.move /home/ops/lmf/move/stdlib/modules/sliding_nonce.move /home/ops/lmf/move/stdlib/modules/authenticator.move /home/ops/lmf/move/stdlib/modules/vector.move /home/ops/lmf/move/stdlib/modules/hash.move /home/ops/lmf/move/stdlib/modules/coin1.move /home/ops/lmf/move/stdlib/modules/empty.move /home/ops/lmf/move/stdlib/modules/compare.move /home/ops/lmf/move/stdlib/modules/transaction.move /home/ops/lmf/move/stdlib/modules/lbr.move /home/ops/lmf/move/stdlib/modules/lcs.move /home/ops/lmf/move/stdlib/modules/coin2.move /home/ops/lmf/move/stdlib/modules/offer.move /home/ops/lmf/move/stdlib/modules/transaction_fee.move /home/ops/lmf/move/stdlib/modules/fixedpoint32.move /home/ops/lmf/move/stdlib/modules/libra_account.move /home/ops/lmf/move/stdlib/modules/libra_transaction_timeout.move /home/ops/lmf/move/stdlib/modules/libra_writeset_manager.move /home/ops/lmf/move/stdlib/modules/registered_currencies.move /home/ops/lmf/move/stdlib/modules/association.move /home/ops/lmf/move/stdlib/modules/shared_ed25519_public_key.move /home/ops/lmf/move/stdlib/modules/event.move /home/ops/lmf/move/stdlib/modules/option.move /home/ops/lmf/move/stdlib/modules/debug.move /home/ops/lmf/move/stdlib/modules/signature.move /home/ops/lmf/move/stdlib/modules/genesis.move /home/ops/lmf/move/stdlib/modules/vasp.move /home/ops/lmf/move/stdlib/modules/libra_system.move /home/ops/lmf/move/stdlib/modules/libra_vm_config.move /home/ops/lmf/move/stdlib/modules/libra_block.move /home/ops/lmf/move/stdlib/modules/unhosted.move /home/ops/lmf/move/stdlib/modules/validator_config.move /home/ops/lmf/move/stdlib/modules/libra.move bank.move 
 
-../move-build -f move_owner.move -s 0x$addr \
-	      -d \
-	      modules/libra_account.move \
-	      modules/libra_coin.move \
-	      modules/vector.move \
-	      modules/transaction.move \
-	      modules/u64_util.move \
-	      modules/libra_time.move \
-	      modules/address_util.move \
-	      modules/hash.move \
-	      modules/libra_transaction_timeout.move \
-	      token.move
+mv move_build_output/scripts/main.mv redeem.mv 
 
-mv output/transaction_0_script.mv move_owner.mv
+../move-build borrow.move -s 0x$addr -d /home/ops/lmf/move/stdlib/modules/signer.move /home/ops/lmf/move/stdlib/modules/libra_time.move /home/ops/lmf/move/stdlib/modules/libra_version.move /home/ops/lmf/move/stdlib/modules/testnet.move /home/ops/lmf/move/stdlib/modules/libra_configs.move /home/ops/lmf/move/stdlib/modules/account_limits.move /home/ops/lmf/move/stdlib/modules/sliding_nonce.move /home/ops/lmf/move/stdlib/modules/authenticator.move /home/ops/lmf/move/stdlib/modules/vector.move /home/ops/lmf/move/stdlib/modules/hash.move /home/ops/lmf/move/stdlib/modules/coin1.move /home/ops/lmf/move/stdlib/modules/empty.move /home/ops/lmf/move/stdlib/modules/compare.move /home/ops/lmf/move/stdlib/modules/transaction.move /home/ops/lmf/move/stdlib/modules/lbr.move /home/ops/lmf/move/stdlib/modules/lcs.move /home/ops/lmf/move/stdlib/modules/coin2.move /home/ops/lmf/move/stdlib/modules/offer.move /home/ops/lmf/move/stdlib/modules/transaction_fee.move /home/ops/lmf/move/stdlib/modules/fixedpoint32.move /home/ops/lmf/move/stdlib/modules/libra_account.move /home/ops/lmf/move/stdlib/modules/libra_transaction_timeout.move /home/ops/lmf/move/stdlib/modules/libra_writeset_manager.move /home/ops/lmf/move/stdlib/modules/registered_currencies.move /home/ops/lmf/move/stdlib/modules/association.move /home/ops/lmf/move/stdlib/modules/shared_ed25519_public_key.move /home/ops/lmf/move/stdlib/modules/event.move /home/ops/lmf/move/stdlib/modules/option.move /home/ops/lmf/move/stdlib/modules/debug.move /home/ops/lmf/move/stdlib/modules/signature.move /home/ops/lmf/move/stdlib/modules/genesis.move /home/ops/lmf/move/stdlib/modules/vasp.move /home/ops/lmf/move/stdlib/modules/libra_system.move /home/ops/lmf/move/stdlib/modules/libra_vm_config.move /home/ops/lmf/move/stdlib/modules/libra_block.move /home/ops/lmf/move/stdlib/modules/unhosted.move /home/ops/lmf/move/stdlib/modules/validator_config.move /home/ops/lmf/move/stdlib/modules/libra.move bank.move 
 
-./bin2json token.mv
-./bin2json publish.mv
-./bin2json mint.mv
-./bin2json transfer.mv
-./bin2json create_token.mv
-./bin2json make_order.mv
-./bin2json cancel_order.mv
-./bin2json take_order.mv
-./bin2json move_owner.mv
+mv move_build_output/scripts/main.mv borrow.mv 
 
-mv token.mv.1 token.mv
-mv publish.mv.1 publish.mv
-mv mint.mv.1 mint.mv
-mv transfer.mv.1 transfer.mv
-mv create_token.mv.1 create_token.mv
-mv make_order.mv.1 make_order.mv
-mv cancel_order.mv.1 cancel_order.mv
-mv take_order.mv.1 take_order.mv
-mv move_owner.mv.1 move_owner.mv
+../move-build repay_borrow.move -s 0x$addr -d /home/ops/lmf/move/stdlib/modules/signer.move /home/ops/lmf/move/stdlib/modules/libra_time.move /home/ops/lmf/move/stdlib/modules/libra_version.move /home/ops/lmf/move/stdlib/modules/testnet.move /home/ops/lmf/move/stdlib/modules/libra_configs.move /home/ops/lmf/move/stdlib/modules/account_limits.move /home/ops/lmf/move/stdlib/modules/sliding_nonce.move /home/ops/lmf/move/stdlib/modules/authenticator.move /home/ops/lmf/move/stdlib/modules/vector.move /home/ops/lmf/move/stdlib/modules/hash.move /home/ops/lmf/move/stdlib/modules/coin1.move /home/ops/lmf/move/stdlib/modules/empty.move /home/ops/lmf/move/stdlib/modules/compare.move /home/ops/lmf/move/stdlib/modules/transaction.move /home/ops/lmf/move/stdlib/modules/lbr.move /home/ops/lmf/move/stdlib/modules/lcs.move /home/ops/lmf/move/stdlib/modules/coin2.move /home/ops/lmf/move/stdlib/modules/offer.move /home/ops/lmf/move/stdlib/modules/transaction_fee.move /home/ops/lmf/move/stdlib/modules/fixedpoint32.move /home/ops/lmf/move/stdlib/modules/libra_account.move /home/ops/lmf/move/stdlib/modules/libra_transaction_timeout.move /home/ops/lmf/move/stdlib/modules/libra_writeset_manager.move /home/ops/lmf/move/stdlib/modules/registered_currencies.move /home/ops/lmf/move/stdlib/modules/association.move /home/ops/lmf/move/stdlib/modules/shared_ed25519_public_key.move /home/ops/lmf/move/stdlib/modules/event.move /home/ops/lmf/move/stdlib/modules/option.move /home/ops/lmf/move/stdlib/modules/debug.move /home/ops/lmf/move/stdlib/modules/signature.move /home/ops/lmf/move/stdlib/modules/genesis.move /home/ops/lmf/move/stdlib/modules/vasp.move /home/ops/lmf/move/stdlib/modules/libra_system.move /home/ops/lmf/move/stdlib/modules/libra_vm_config.move /home/ops/lmf/move/stdlib/modules/libra_block.move /home/ops/lmf/move/stdlib/modules/unhosted.move /home/ops/lmf/move/stdlib/modules/validator_config.move /home/ops/lmf/move/stdlib/modules/libra.move bank.move 
+
+mv move_build_output/scripts/main.mv repay_borrow.mv 
+
+../move-build liquidate_borrow.move -s 0x$addr -d /home/ops/lmf/move/stdlib/modules/signer.move /home/ops/lmf/move/stdlib/modules/libra_time.move /home/ops/lmf/move/stdlib/modules/libra_version.move /home/ops/lmf/move/stdlib/modules/testnet.move /home/ops/lmf/move/stdlib/modules/libra_configs.move /home/ops/lmf/move/stdlib/modules/account_limits.move /home/ops/lmf/move/stdlib/modules/sliding_nonce.move /home/ops/lmf/move/stdlib/modules/authenticator.move /home/ops/lmf/move/stdlib/modules/vector.move /home/ops/lmf/move/stdlib/modules/hash.move /home/ops/lmf/move/stdlib/modules/coin1.move /home/ops/lmf/move/stdlib/modules/empty.move /home/ops/lmf/move/stdlib/modules/compare.move /home/ops/lmf/move/stdlib/modules/transaction.move /home/ops/lmf/move/stdlib/modules/lbr.move /home/ops/lmf/move/stdlib/modules/lcs.move /home/ops/lmf/move/stdlib/modules/coin2.move /home/ops/lmf/move/stdlib/modules/offer.move /home/ops/lmf/move/stdlib/modules/transaction_fee.move /home/ops/lmf/move/stdlib/modules/fixedpoint32.move /home/ops/lmf/move/stdlib/modules/libra_account.move /home/ops/lmf/move/stdlib/modules/libra_transaction_timeout.move /home/ops/lmf/move/stdlib/modules/libra_writeset_manager.move /home/ops/lmf/move/stdlib/modules/registered_currencies.move /home/ops/lmf/move/stdlib/modules/association.move /home/ops/lmf/move/stdlib/modules/shared_ed25519_public_key.move /home/ops/lmf/move/stdlib/modules/event.move /home/ops/lmf/move/stdlib/modules/option.move /home/ops/lmf/move/stdlib/modules/debug.move /home/ops/lmf/move/stdlib/modules/signature.move /home/ops/lmf/move/stdlib/modules/genesis.move /home/ops/lmf/move/stdlib/modules/vasp.move /home/ops/lmf/move/stdlib/modules/libra_system.move /home/ops/lmf/move/stdlib/modules/libra_vm_config.move /home/ops/lmf/move/stdlib/modules/libra_block.move /home/ops/lmf/move/stdlib/modules/unhosted.move /home/ops/lmf/move/stdlib/modules/validator_config.move /home/ops/lmf/move/stdlib/modules/libra.move bank.move 
+
+mv move_build_output/scripts/main.mv liquidate_borrow.mv 
+
