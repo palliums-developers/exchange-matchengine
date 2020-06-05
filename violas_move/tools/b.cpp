@@ -53,6 +53,15 @@ int main() {
       "borrow",
       "repay_borrow",
       "liquidate_borrow",
+
+      "create_token",
+      "update_price_index",
+      "mint",
+      "lock_index",
+      "redeem_index",
+      "borrow_index",
+      "repay_borrow_index",
+      "liquidate_borrow_index",
       };
 
   for(int i=0; i<scripts.size(); ++i) {
@@ -60,7 +69,6 @@ int main() {
     printf("mv move_build_output/scripts/main.mv %s.mv \n\n", scripts[i].c_str());
   }
 
-  //printf("../create_token.move -s 0x$addr -d %s", dep.c_str());
   
   return 0;
 }
