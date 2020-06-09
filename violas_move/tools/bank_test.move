@@ -249,6 +249,13 @@ module ViolasBank {
 	balance_of(tokenidx, Transaction::sender())
     }
 
+    public fun print_balance<CoinType>(account: address) acquires LibraToken, Tokens {
+	let libratoken = borrow_global<LibraToken<CoinType>>(contract_address());
+	Debug::print(&x"01010101");
+	Debug::print(&balance_of(libratoken.index, account));
+	Debug::print(&balance_of(libratoken.index+1, account));
+    }
+    
     fun borrow_balance_of(tokenidx: u64, account: address) : u64 acquires Tokens, TokenInfoStore {
 	// recentBorrowBalance = borrower.borrowBalance * market.borrowIndex / borrower.borrowIndex
 	let tokens = borrow_global<Tokens>(account);
@@ -348,8 +355,6 @@ module ViolasBank {
     
     public fun publish(account: &signer, userdata: vector<u8>) acquires Tokens, TokenInfoStore, UserInfo {
 
-	Debug::print(&101);
-	
 	let sender = Transaction::sender();
 	Transaction::assert(!exists<Tokens>(sender), 113);
 	move_to_sender<Tokens>(Tokens{ ts: Vector::empty(), borrows: Vector::empty() });
@@ -662,55 +667,33 @@ module ViolasBank {
 
 	Debug::print(&LibraBlock::get_current_block_height());
 	
-	Debug::print(&801);
-	
 	require_published();
 	require_first_tokenidx(tokenidx);
 	require_price(tokenidx);
 
 	extend_user_tokens(Transaction::sender());
 
-	Debug::print(&802);
-
 	let sender = Transaction::sender();
 	accrue_interest(tokenidx);
 
-	Debug::print(&803);
-	
 	let er = exchange_rate(tokenidx);
 
-	Debug::print(&er);
-	Debug::print(&804);
-	
 	let token_amount = mantissa_div(amount, er);
 	if(amount == 0) {
 	    token_amount = balance(tokenidx+1);
 	    amount = mantissa_mul(token_amount, er);
 	};
 
-	Debug::print(&token_amount);
-	Debug::print(&amount);
-	Debug::print(&805);
-
 	let (sum_collateral, sum_borrow) = account_liquidity(sender, tokenidx, token_amount, 0);
 
-	Debug::print(&sum_collateral);
-	Debug::print(&sum_borrow);
-	
 	Transaction::assert(sum_collateral+1000000 >= sum_borrow, 117);
 
-	Debug::print(&806);
-
 	let T{ index:_, value:_ } = withdraw(tokenidx+1, token_amount);	
-	
-	Debug::print(&807);
 	
 	let tokeninfos = borrow_global_mut<TokenInfoStore>(contract_address());
 	let ti1 = Vector::borrow_mut(&mut tokeninfos.tokens, tokenidx+1);
 	ti1.total_supply = safe_sub(ti1.total_supply, token_amount);
 
-	Debug::print(&808);
-	
 	transfer_from(tokenidx, contract_address(), sender, amount);
 
 	let v = LCS::to_bytes(&tokenidx);
@@ -730,25 +713,16 @@ module ViolasBank {
 	require_price(tokenidx);
 
 	Debug::print(&LibraBlock::get_current_block_height());
-	Debug::print(&901);
 	
 	extend_user_tokens(Transaction::sender());
 
 	let sender = Transaction::sender();
 	accrue_interest(tokenidx);
 
-	Debug::print(&902);
-	
 	let (sum_collateral, sum_borrow) = account_liquidity(sender, tokenidx, 0, amount);
-	Debug::print(&sum_collateral);
-	Debug::print(&sum_borrow);
 	Transaction::assert(sum_collateral >= sum_borrow, 118);
 
-	Debug::print(&903);
-
 	let balance = borrow_balance(tokenidx);
-	Debug::print(&balance);
-	Debug::print(&904);
 	
 	let tokens = borrow_global_mut<Tokens>(Transaction::sender());
 	let borrowinfo = Vector::borrow_mut(&mut tokens.borrows, tokenidx);
@@ -760,12 +734,8 @@ module ViolasBank {
 	borrowinfo.principal = balance + amount;
 	borrowinfo.interest_index = ti.borrow_index;
 
-	Debug::print(&905);
-	
 	transfer_from(tokenidx, contract_address(), sender, amount);
 
-	Debug::print(&906);
-	
 	let v = LCS::to_bytes(&tokenidx);
  	Vector::append(&mut v, LCS::to_bytes(&amount));
  	Vector::append(&mut v, data);
@@ -1128,15 +1098,15 @@ script {
     use {{default}}::EUR;
     
     fun main() {
-	LibraAccount::mint_to_address<USD::T>({{alice}}, 10000000000);
-	LibraAccount::mint_to_address<RMB::T>({{alice}}, 10000000000);
-	LibraAccount::mint_to_address<EUR::T>({{alice}}, 10000000000);
-	LibraAccount::mint_to_address<USD::T>({{bob}}, 10000000000);
-	LibraAccount::mint_to_address<RMB::T>({{bob}}, 10000000000);
-	LibraAccount::mint_to_address<EUR::T>({{bob}}, 10000000000);
-	LibraAccount::mint_to_address<USD::T>({{john}}, 10000000000);
-	LibraAccount::mint_to_address<RMB::T>({{john}}, 10000000000);
-	LibraAccount::mint_to_address<EUR::T>({{john}}, 10000000000);
+	LibraAccount::mint_to_address<USD::T>({{alice}}, 100000000000);
+	LibraAccount::mint_to_address<RMB::T>({{alice}}, 100000000000);
+	LibraAccount::mint_to_address<EUR::T>({{alice}}, 100000000000);
+	LibraAccount::mint_to_address<USD::T>({{bob}}, 100000000000);
+	LibraAccount::mint_to_address<RMB::T>({{bob}}, 100000000000);
+	LibraAccount::mint_to_address<EUR::T>({{bob}}, 100000000000);
+	LibraAccount::mint_to_address<USD::T>({{john}}, 100000000000);
+	LibraAccount::mint_to_address<RMB::T>({{john}}, 100000000000);
+	LibraAccount::mint_to_address<EUR::T>({{john}}, 100000000000);
     }
 }
 // check: EXECUTED
@@ -1145,9 +1115,20 @@ script {
 script {
     use {{default}}::ViolasBank;
     use 0x0::Vector;
+    use {{default}}::USD;
+    use {{default}}::RMB;
+    use {{default}}::EUR;
     
     fun main(account: &signer) {
 	ViolasBank::publish(account, Vector::empty());
+	
+	ViolasBank::register_libra_token<USD::T>({{default}}, 2147483648, x"");
+	ViolasBank::register_libra_token<RMB::T>({{default}}, 2147483648, x"");
+	ViolasBank::register_libra_token<EUR::T>({{default}}, 2147483648, x"");
+
+	ViolasBank::update_price<USD::T>(429496729);
+	ViolasBank::update_price<RMB::T>(429496729);
+	ViolasBank::update_price<EUR::T>(429496729);
     }
 }
 // check: EXECUTED
@@ -1157,9 +1138,14 @@ script {
 script {
     use {{default}}::ViolasBank;
     use 0x0::Vector;
+    use {{default}}::USD;
     
     fun main(account: &signer) {
 	ViolasBank::publish(account, Vector::empty());
+	ViolasBank::enter_bank<USD::T>(10000000000);
+	ViolasBank::lock<USD::T>(2000000000, x"");
+	ViolasBank::redeem<USD::T>(2000000000, x"");
+	ViolasBank::lock<USD::T>(2000000000, x"");
     }
 }
 // check: EXECUTED
@@ -1169,28 +1155,79 @@ script {
 script {
     use {{default}}::ViolasBank;
     use 0x0::Vector;
+    use {{default}}::RMB;
+    use {{default}}::USD;
     
     fun main(account: &signer) {
 	ViolasBank::publish(account, Vector::empty());
+	ViolasBank::enter_bank<RMB::T>(10000000000);
+	ViolasBank::enter_bank<USD::T>(10000000000);
+	ViolasBank::lock<RMB::T>(2000000000, x"");
+	ViolasBank::redeem<RMB::T>(2000000000, x"");
+	ViolasBank::lock<RMB::T>(2000000000, x"");
+
+	ViolasBank::borrow<USD::T>(1000000000, x"");
+	ViolasBank::repay_borrow<USD::T>(1000000000, x"");
+	ViolasBank::borrow<USD::T>(1000000000, x"");
     }
 }
+// check: EXECUTED
+
+//! block-prologue
+//! proposer-address: {{va}}
+//! block-time: 300000000
+// check: EXECUTED
+
+//! new-transaction
+//! sender: bob
+script {
+    use {{default}}::ViolasBank;
+    use {{default}}::USD;
+    
+    fun main() {
+	ViolasBank::repay_borrow<USD::T>(0, x"");
+	ViolasBank::print_balance<USD::T>({{bob}});
+
+	ViolasBank::borrow<USD::T>(1000000000, x"");
+	ViolasBank::print_balance<USD::T>({{bob}});
+    }
+}
+// check: EXECUTED
+
+//! new-transaction
+script {
+    use {{default}}::ViolasBank;
+    use {{default}}::USD;
+    
+    fun main() {
+	ViolasBank::update_price<USD::T>(429496729*2);
+    }
+}
+// check: EXECUTED
+
+//! block-prologue
+//! proposer-address: {{va}}
+//! block-time: 600000000
 // check: EXECUTED
 
 //! new-transaction
 //! sender: john
 script {
     use {{default}}::ViolasBank;
-    use 0x0::Vector;
+    use {{default}}::USD;
+    use {{default}}::RMB;
     
     fun main(account: &signer) {
-	ViolasBank::publish(account, Vector::empty());
+	ViolasBank::publish(account, x"");
+	ViolasBank::enter_bank<USD::T>(10000000000);
+	ViolasBank::print_balance<USD::T>({{john}});
+	ViolasBank::print_balance<RMB::T>({{bob}});
+	ViolasBank::liquidate_borrow<USD::T, RMB::T>({{bob}}, 1000000000/2, x"");
+	ViolasBank::print_balance<USD::T>({{john}});
+	ViolasBank::print_balance<RMB::T>({{bob}});
     }
 }
 // check: EXECUTED
 
 
-
-//! block-prologue
-//! proposer-address: {{va}}
-//! block-time: 300000000
 
