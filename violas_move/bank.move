@@ -56,6 +56,10 @@ module ViolasBank {
 	price: u64,
 	price_oracle: address,
 	collateral_factor: u64,
+	base_rate: u64,
+	rate_multiplier: u64,
+	rate_jump_multiplier: u64,
+	rate_kink: u64,
 	last_minute: u64,
 	data: vector<u8>,
 	bulletin_first: vector<u8>,
@@ -123,10 +127,6 @@ module ViolasBank {
     fun require_first_tokenidx(tokenidx: u64) {
 	assert(tokenidx % 2 == 0, 105);
     }
-
-    // fun require_second_tokenidx(tokenidx: u64) {
-    // 	assert(tokenidx % 2 == 1, 106);
-    // }
 
     fun require_price(tokenidx: u64) acquires TokenInfoStore {
 	let tokeninfos = borrow_global<TokenInfoStore>(contract_address());
@@ -255,20 +255,6 @@ module ViolasBank {
     }
 
     ///////////////////////////////////////////////////////////////////////////////////
-
-    // fun debug(a: u64) acquires UserInfo {
-    // 	let info = borrow_global_mut<UserInfo>(Transaction::sender());
-    // 	if(a == 513) { // 0x0102...
-    // 	    loop {
-    // 	    	if(Vector::is_empty(&info.debug))
-    // 	    	    break;
-    // 	    	Vector::pop_back(&mut info.debug);
-    // 	    };
-    // 	};
-    // 	Vector::append(&mut info.debug, LCS::to_bytes(&a));
-    // }
-
-    ///////////////////////////////////////////////////////////////////////////////////
     
     public fun publish(account: &signer, userdata: vector<u8>) acquires Tokens, TokenInfoStore, UserInfo {
 	let sender = Signer::address_of(account);
@@ -292,17 +278,17 @@ module ViolasBank {
 	emit_events(sender, 0, userdata, Vector::empty());
     }
 
-    public fun register_libra_token<CoinType>(account: &signer, price_oracle: address, collateral_factor: u64, tokendata: vector<u8>) : u64 acquires TokenInfoStore, Tokens, UserInfo {
+    public fun register_libra_token<CoinType>(account: &signer, price_oracle: address, collateral_factor: u64, base_rate: u64, rate_multiplier: u64, rate_jump_multiplier: u64, rate_kink: u64, tokendata: vector<u8>) : u64 acquires TokenInfoStore, Tokens, UserInfo {
 	let sender = Signer::address_of(account);
 	require_published(sender);
 	require_supervisor(sender);
 	let tokeninfos = borrow_global_mut<TokenInfoStore>(contract_address());
 	let len = Vector::length(&tokeninfos.tokens);
 	move_to(account, LibraToken<CoinType> { coin: Libra::zero<CoinType>(), index: len });
-	create_token(account, Libra::currency_code<CoinType>(), 0x0, price_oracle, collateral_factor, tokendata)
+	create_token(account, Libra::currency_code<CoinType>(), 0x0, price_oracle, collateral_factor, base_rate, rate_multiplier, rate_jump_multiplier, rate_kink, tokendata)
     }
     
-    public fun create_token(account: &signer, currency_code: vector<u8>, owner: address, price_oracle: address, collateral_factor: u64, tokendata: vector<u8>) : u64 acquires Tokens, TokenInfoStore, UserInfo {
+    public fun create_token(account: &signer, currency_code: vector<u8>, owner: address, price_oracle: address, collateral_factor: u64, base_rate: u64, rate_multiplier: u64, rate_jump_multiplier: u64, rate_kink: u64, tokendata: vector<u8>) : u64 acquires Tokens, TokenInfoStore, UserInfo {
 	let sender = Signer::address_of(account);
 	require_published(sender);
 	require_supervisor(sender);
@@ -323,6 +309,10 @@ module ViolasBank {
 	    price: 0,
 	    price_oracle: price_oracle,
 	    collateral_factor: collateral_factor,
+	    base_rate: base_rate/(365*24*60),
+	    rate_multiplier: rate_multiplier/(365*24*60),
+	    rate_jump_multiplier: rate_jump_multiplier/(365*24*60),
+	    rate_kink: rate_kink,
 	    last_minute: LibraTimestamp::now_microseconds() / (60*1000*1000),
 	    data: *&tokendata,
 	    bulletin_first: Vector::empty(),
@@ -338,6 +328,10 @@ module ViolasBank {
 	    price: 0,
 	    price_oracle: price_oracle,
 	    collateral_factor: collateral_factor,
+	    base_rate: base_rate/(365*24*60),
+	    rate_multiplier: rate_multiplier/(365*24*60),
+	    rate_jump_multiplier: rate_jump_multiplier/(365*24*60),
+	    rate_kink: rate_kink,
 	    last_minute: LibraTimestamp::now_microseconds() / (60*1000*1000),
 	    data: *&tokendata,
 	    bulletin_first: Vector::empty(),
@@ -414,31 +408,6 @@ module ViolasBank {
 	emit_events(sender, 3, v, Vector::empty());
     }
 
-    // public fun move_owner(tokenidx: u64, new_owner: address, data: vector<u8>) acquires TokenInfoStore, UserInfo {
-    // 	require_published();
-    // 	require_first_tokenidx(tokenidx);
-    // 	require_owner(tokenidx);
-    // 	let tokeninfos = borrow_global_mut<TokenInfoStore>(contract_address());
-    // 	let ti = Vector::borrow_mut(&mut tokeninfos.tokens, tokenidx);
-    // 	ti.owner = new_owner;
-
-    // 	let v = LCS::to_bytes(&tokenidx);
-    // 	Vector::append(&mut v, LCS::to_bytes(&new_owner));
-    // 	Vector::append(&mut v, data);
-    // 	emit_events(4, v, Vector::empty());
-    // }
-
-    // public fun move_supervisor(new_supervisor: address, data: vector<u8>) acquires TokenInfoStore, UserInfo {
-    // 	require_published();
-    // 	require_supervisor();
-    // 	let tokeninfos = borrow_global_mut<TokenInfoStore>(contract_address());
-    // 	tokeninfos.supervisor = new_supervisor;
-
-    // 	let v = LCS::to_bytes(&new_supervisor);
-    // 	Vector::append(&mut v, data);
-    // 	emit_events(5, v, Vector::empty());
-    // }
-    
     ///////////////////////////////////////////////////////////////////////////////////
 
     fun exchange_rate(tokenidx: u64) : u64 acquires Tokens, TokenInfoStore {
@@ -469,8 +438,19 @@ module ViolasBank {
 	} else {
 	    new_mantissa(ti.total_borrows, ti.total_borrows + safe_sub(t.value, ti.total_reserves))
 	};
-	let baserate_perminute = new_mantissa(5*60*24*30, 100*60*24*365);
-	baserate_perminute + mantissa_mul(baserate_perminute, util)
+	
+	if(util <= ti.rate_kink) {
+	    mantissa_mul(ti.rate_multiplier, util) + ti.base_rate
+	} else {
+	    let normalrate = mantissa_mul(ti.rate_multiplier, ti.rate_kink) + ti.base_rate;
+	    let excessutil = util - ti.rate_kink;
+	    mantissa_mul(ti.rate_jump_multiplier, excessutil) + normalrate
+	}
+
+	// way to calc supply_rate
+	// let borrowrate = borrow_rate(tokenidx);
+	// let ratetopool = mantissa_mul(borrowrate, new_mantissa(95, 100));
+	// mantissa_mul(ratetopool, util)
     }
 
     fun accrue_interest(tokenidx: u64) acquires Tokens, TokenInfoStore {
@@ -942,6 +922,46 @@ module ViolasBank {
     // 	require_published();
     // 	emit_events(12, data, Vector::empty());
     // }
+
+    ///////////////////////////////////////////////////////////////////////////////////
+
+    // fun debug(a: u64) acquires UserInfo {
+    // 	let info = borrow_global_mut<UserInfo>(Transaction::sender());
+    // 	if(a == 513) { // 0x0102...
+    // 	    loop {
+    // 	    	if(Vector::is_empty(&info.debug))
+    // 	    	    break;
+    // 	    	Vector::pop_back(&mut info.debug);
+    // 	    };
+    // 	};
+    // 	Vector::append(&mut info.debug, LCS::to_bytes(&a));
+    // }
+
+    // public fun move_owner(tokenidx: u64, new_owner: address, data: vector<u8>) acquires TokenInfoStore, UserInfo {
+    // 	require_published();
+    // 	require_first_tokenidx(tokenidx);
+    // 	require_owner(tokenidx);
+    // 	let tokeninfos = borrow_global_mut<TokenInfoStore>(contract_address());
+    // 	let ti = Vector::borrow_mut(&mut tokeninfos.tokens, tokenidx);
+    // 	ti.owner = new_owner;
+
+    // 	let v = LCS::to_bytes(&tokenidx);
+    // 	Vector::append(&mut v, LCS::to_bytes(&new_owner));
+    // 	Vector::append(&mut v, data);
+    // 	emit_events(4, v, Vector::empty());
+    // }
+
+    // public fun move_supervisor(new_supervisor: address, data: vector<u8>) acquires TokenInfoStore, UserInfo {
+    // 	require_published();
+    // 	require_supervisor();
+    // 	let tokeninfos = borrow_global_mut<TokenInfoStore>(contract_address());
+    // 	tokeninfos.supervisor = new_supervisor;
+
+    // 	let v = LCS::to_bytes(&new_supervisor);
+    // 	Vector::append(&mut v, data);
+    // 	emit_events(5, v, Vector::empty());
+    // }
+    
 }
 
 }
