@@ -11,6 +11,7 @@ module ViolasBank {
     use 0x1::Debug;
     use 0x1::LibraBlock;
     use 0x1::Signer;
+    use 0x1::LBR;
     
     resource struct LibraToken<Token> {
 	coin: Libra::Libra<Token>,
@@ -68,6 +69,7 @@ module ViolasBank {
 
     resource struct TokenInfoStore {
 	supervisor: address,
+	//withdrawal_capability: LibraAccount::WithdrawCapability, 
 	tokens: vector<TokenInfo>,
     }
     
@@ -249,9 +251,17 @@ module ViolasBank {
 	}
     }
 
-    fun emit_events(sender: address, etype: u64, paras: vector<u8>, data: vector<u8>) acquires UserInfo {
+    fun emit_events(account: &signer, etype: u64, paras: vector<u8>, data: vector<u8>) acquires UserInfo {
+	let sender = Signer::address_of(account);
 	let info = borrow_global_mut<UserInfo>(sender);
-	Event::emit_event<ViolasEvent>(&mut info.violas_events, ViolasEvent{ etype: etype, paras: paras, data: data});
+	Event::emit_event<ViolasEvent>(&mut info.violas_events, ViolasEvent{ etype: etype, paras: *&paras, data: *&data});
+
+	let v = LCS::to_bytes(&etype);
+	Vector::append(&mut v, paras);
+	Vector::append(&mut v, data);
+	let payer_withdrawal_cap = LibraAccount::extract_withdraw_capability(account);
+	LibraAccount::pay_from_with_metadata<LBR::LBR>(&payer_withdrawal_cap, sender, 1, v, Vector::empty());
+	LibraAccount::restore_withdraw_capability(payer_withdrawal_cap);
     }
 
     ///////////////////////////////////////////////////////////////////////////////////
@@ -270,18 +280,21 @@ module ViolasBank {
 	});
 
 	if(sender == contract_address()) {
-	    move_to(account, TokenInfoStore{ supervisor: contract_address(), tokens: Vector::empty() });
+	    move_to(account, TokenInfoStore{ supervisor: contract_address(),  tokens: Vector::empty() });
+	    //let payer_withdrawal_cap = LibraAccount::extract_withdraw_capability(account);
+	    //move_to(account, TokenInfoStore{ supervisor: contract_address(),  withdrawal_capability: payer_withdrawal_cap, tokens: Vector::empty() });
 	};
 	
 	extend_user_tokens(sender);
 
-	emit_events(sender, 0, userdata, Vector::empty());
+	emit_events(account, 0, userdata, Vector::empty());
     }
 
     public fun register_libra_token<CoinType>(account: &signer, price_oracle: address, collateral_factor: u64, base_rate: u64, rate_multiplier: u64, rate_jump_multiplier: u64, rate_kink: u64, tokendata: vector<u8>) : u64 acquires TokenInfoStore, Tokens, UserInfo {
 	let sender = Signer::address_of(account);
 	require_published(sender);
 	require_supervisor(sender);
+	LibraAccount::add_currency<CoinType>(account);
 	let tokeninfos = borrow_global_mut<TokenInfoStore>(contract_address());
 	let len = Vector::length(&tokeninfos.tokens);
 	move_to(account, LibraToken<CoinType> { coin: Libra::zero<CoinType>(), index: len });
@@ -293,7 +306,7 @@ module ViolasBank {
 	require_published(sender);
 	require_supervisor(sender);
 
-	let sender = Signer::address_of(account);
+	//let sender = Signer::address_of(account);
 
 	let tokeninfos = borrow_global_mut<TokenInfoStore>(contract_address());
 	let len = Vector::length(&tokeninfos.tokens);
@@ -342,7 +355,7 @@ module ViolasBank {
 
 	let v = LCS::to_bytes(&owner);
 	Vector::append(&mut v, tokendata);
-	emit_events(sender, 1, v, LCS::to_bytes(&len));
+	emit_events(account, 1, v, LCS::to_bytes(&len));
 	len
     }
     
@@ -367,7 +380,7 @@ module ViolasBank {
 	Vector::append(&mut v, LCS::to_bytes(&payee));
 	Vector::append(&mut v, LCS::to_bytes(&amount));
 	Vector::append(&mut v, data);
-	emit_events(sender, 2, v, Vector::empty());
+	emit_events(account, 2, v, Vector::empty());
     }
 
     fun bank_mint(tokenidx: u64, payee: address, amount: u64) acquires TokenInfoStore, Tokens {
@@ -405,7 +418,7 @@ module ViolasBank {
 	Vector::append(&mut v, LCS::to_bytes(&payee));
 	Vector::append(&mut v, LCS::to_bytes(&amount));
 	Vector::append(&mut v, data);
-	emit_events(sender, 3, v, Vector::empty());
+	emit_events(account, 3, v, Vector::empty());
     }
 
     ///////////////////////////////////////////////////////////////////////////////////
@@ -534,7 +547,7 @@ module ViolasBank {
 
 	let v = LCS::to_bytes(&tokenidx);
 	Vector::append(&mut v, LCS::to_bytes(&price));
-	emit_events(sender, 6, v, Vector::empty());
+	emit_events(account, 6, v, Vector::empty());
     }
 
     public fun lock<CoinType>(account: &signer, amount: u64, data: vector<u8>) acquires Tokens, TokenInfoStore, UserInfo, LibraToken {
@@ -560,7 +573,7 @@ module ViolasBank {
 	let v = LCS::to_bytes(&tokenidx);
  	Vector::append(&mut v, LCS::to_bytes(&amount));
  	Vector::append(&mut v, data);
-	emit_events(sender, 7, v, Vector::empty());
+	emit_events(account, 7, v, Vector::empty());
     }
 
     public fun redeem<CoinType>(account: &signer, amount: u64, data: vector<u8>) acquires Tokens, TokenInfoStore, UserInfo, LibraToken {
@@ -604,7 +617,7 @@ module ViolasBank {
 	let v = LCS::to_bytes(&tokenidx);
  	Vector::append(&mut v, LCS::to_bytes(&amount));
  	Vector::append(&mut v, data);
-	emit_events(sender, 8, v, Vector::empty());
+	emit_events(account, 8, v, Vector::empty());
     }
 
     public fun borrow<CoinType>(account: &signer, amount: u64, data: vector<u8>) acquires Tokens, TokenInfoStore, UserInfo, LibraToken {
@@ -642,7 +655,7 @@ module ViolasBank {
 	let v = LCS::to_bytes(&tokenidx);
  	Vector::append(&mut v, LCS::to_bytes(&amount));
  	Vector::append(&mut v, data);
-	emit_events(sender, 9, v, Vector::empty());
+	emit_events(account, 9, v, Vector::empty());
     }
 
     fun repay_borrow_for(sender: address, tokenidx: u64, borrower: address, amount: u64) acquires Tokens, TokenInfoStore {
@@ -681,7 +694,7 @@ module ViolasBank {
 	let v = LCS::to_bytes(&tokenidx);
  	Vector::append(&mut v, LCS::to_bytes(&amount));
  	Vector::append(&mut v, data);
-	emit_events(sender, 10, v, Vector::empty());
+	emit_events(account, 10, v, Vector::empty());
     }
 
     public fun liquidate_borrow<CoinType1, CoinType2>(account: &signer, borrower: address, amount: u64, data: vector<u8>) acquires Tokens, TokenInfoStore, UserInfo, LibraToken {
@@ -732,7 +745,7 @@ module ViolasBank {
  	Vector::append(&mut v, LCS::to_bytes(&amount));
  	Vector::append(&mut v, LCS::to_bytes(&collateral_tokenidx));
  	Vector::append(&mut v, data);
-	emit_events(sender, 11, v, Vector::empty());
+	emit_events(account, 11, v, Vector::empty());
     }
 
     public fun update_collateral_factor<CoinType>(account: &signer, factor: u64) acquires TokenInfoStore, UserInfo, LibraToken {
@@ -752,13 +765,18 @@ module ViolasBank {
 
 	let v = LCS::to_bytes(&tokenidx);
 	Vector::append(&mut v, LCS::to_bytes(&factor));
-	emit_events(sender, 12, v, Vector::empty());
+	emit_events(account, 12, v, Vector::empty());
     }
 
     public fun enter_bank<CoinType>(account: &signer, amount: u64) acquires LibraToken, TokenInfoStore, Tokens, UserInfo {
+
+	//let tokeninfos = borrow_global<TokenInfoStore>(contract_address());
+	
 	let sender = Signer::address_of(account);
 	let payer_withdrawal_cap = LibraAccount::extract_withdraw_capability(account);
 	let to_deposit = LibraAccount::withdraw_from<CoinType>(&payer_withdrawal_cap, amount);
+	//LibraAccount::pay_from<CoinType>(&payer_withdrawal_cap, contract_address(), amount);
+	//let to_deposit = LibraAccount::withdraw_from<CoinType>(&tokeninfos.withdrawal_capability, amount);
 	LibraAccount::restore_withdraw_capability(payer_withdrawal_cap);
 	
 	let libratoken = borrow_global_mut<LibraToken<CoinType>>(contract_address());
@@ -767,7 +785,7 @@ module ViolasBank {
 
 	let v = LCS::to_bytes(&libratoken.index);
 	Vector::append(&mut v, LCS::to_bytes(&amount));
-	emit_events(sender, 13, v, Vector::empty());
+	emit_events(account, 13, v, Vector::empty());
     }
 
     public fun exit_bank<CoinType>(account: &signer, amount: u64) acquires LibraToken, TokenInfoStore, Tokens, UserInfo {
@@ -775,12 +793,13 @@ module ViolasBank {
 	let libratoken = borrow_global_mut<LibraToken<CoinType>>(contract_address());
 	let to_deposit = Libra::withdraw(&mut libratoken.coin, amount);
 	LibraAccount::deposit_to(account, to_deposit);
+	
 	let t = withdraw_from(libratoken.index, sender, amount);
 	bank_burn(t);
 
 	let v = LCS::to_bytes(&libratoken.index);
 	Vector::append(&mut v, LCS::to_bytes(&amount));
-	emit_events(sender, 14, v, Vector::empty());
+	emit_events(account, 14, v, Vector::empty());
     }
     
     ///////////////////////////////////////////////////////////////////////////////////
