@@ -382,7 +382,7 @@ module ViolasBank {
 	let sender = Signer::address_of(account);
 	require_published(sender);
 	require_supervisor(sender);
-	LibraAccount::add_currency<CoinType>(account);
+	//LibraAccount::add_currency<CoinType>(account);
 	let tokeninfos = borrow_global_mut<TokenInfoStore>(contract_address());
 	let len = Vector::length(&tokeninfos.tokens);
 	move_to(account, LibraToken<CoinType> { coin: Libra::zero<CoinType>(), index: len });
