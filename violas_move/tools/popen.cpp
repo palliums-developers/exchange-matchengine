@@ -39,13 +39,7 @@ int gen_accounts() {
 
 std::string string_replace(std::string str, std::string a, std::string b) {
   std::string::size_type pos = 0;
-  if((pos = str.find(a)) != std::string::npos) {
-    str.replace(pos, a.length(), b);
-  }
-  if((pos = str.find(a)) != std::string::npos) {
-    str.replace(pos, a.length(), b);
-  }
-  if((pos = str.find(a)) != std::string::npos) {
+  while((pos = str.find(a)) != std::string::npos) {
     str.replace(pos, a.length(), b);
   }
   return str;
@@ -57,6 +51,8 @@ std::string handle_line(std::string line) {
   line = string_replace(line,"@2", "0x"+gaccounts[2]);
   line = string_replace(line,"@3", "0x"+gaccounts[3]);
   line = string_replace(line,"@4", "0x"+gaccounts[4]);
+
+  line = string_replace(line,",", "");
 
   std::string::size_type pos = 0;
 

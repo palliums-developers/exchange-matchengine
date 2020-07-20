@@ -8,7 +8,8 @@ dev execute 1 /home/ops/lmf/move/publish.mv b"00"
 dev execute 2 /home/ops/lmf/move/publish.mv b"00"
 dev execute 3 /home/ops/lmf/move/publish.mv b"00"
 
-dev execute 0 /home/ops/lmf/move/create_token.mv b"00" @0 @0 2147483648 b"00"
+
+dev execute 0 /home/ops/lmf/move/create_token.mv b"00" @0 @0 2147483648 9277129359360 18554258718720 37108517437440 3435973836 b"00"
 dev execute 0 /home/ops/lmf/move/update_price_index.mv 0 429496729
 
 dev execute 0 /home/ops/lmf/move/mint.mv 0 @1 10000000000 b"00"
@@ -20,7 +21,10 @@ dev execute 2 /home/ops/lmf/move/lock_index.mv 0 2000000000 b"00"
 dev execute 3 /home/ops/lmf/move/lock_index.mv 0 2000000000 b"00"
 
 dev execute 1 /home/ops/lmf/move/borrow_index.mv 0 1000000000 b"00"
-sleep(120)
+sleep 120
 dev execute 1 /home/ops/lmf/move/repay_borrow_index.mv 0 1000000000 b"00"
+
+dev execute 1 /home/ops/lmf/move/borrow_index.mv 0 1000000000 b"00"
+dev execute 1 /home/ops/lmf/move/borrow_index.mv 0 1000000000 b"00"
 
 
