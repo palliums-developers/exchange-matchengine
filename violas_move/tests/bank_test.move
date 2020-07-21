@@ -2,86 +2,20 @@
 //! account: alice, 1000000LBR
 //! account: bob, 1000000LBR
 //! account: john, 1000000LBR
-
-module USD {
-    use 0x1::Libra;
-    use 0x1::FixedPoint32;
-
-    struct T { }
-
-    public fun initialize(account: &signer): (Libra::MintCapability<T>, Libra::BurnCapability<T>) {
-        // Register the Coin2 currency.
-        Libra::register_currency<T>(
-            account,
-            FixedPoint32::create_from_rational(1, 2), // exchange rate to LBR
-            false,   // is_synthetic
-            1000000, // scaling_factor = 10^6
-            100,     // fractional_part = 10^2
-            x"436F696E32", // UTF8 encoding of "Coin2" in hex
-        )
-    }
-}
-
-// check: EXECUTED
-
-//! new-transaction
-
-module RMB {
-    use 0x1::Libra;
-    use 0x1::FixedPoint32;
-
-    struct T { }
-
-    public fun initialize(account: &signer): (Libra::MintCapability<T>, Libra::BurnCapability<T>) {
-        // Register the Coin2 currency.
-        Libra::register_currency<T>(
-            account,
-            FixedPoint32::create_from_rational(1, 2), // exchange rate to LBR
-            false,   // is_synthetic
-            1000000, // scaling_factor = 10^6
-            100,     // fractional_part = 10^2
-            x"436F696E32", // UTF8 encoding of "Coin2" in hex
-        )
-    }
-}
-
-// check: EXECUTED
-
-//! new-transaction
-
-module EUR {
-    use 0x1::Libra;
-    use 0x1::FixedPoint32;
-
-    struct T { }
-
-    public fun initialize(account: &signer): (Libra::MintCapability<T>, Libra::BurnCapability<T>) {
-        // Register the Coin2 currency.
-        Libra::register_currency<T>(
-            account,
-            FixedPoint32::create_from_rational(1, 2), // exchange rate to LBR
-            false,   // is_synthetic
-            1000000, // scaling_factor = 10^6
-            100,     // fractional_part = 10^2
-            x"436F696E32", // UTF8 encoding of "Coin2" in hex
-        )
-    }
-}
-
-// check: EXECUTED
-
-//! new-transaction
+//! account: tc, 1000000LBR, 0, blessed
 
 module ViolasBank {
     use 0x1::Libra;
     use 0x1::LibraAccount;
-    use 0x1::Transaction;
+    //use 0x1::Transaction;
     use 0x1::Event;
     use 0x1::Vector;
     use 0x1::LCS;
     use 0x1::LibraTimestamp;
     use 0x1::Debug;
     use 0x1::LibraBlock;
+    use 0x1::Signer;
+    //use 0x1::LBR;
     
     resource struct LibraToken<Token> {
 	coin: Libra::Libra<Token>,
@@ -127,6 +61,10 @@ module ViolasBank {
 	price: u64,
 	price_oracle: address,
 	collateral_factor: u64,
+	base_rate: u64,
+	rate_multiplier: u64,
+	rate_jump_multiplier: u64,
+	rate_kink: u64,
 	last_minute: u64,
 	data: vector<u8>,
 	bulletin_first: vector<u8>,
@@ -144,6 +82,97 @@ module ViolasBank {
 	data:  vector<u8>,
     }
 
+    struct EventPublish {
+	userdata: vector<u8>,
+    }
+
+    struct EventRegisterLibraToken {
+	currency_code: vector<u8>,
+	price_oracle: address,
+	collateral_factor: u64,
+	base_rate: u64,
+	rate_multiplier: u64,
+	rate_jump_multiplier: u64,
+	rate_kink: u64,
+	tokendata: vector<u8>,
+    }
+
+    struct EventMint {
+	tokenidx: u64,
+	payee: address,
+	amount: u64,
+	data: vector<u8>,
+    }
+
+    struct EventTransfer {
+	tokenidx: u64,
+	payee: address,
+	amount: u64,
+	data: vector<u8>,
+    }
+
+    struct EventUpdatePrice {
+	currency_code: vector<u8>,
+	tokenidx: u64,
+	price: u64,
+    }
+
+    struct EventLock {
+	currency_code: vector<u8>,
+	tokenidx: u64,
+	amount: u64,
+	data: vector<u8>,
+    }
+
+    struct EventRedeem {
+	currency_code: vector<u8>,
+	tokenidx: u64,
+	amount: u64,
+	data: vector<u8>,
+    }
+
+    struct EventBorrow {
+	currency_code: vector<u8>,
+	tokenidx: u64,
+	amount: u64,
+	data: vector<u8>,
+    }
+
+    struct EventRepayBorrow {
+	currency_code: vector<u8>,
+	tokenidx: u64,
+	amount: u64,
+	data: vector<u8>,
+    }
+
+    struct EventLiquidateBorrow {
+	currency_code1: vector<u8>,
+	currency_code2: vector<u8>,
+	tokenidx: u64,
+	borrower: address,
+	amount: u64,
+	collateral_tokenidx: u64,
+	data: vector<u8>,	    
+    }
+
+    struct EventUpdateCollateralFactor {
+	currency_code: vector<u8>,
+	tokenidx: u64,
+	factor: u64,
+    }
+
+    struct EventEnterBank {
+	currency_code: vector<u8>,
+	tokenidx: u64,
+	amount: u64,
+    }
+
+    struct EventExitBank {
+	currency_code: vector<u8>,
+	tokenidx: u64,
+	amount: u64,
+    }
+    
     ///////////////////////////////////////////////////////////////////////////////////
     
     fun new_mantissa(a: u64, b: u64) : u64 {
@@ -174,30 +203,27 @@ module ViolasBank {
     
     fun contract_address() : address {
 	{{default}}
+	// 0x0000000000000000000000000a550c18
     }
     
-    fun require_published() {
-	assert(exists<Tokens>(Transaction::sender()), 102);
+    fun require_published(sender: address) {
+	assert(exists<Tokens>(sender), 102);
     }
 
-    fun require_supervisor() acquires TokenInfoStore {
+    fun require_supervisor(sender: address) acquires TokenInfoStore {
 	let tokeninfos = borrow_global<TokenInfoStore>(contract_address());
-	assert(Transaction::sender() == tokeninfos.supervisor, 103);
+	assert(sender == tokeninfos.supervisor, 103);
     }
     
-    fun require_owner(tokenidx: u64) acquires TokenInfoStore {
+    fun require_owner(sender: address, tokenidx: u64) acquires TokenInfoStore {
 	let tokeninfos = borrow_global_mut<TokenInfoStore>(contract_address());
 	let ti = Vector::borrow(&tokeninfos.tokens, tokenidx);
-	assert(ti.owner == Transaction::sender(), 104);
+	assert(ti.owner == sender, 104);
     }
 
     fun require_first_tokenidx(tokenidx: u64) {
 	assert(tokenidx % 2 == 0, 105);
     }
-
-    // fun require_second_tokenidx(tokenidx: u64) {
-    // 	assert(tokenidx % 2 == 1, 106);
-    // }
 
     fun require_price(tokenidx: u64) acquires TokenInfoStore {
 	let tokeninfos = borrow_global<TokenInfoStore>(contract_address());
@@ -244,17 +270,10 @@ module ViolasBank {
 	} else { 0 }
     }
     
-    public fun balance(tokenidx: u64) : u64 acquires Tokens {
-	balance_of(tokenidx, Transaction::sender())
-    }
+    // public fun balance(tokenidx: u64) : u64 acquires Tokens {
+    // 	balance_of(tokenidx, Transaction::sender())
+    // }
 
-    public fun print_balance<CoinType>(account: address) acquires LibraToken, Tokens {
-	let libratoken = borrow_global<LibraToken<CoinType>>(contract_address());
-	Debug::print(&x"01010101");
-	Debug::print(&balance_of(libratoken.index, account));
-	Debug::print(&balance_of(libratoken.index+1, account));
-    }
-    
     fun borrow_balance_of(tokenidx: u64, account: address) : u64 acquires Tokens, TokenInfoStore {
 	// recentBorrowBalance = borrower.borrowBalance * market.borrowIndex / borrower.borrowIndex
 	let tokens = borrow_global<Tokens>(account);
@@ -267,9 +286,9 @@ module ViolasBank {
 	mantissa_div(mantissa_mul(borrowinfo.principal, ti.borrow_index), borrowinfo.interest_index)
     }
 
-    fun borrow_balance(tokenidx: u64) : u64 acquires Tokens, TokenInfoStore {
-	borrow_balance_of(tokenidx, Transaction::sender())
-    }
+    // fun borrow_balance(tokenidx: u64) : u64 acquires Tokens, TokenInfoStore {
+    // 	borrow_balance_of(tokenidx, Transaction::sender())
+    // }
     
     public fun token_count() : u64 acquires TokenInfoStore {
 	let tokeninfos = borrow_global<TokenInfoStore>(contract_address());
@@ -306,13 +325,9 @@ module ViolasBank {
 	T { index: tokenidx, value: amount }
     }
     
-    fun withdraw(tokenidx: u64, amount: u64) : T acquires Tokens {
-	withdraw_from(tokenidx, Transaction::sender(), amount)
-    }
-
-    fun pay_from_sender(tokenidx: u64, payee: address, amount: u64) acquires TokenInfoStore,Tokens {
-	assert(Transaction::sender() != payee, 112);
-    	let t = withdraw(tokenidx, amount);
+    fun pay_from(tokenidx: u64, payer: address, payee: address, amount: u64) acquires TokenInfoStore,Tokens {
+	assert(payer != payee, 112);
+    	let t = withdraw_from(tokenidx, payer, amount);
     	deposit(payee, t);
     }
     
@@ -331,34 +346,25 @@ module ViolasBank {
 	}
     }
 
-    fun emit_events(etype: u64, paras: vector<u8>, data: vector<u8>) acquires UserInfo {
-	let info = borrow_global_mut<UserInfo>(Transaction::sender());
-	Event::emit_event<ViolasEvent>(&mut info.violas_events, ViolasEvent{ etype: etype, paras: paras, data: data});
+    fun emit_events(account: &signer, etype: u64, paras: vector<u8>, data: vector<u8>) acquires UserInfo {
+	let sender = Signer::address_of(account);
+	let info = borrow_global_mut<UserInfo>(sender);
+	Event::emit_event<ViolasEvent>(&mut info.violas_events, ViolasEvent{ etype: etype, paras: *&paras, data: *&data});
+
+	// let input = ViolasEvent{ etype: etype, paras: *&paras, data: *&data };
+	// let payer_withdrawal_cap = LibraAccount::extract_withdraw_capability(account);
+	// LibraAccount::pay_from_with_metadata<LBR::LBR>(&payer_withdrawal_cap, sender, 1, LCS::to_bytes(&input), Vector::empty());
+	// LibraAccount::restore_withdraw_capability(payer_withdrawal_cap);
     }
-
-    ///////////////////////////////////////////////////////////////////////////////////
-
-    // fun debug(a: u64) acquires UserInfo {
-    // 	let info = borrow_global_mut<UserInfo>(Transaction::sender());
-    // 	if(a == 513) { // 0x0102...
-    // 	    loop {
-    // 	    	if(Vector::is_empty(&info.debug))
-    // 	    	    break;
-    // 	    	Vector::pop_back(&mut info.debug);
-    // 	    };
-    // 	};
-    // 	Vector::append(&mut info.debug, LCS::to_bytes(&a));
-    // }
 
     ///////////////////////////////////////////////////////////////////////////////////
     
     public fun publish(account: &signer, userdata: vector<u8>) acquires Tokens, TokenInfoStore, UserInfo {
-
-	let sender = Transaction::sender();
+	let sender = Signer::address_of(account);
 	assert(!exists<Tokens>(sender), 113);
-	move_to_sender<Tokens>(Tokens{ ts: Vector::empty(), borrows: Vector::empty() });
+	move_to(account, Tokens{ ts: Vector::empty(), borrows: Vector::empty() });
 
-	move_to_sender<UserInfo>(UserInfo{
+	move_to(account, UserInfo{
 	    violas_events: Event::new_event_handle<ViolasEvent>(account),
 	    data: *&userdata,
 	    orders: Vector::empty(),
@@ -367,32 +373,39 @@ module ViolasBank {
 	});
 
 	if(sender == contract_address()) {
-	    move_to_sender<TokenInfoStore>(TokenInfoStore{ supervisor: contract_address(), tokens: Vector::empty() });
+	    move_to(account, TokenInfoStore{ supervisor: contract_address(),  tokens: Vector::empty() });
 	};
 	
-	extend_user_tokens(Transaction::sender());
+	extend_user_tokens(sender);
 
-	emit_events(0, userdata, Vector::empty());
+	let input = EventPublish{ userdata: userdata };
+	emit_events(account, 0, LCS::to_bytes(&input), Vector::empty());
     }
 
-    public fun register_libra_token<CoinType>(price_oracle: address, collateral_factor: u64, tokendata: vector<u8>) : u64 acquires TokenInfoStore, Tokens, UserInfo {
-	require_published();
-	require_supervisor();
+    public fun register_libra_token<CoinType>(account: &signer, price_oracle: address, collateral_factor: u64, base_rate: u64, rate_multiplier: u64, rate_jump_multiplier: u64, rate_kink: u64, tokendata: vector<u8>) : u64 acquires TokenInfoStore, Tokens, UserInfo {
+	let sender = Signer::address_of(account);
+	require_published(sender);
+	require_supervisor(sender);
+	//LibraAccount::add_currency<CoinType>(account);
 	let tokeninfos = borrow_global_mut<TokenInfoStore>(contract_address());
 	let len = Vector::length(&tokeninfos.tokens);
-	move_to_sender<LibraToken<CoinType>>(LibraToken<CoinType> { coin: Libra::zero<CoinType>(), index: len });
-	create_token(Libra::currency_code<CoinType>(), 0x0, price_oracle, collateral_factor, tokendata)
+	move_to(account, LibraToken<CoinType> { coin: Libra::zero<CoinType>(), index: len });
+	create_token(account, Libra::currency_code<CoinType>(), 0x0, price_oracle, collateral_factor, base_rate, rate_multiplier, rate_jump_multiplier, rate_kink, tokendata)
     }
     
-    public fun create_token(currency_code: vector<u8>, owner: address, price_oracle: address, collateral_factor: u64, tokendata: vector<u8>) : u64 acquires Tokens, TokenInfoStore, UserInfo {
-	require_published();
-	require_supervisor();
+    public fun create_token(account: &signer, currency_code: vector<u8>, owner: address, price_oracle: address, collateral_factor: u64, base_rate: u64, rate_multiplier: u64, rate_jump_multiplier: u64, rate_kink: u64, tokendata: vector<u8>) : u64 acquires Tokens, TokenInfoStore, UserInfo {
+	let sender = Signer::address_of(account);
+	require_published(sender);
+	require_supervisor(sender);
+
+	//let sender = Signer::address_of(account);
+
 	let tokeninfos = borrow_global_mut<TokenInfoStore>(contract_address());
 	let len = Vector::length(&tokeninfos.tokens);
 	let mantissa_one = new_mantissa(1, 1);
 
 	Vector::push_back(&mut tokeninfos.tokens, TokenInfo {
-	    currency_code: currency_code,
+	    currency_code: *&currency_code,
 	    owner: owner,
 	    total_supply: 0,
 	    total_reserves: 0,
@@ -401,6 +414,10 @@ module ViolasBank {
 	    price: 0,
 	    price_oracle: price_oracle,
 	    collateral_factor: collateral_factor,
+	    base_rate: base_rate/(365*24*60),
+	    rate_multiplier: rate_multiplier/(365*24*60),
+	    rate_jump_multiplier: rate_jump_multiplier/(365*24*60),
+	    rate_kink: rate_kink,
 	    last_minute: LibraTimestamp::now_microseconds() / (60*1000*1000),
 	    data: *&tokendata,
 	    bulletin_first: Vector::empty(),
@@ -416,6 +433,10 @@ module ViolasBank {
 	    price: 0,
 	    price_oracle: price_oracle,
 	    collateral_factor: collateral_factor,
+	    base_rate: base_rate/(365*24*60),
+	    rate_multiplier: rate_multiplier/(365*24*60),
+	    rate_jump_multiplier: rate_jump_multiplier/(365*24*60),
+	    rate_kink: rate_kink,
 	    last_minute: LibraTimestamp::now_microseconds() / (60*1000*1000),
 	    data: *&tokendata,
 	    bulletin_first: Vector::empty(),
@@ -424,18 +445,29 @@ module ViolasBank {
 
 	extend_user_tokens(contract_address());
 
-	let v = LCS::to_bytes(&owner);
-	Vector::append(&mut v, tokendata);
-	emit_events(1, v, LCS::to_bytes(&len));
+	let input = EventRegisterLibraToken {
+	    currency_code: currency_code,
+	    price_oracle: price_oracle,
+	    collateral_factor: collateral_factor,
+	    base_rate: base_rate,
+	    rate_multiplier: rate_multiplier,
+	    rate_jump_multiplier: rate_jump_multiplier,
+	    rate_kink: rate_kink,
+	    tokendata: tokendata,
+	};
+	
+	emit_events(account, 1, LCS::to_bytes(&input), Vector::empty());
 	len
     }
     
-    public fun mint(tokenidx: u64, payee: address, amount: u64, data: vector<u8>) acquires TokenInfoStore, Tokens, UserInfo {
-	require_published();
-	require_first_tokenidx(tokenidx);
-	require_owner(tokenidx);
+    public fun mint(account: &signer, tokenidx: u64, payee: address, amount: u64, data: vector<u8>) acquires TokenInfoStore, Tokens, UserInfo {
+	let sender = Signer::address_of(account);
 
- 	extend_user_tokens(Transaction::sender());
+	require_published(sender);
+	require_first_tokenidx(tokenidx);
+	require_owner(sender, tokenidx);
+
+ 	extend_user_tokens(sender);
 	extend_user_tokens(payee);
 	
 	let t = T{ index: tokenidx, value: amount };
@@ -445,11 +477,14 @@ module ViolasBank {
 	let ti = Vector::borrow_mut(&mut tokeninfos.tokens, tokenidx);
 	ti.total_supply = ti.total_supply + amount;
 
-	let v = LCS::to_bytes(&tokenidx);
-	Vector::append(&mut v, LCS::to_bytes(&payee));
-	Vector::append(&mut v, LCS::to_bytes(&amount));
-	Vector::append(&mut v, data);
-	emit_events(2, v, Vector::empty());
+	let input = EventMint {
+	    tokenidx: tokenidx,
+	    payee: payee,
+	    amount: amount,
+	    data: data,
+	};
+	
+	emit_events(account, 2, LCS::to_bytes(&input), Vector::empty());
     }
 
     fun bank_mint(tokenidx: u64, payee: address, amount: u64) acquires TokenInfoStore, Tokens {
@@ -473,47 +508,26 @@ module ViolasBank {
 	deposit(payee, t)
     }
     
-    public fun transfer(tokenidx: u64, payee: address, amount: u64, data: vector<u8>) acquires TokenInfoStore, Tokens,  UserInfo {
-	require_published();
+    public fun transfer(account: &signer, tokenidx: u64, payee: address, amount: u64, data: vector<u8>) acquires TokenInfoStore, Tokens,  UserInfo {
+	let sender = Signer::address_of(account);
+	require_published(sender);
 	require_first_tokenidx(tokenidx);
 
-	extend_user_tokens(Transaction::sender());
+	extend_user_tokens(sender);
 	extend_user_tokens(payee);
 
-	pay_from_sender(tokenidx, payee, amount);
+	pay_from(tokenidx, sender, payee, amount);
 	
-	let v = LCS::to_bytes(&tokenidx);
-	Vector::append(&mut v, LCS::to_bytes(&payee));
-	Vector::append(&mut v, LCS::to_bytes(&amount));
-	Vector::append(&mut v, data);
-	emit_events(3, v, Vector::empty());
+	let input = EventTransfer {
+	    tokenidx: tokenidx,
+	    payee: payee,
+	    amount: amount,
+	    data: data,
+	};
+	
+	emit_events(account, 3, LCS::to_bytes(&input), Vector::empty());
     }
 
-    // public fun move_owner(tokenidx: u64, new_owner: address, data: vector<u8>) acquires TokenInfoStore, UserInfo {
-    // 	require_published();
-    // 	require_first_tokenidx(tokenidx);
-    // 	require_owner(tokenidx);
-    // 	let tokeninfos = borrow_global_mut<TokenInfoStore>(contract_address());
-    // 	let ti = Vector::borrow_mut(&mut tokeninfos.tokens, tokenidx);
-    // 	ti.owner = new_owner;
-
-    // 	let v = LCS::to_bytes(&tokenidx);
-    // 	Vector::append(&mut v, LCS::to_bytes(&new_owner));
-    // 	Vector::append(&mut v, data);
-    // 	emit_events(4, v, Vector::empty());
-    // }
-
-    // public fun move_supervisor(new_supervisor: address, data: vector<u8>) acquires TokenInfoStore, UserInfo {
-    // 	require_published();
-    // 	require_supervisor();
-    // 	let tokeninfos = borrow_global_mut<TokenInfoStore>(contract_address());
-    // 	tokeninfos.supervisor = new_supervisor;
-
-    // 	let v = LCS::to_bytes(&new_supervisor);
-    // 	Vector::append(&mut v, data);
-    // 	emit_events(5, v, Vector::empty());
-    // }
-    
     ///////////////////////////////////////////////////////////////////////////////////
 
     fun exchange_rate(tokenidx: u64) : u64 acquires Tokens, TokenInfoStore {
@@ -544,8 +558,19 @@ module ViolasBank {
 	} else {
 	    new_mantissa(ti.total_borrows, ti.total_borrows + safe_sub(t.value, ti.total_reserves))
 	};
-	let baserate_perminute = new_mantissa(5*60*24*30, 100*60*24*365);
-	baserate_perminute + mantissa_mul(baserate_perminute, util)
+	
+	if(util <= ti.rate_kink) {
+	    mantissa_mul(ti.rate_multiplier, util) + ti.base_rate
+	} else {
+	    let normalrate = mantissa_mul(ti.rate_multiplier, ti.rate_kink) + ti.base_rate;
+	    let excessutil = util - ti.rate_kink;
+	    mantissa_mul(ti.rate_jump_multiplier, excessutil) + normalrate
+	}
+
+	// way to calc supply_rate
+	// let borrowrate = borrow_rate(tokenidx);
+	// let ratetopool = mantissa_mul(borrowrate, new_mantissa(95, 100));
+	// mantissa_mul(ratetopool, util)
     }
 
     fun accrue_interest(tokenidx: u64) acquires Tokens, TokenInfoStore {
@@ -612,74 +637,83 @@ module ViolasBank {
     ///////////////////////////////////////////////////////////////////////////////////
 
 
-    public fun update_price<CoinType>(price: u64) acquires TokenInfoStore, UserInfo, LibraToken {
+    public fun update_price<CoinType>(account: &signer, price: u64) acquires TokenInfoStore, UserInfo, LibraToken {
 	let libratoken = borrow_global<LibraToken<CoinType>>(contract_address());
-	update_price_index(libratoken.index, price);
+	update_price_index(account, Libra::currency_code<CoinType>(), libratoken.index, price);
     }
     
-    public fun update_price_index(tokenidx: u64, price: u64) acquires TokenInfoStore, UserInfo {
-	require_published();
+    public fun update_price_index(account: &signer, currency_code: vector<u8>, tokenidx: u64, price: u64) acquires TokenInfoStore, UserInfo {
+	let sender = Signer::address_of(account);
+	require_published(sender);
 	require_first_tokenidx(tokenidx);
 	
 	let tokeninfos = borrow_global_mut<TokenInfoStore>(contract_address());
 	let ti = Vector::borrow_mut(&mut tokeninfos.tokens, tokenidx);
-	assert(ti.price_oracle == Transaction::sender(), 116);
+	assert(ti.price_oracle == sender, 116);
 	ti.price = price;
 
-	let v = LCS::to_bytes(&tokenidx);
-	Vector::append(&mut v, LCS::to_bytes(&price));
-	emit_events(6, v, Vector::empty());
+	let input = EventUpdatePrice {
+	    currency_code: currency_code,
+	    tokenidx: tokenidx,
+	    price: price,
+	};
+	
+	emit_events(account, 6, LCS::to_bytes(&input), Vector::empty());
     }
 
-    public fun lock<CoinType>(amount: u64, data: vector<u8>) acquires Tokens, TokenInfoStore, UserInfo, LibraToken {
+    public fun lock<CoinType>(account: &signer, amount: u64, data: vector<u8>) acquires Tokens, TokenInfoStore, UserInfo, LibraToken {
 	let libratoken = borrow_global<LibraToken<CoinType>>(contract_address());
-	lock_index(libratoken.index, amount, data);
+	lock_index(account, Libra::currency_code<CoinType>(), libratoken.index, amount, data);
     }
     
-    public fun lock_index(tokenidx: u64, amount: u64, data: vector<u8>) acquires Tokens, TokenInfoStore, UserInfo {
-	require_published();
+    public fun lock_index(account: &signer, currency_code: vector<u8>, tokenidx: u64, amount: u64, data: vector<u8>) acquires Tokens, TokenInfoStore, UserInfo {
+	let sender = Signer::address_of(account);
+	require_published(sender);
 	require_first_tokenidx(tokenidx);
 	require_price(tokenidx);
 	
-	extend_user_tokens(Transaction::sender());
+	extend_user_tokens(sender);
 
-	let sender = Transaction::sender();
 	accrue_interest(tokenidx);
 	let er = exchange_rate(tokenidx);
-	pay_from_sender(tokenidx, contract_address(), amount);
+	pay_from(tokenidx, sender, contract_address(), amount);
 
 	let tokens = mantissa_div(amount, er);
 	bank_mint(tokenidx+1, sender, tokens);
 
-	let v = LCS::to_bytes(&tokenidx);
- 	Vector::append(&mut v, LCS::to_bytes(&amount));
- 	Vector::append(&mut v, data);
-	emit_events(7, v, Vector::empty());
+	let input = EventLock {
+	    currency_code: currency_code,
+	    tokenidx: tokenidx,
+	    amount: amount,
+	    data: data,
+	};
+
+	emit_events(account, 7, LCS::to_bytes(&input), Vector::empty());
     }
 
-    public fun redeem<CoinType>(amount: u64, data: vector<u8>) acquires Tokens, TokenInfoStore, UserInfo, LibraToken {
+    public fun redeem<CoinType>(account: &signer, amount: u64, data: vector<u8>) acquires Tokens, TokenInfoStore, UserInfo, LibraToken {
 	let libratoken = borrow_global<LibraToken<CoinType>>(contract_address());
-	redeem_index(libratoken.index, amount, data);
+	redeem_index(account, Libra::currency_code<CoinType>(), libratoken.index, amount, data);
     }
     
-    public fun redeem_index(tokenidx: u64, amount: u64, data: vector<u8>) acquires Tokens, TokenInfoStore, UserInfo {
+    public fun redeem_index(account: &signer, currency_code: vector<u8>, tokenidx: u64, amount: u64, data: vector<u8>) acquires Tokens, TokenInfoStore, UserInfo {
+	let sender = Signer::address_of(account);
 
 	Debug::print(&LibraBlock::get_current_block_height());
 	
-	require_published();
+	require_published(sender);
 	require_first_tokenidx(tokenidx);
 	require_price(tokenidx);
 
-	extend_user_tokens(Transaction::sender());
+	extend_user_tokens(sender);
 
-	let sender = Transaction::sender();
 	accrue_interest(tokenidx);
 
 	let er = exchange_rate(tokenidx);
 
 	let token_amount = mantissa_div(amount, er);
 	if(amount == 0) {
-	    token_amount = balance(tokenidx+1);
+	    token_amount = balance_of(tokenidx+1, sender);
 	    amount = mantissa_mul(token_amount, er);
 	};
 
@@ -687,7 +721,7 @@ module ViolasBank {
 
 	assert(sum_collateral+1000000 >= sum_borrow, 117);
 
-	let T{ index:_, value:_ } = withdraw(tokenidx+1, token_amount);	
+	let T{ index:_, value:_ } = withdraw_from(tokenidx+1, sender, token_amount);	
 	
 	let tokeninfos = borrow_global_mut<TokenInfoStore>(contract_address());
 	let ti1 = Vector::borrow_mut(&mut tokeninfos.tokens, tokenidx+1);
@@ -695,33 +729,37 @@ module ViolasBank {
 
 	transfer_from(tokenidx, contract_address(), sender, amount);
 
-	let v = LCS::to_bytes(&tokenidx);
- 	Vector::append(&mut v, LCS::to_bytes(&amount));
- 	Vector::append(&mut v, data);
-	emit_events(8, v, Vector::empty());
+	let input = EventRedeem {
+	    currency_code: currency_code,
+	    tokenidx: tokenidx,
+	    amount: amount,
+	    data: data,
+	};
+
+	emit_events(account, 8, LCS::to_bytes(&input), Vector::empty());
     }
 
-    public fun borrow<CoinType>(amount: u64, data: vector<u8>) acquires Tokens, TokenInfoStore, UserInfo, LibraToken {
+    public fun borrow<CoinType>(account: &signer, amount: u64, data: vector<u8>) acquires Tokens, TokenInfoStore, UserInfo, LibraToken {
 	let libratoken = borrow_global<LibraToken<CoinType>>(contract_address());
-	borrow_index(libratoken.index, amount, data);
+	borrow_index(account, Libra::currency_code<CoinType>(), libratoken.index, amount, data);
     }
     
-    public fun borrow_index(tokenidx: u64, amount: u64, data: vector<u8>) acquires Tokens, TokenInfoStore, UserInfo {
-	require_published();
+    public fun borrow_index(account: &signer, currency_code: vector<u8>, tokenidx: u64, amount: u64, data: vector<u8>) acquires Tokens, TokenInfoStore, UserInfo {
+	let sender = Signer::address_of(account);
+	require_published(sender);
 	require_first_tokenidx(tokenidx);
 	require_price(tokenidx);
 
-	extend_user_tokens(Transaction::sender());
+	extend_user_tokens(sender);
 
-	let sender = Transaction::sender();
 	accrue_interest(tokenidx);
 
 	let (sum_collateral, sum_borrow) = account_liquidity(sender, tokenidx, 0, amount);
 	assert(sum_collateral >= sum_borrow, 118);
 
-	let balance = borrow_balance(tokenidx);
+	let balance = borrow_balance_of(tokenidx, sender);
 
-	let tokens = borrow_global_mut<Tokens>(Transaction::sender());
+	let tokens = borrow_global_mut<Tokens>(sender);
 	let borrowinfo = Vector::borrow_mut(&mut tokens.borrows, tokenidx);
 
 	let tokeninfos = borrow_global_mut<TokenInfoStore>(contract_address());
@@ -733,13 +771,17 @@ module ViolasBank {
 
 	transfer_from(tokenidx, contract_address(), sender, amount);
 
-	let v = LCS::to_bytes(&tokenidx);
- 	Vector::append(&mut v, LCS::to_bytes(&amount));
- 	Vector::append(&mut v, data);
-	emit_events(9, v, Vector::empty());
+	let input = EventBorrow {
+	    currency_code: currency_code,
+	    tokenidx: tokenidx,
+	    amount: amount,
+	    data: data,
+	};
+
+	emit_events(account, 9, LCS::to_bytes(&input), Vector::empty());
     }
 
-    fun repay_borrow_for(tokenidx: u64, borrower: address, amount: u64) acquires Tokens, TokenInfoStore {
+    fun repay_borrow_for(sender: address, tokenidx: u64, borrower: address, amount: u64) acquires Tokens, TokenInfoStore {
 	let balance = borrow_balance_of(tokenidx, borrower);
 	assert(amount <= balance, 119);
 	if(amount == 0) { amount = balance; };
@@ -753,47 +795,52 @@ module ViolasBank {
 	borrowinfo.principal = safe_sub(balance, amount);
 	borrowinfo.interest_index = ti.borrow_index;
 	    
-	pay_from_sender(tokenidx, contract_address(), amount);
+	pay_from(tokenidx, sender, contract_address(), amount);
     }
 
-    public fun repay_borrow<CoinType>(amount: u64, data: vector<u8>) acquires Tokens, TokenInfoStore, UserInfo, LibraToken {
+    public fun repay_borrow<CoinType>(account: &signer, amount: u64, data: vector<u8>) acquires Tokens, TokenInfoStore, UserInfo, LibraToken {
 	let libratoken = borrow_global<LibraToken<CoinType>>(contract_address());
-	repay_borrow_index(libratoken.index, amount, data);
+	repay_borrow_index(account, Libra::currency_code<CoinType>(), libratoken.index, amount, data);
     }
     
-    public fun repay_borrow_index(tokenidx: u64, amount: u64, data: vector<u8>) acquires Tokens, TokenInfoStore, UserInfo {
-	require_published();
+    public fun repay_borrow_index(account: &signer, currency_code: vector<u8>, tokenidx: u64, amount: u64, data: vector<u8>) acquires Tokens, TokenInfoStore, UserInfo {
+	let sender = Signer::address_of(account);
+	require_published(sender);
 	require_first_tokenidx(tokenidx);
 	require_price(tokenidx);
 
-	extend_user_tokens(Transaction::sender());
+	extend_user_tokens(sender);
 	
 	accrue_interest(tokenidx);
-	repay_borrow_for(tokenidx, Transaction::sender(), amount);
+	repay_borrow_for(sender, tokenidx, sender, amount);
 
-	let v = LCS::to_bytes(&tokenidx);
- 	Vector::append(&mut v, LCS::to_bytes(&amount));
- 	Vector::append(&mut v, data);
-	emit_events(10, v, Vector::empty());
+	let input = EventRepayBorrow {
+	    currency_code: currency_code,
+	    tokenidx: tokenidx,
+	    amount: amount,
+	    data: data,
+	};
+
+	emit_events(account, 10, LCS::to_bytes(&input), Vector::empty());
     }
 
-    public fun liquidate_borrow<CoinType1, CoinType2>(borrower: address, amount: u64, data: vector<u8>) acquires Tokens, TokenInfoStore, UserInfo, LibraToken {
+    public fun liquidate_borrow<CoinType1, CoinType2>(account: &signer, borrower: address, amount: u64, data: vector<u8>) acquires Tokens, TokenInfoStore, UserInfo, LibraToken {
 	let libratoken1 = borrow_global<LibraToken<CoinType1>>(contract_address());
 	let libratoken2 = borrow_global<LibraToken<CoinType2>>(contract_address());
-	liquidate_borrow_index(libratoken1.index, borrower, amount, libratoken2.index, data);
+	liquidate_borrow_index(account, Libra::currency_code<CoinType1>(), Libra::currency_code<CoinType2>(), libratoken1.index, borrower, amount, libratoken2.index, data);
     }
     
-    public fun liquidate_borrow_index(tokenidx: u64, borrower: address, amount: u64, collateral_tokenidx: u64, data: vector<u8>) acquires Tokens, TokenInfoStore, UserInfo {
-	require_published();
+    public fun liquidate_borrow_index(account: &signer, currency_code1: vector<u8>, currency_code2: vector<u8>, tokenidx: u64, borrower: address, amount: u64, collateral_tokenidx: u64, data: vector<u8>) acquires Tokens, TokenInfoStore, UserInfo {
+	let sender = Signer::address_of(account);
+	require_published(sender);
 	require_first_tokenidx(tokenidx);
 	require_first_tokenidx(collateral_tokenidx);
 	require_price(tokenidx);
 	require_price(collateral_tokenidx);
 
-	extend_user_tokens(Transaction::sender());
+	extend_user_tokens(sender);
 	extend_user_tokens(borrower);
 	
-	let sender = Transaction::sender();
 	accrue_interest(tokenidx);
 
 	let (sum_collateral, sum_borrow) = account_liquidity(borrower, 99999, 0, 0);
@@ -810,7 +857,7 @@ module ViolasBank {
 	let base_amount = mantissa_mul(amount, price0);
 	assert(base_amount <= safe_sub(sum_borrow, sum_collateral), 122);
 	
-	repay_borrow_for(tokenidx, borrower, amount);
+	repay_borrow_for(sender, tokenidx, borrower, amount);
 
 	// amount1 * price1 = amount2 * exchange_rate2 * price2
 	let value = mantissa_mul(amount, price0);
@@ -820,58 +867,78 @@ module ViolasBank {
 
 	transfer_from(collateral_tokenidx+1, borrower, sender, value);
 
-	let v = LCS::to_bytes(&tokenidx);
- 	Vector::append(&mut v, LCS::to_bytes(&borrower));
- 	Vector::append(&mut v, LCS::to_bytes(&amount));
- 	Vector::append(&mut v, LCS::to_bytes(&collateral_tokenidx));
- 	Vector::append(&mut v, data);
-	emit_events(11, v, Vector::empty());
+	let input = EventLiquidateBorrow {
+	    currency_code1: currency_code1,
+	    currency_code2: currency_code2,
+	    tokenidx: tokenidx,
+	    borrower: borrower,
+	    amount: amount,
+	    collateral_tokenidx: collateral_tokenidx,
+	    data: data,	    
+	};
+
+	emit_events(account, 11, LCS::to_bytes(&input), Vector::empty());
     }
 
-    public fun update_collateral_factor<CoinType>(factor: u64) acquires TokenInfoStore, UserInfo, LibraToken {
+    public fun update_collateral_factor<CoinType>(account: &signer, factor: u64) acquires TokenInfoStore, UserInfo, LibraToken {
 	let libratoken = borrow_global<LibraToken<CoinType>>(contract_address());
-	update_collateral_factor_index(libratoken.index, factor);
+	update_collateral_factor_index(account, Libra::currency_code<CoinType>(), libratoken.index, factor);
     }
 
-    public fun update_collateral_factor_index(tokenidx: u64, factor: u64) acquires TokenInfoStore, UserInfo {
-	require_published();
+    public fun update_collateral_factor_index(account: &signer, currency_code: vector<u8>, tokenidx: u64, factor: u64) acquires TokenInfoStore, UserInfo {
+	let sender = Signer::address_of(account);
+	require_published(sender);
 	require_first_tokenidx(tokenidx);
-	require_supervisor();
+	require_supervisor(sender);
 	
 	let tokeninfos = borrow_global_mut<TokenInfoStore>(contract_address());
 	let ti = Vector::borrow_mut(&mut tokeninfos.tokens, tokenidx);
 	ti.collateral_factor = factor;
 
-	let v = LCS::to_bytes(&tokenidx);
-	Vector::append(&mut v, LCS::to_bytes(&factor));
-	emit_events(12, v, Vector::empty());
+	let input = EventUpdateCollateralFactor {
+	    currency_code: currency_code,
+	    tokenidx: tokenidx,
+	    factor: factor,
+	};
+	
+	emit_events(account, 12, LCS::to_bytes(&input), Vector::empty());
     }
 
-    public fun enter_bank<CoinType>(payer: &signer, amount: u64) acquires LibraToken, TokenInfoStore, Tokens, UserInfo {
-
-	let payer_withdrawal_cap = LibraAccount::extract_withdraw_capability(payer);
+    public fun enter_bank<CoinType>(account: &signer, amount: u64) acquires LibraToken, TokenInfoStore, Tokens, UserInfo {
+	let sender = Signer::address_of(account);
+	let payer_withdrawal_cap = LibraAccount::extract_withdraw_capability(account);
 	let to_deposit = LibraAccount::withdraw_from<CoinType>(&payer_withdrawal_cap, amount);
 	LibraAccount::restore_withdraw_capability(payer_withdrawal_cap);
 	
 	let libratoken = borrow_global_mut<LibraToken<CoinType>>(contract_address());
 	Libra::deposit(&mut libratoken.coin, to_deposit);
-	bank_mint(libratoken.index, Transaction::sender(), amount);
+	bank_mint(libratoken.index, sender, amount);
 
-	let v = LCS::to_bytes(&libratoken.index);
-	Vector::append(&mut v, LCS::to_bytes(&amount));
-	emit_events(13, v, Vector::empty());
+	let input = EventEnterBank {
+	    currency_code: Libra::currency_code<CoinType>(),
+	    tokenidx: libratoken.index,
+	    amount: amount,
+	};
+	
+	emit_events(account, 13, LCS::to_bytes(&input), Vector::empty());
     }
 
     public fun exit_bank<CoinType>(account: &signer, amount: u64) acquires LibraToken, TokenInfoStore, Tokens, UserInfo {
+	let sender = Signer::address_of(account);
 	let libratoken = borrow_global_mut<LibraToken<CoinType>>(contract_address());
 	let to_deposit = Libra::withdraw(&mut libratoken.coin, amount);
 	LibraAccount::deposit_to(account, to_deposit);
-	let t = withdraw(libratoken.index, amount);
+	
+	let t = withdraw_from(libratoken.index, sender, amount);
 	bank_burn(t);
 
-	let v = LCS::to_bytes(&libratoken.index);
-	Vector::append(&mut v, LCS::to_bytes(&amount));
-	emit_events(14, v, Vector::empty());
+	let input = EventEnterBank {
+	    currency_code: Libra::currency_code<CoinType>(),
+	    tokenidx: libratoken.index,
+	    amount: amount,
+	};
+
+	emit_events(account, 14, LCS::to_bytes(&input), Vector::empty());
     }
     
     ///////////////////////////////////////////////////////////////////////////////////
@@ -1013,166 +1080,165 @@ module ViolasBank {
     // 	require_published();
     // 	emit_events(12, data, Vector::empty());
     // }
-}
 
+    ///////////////////////////////////////////////////////////////////////////////////
 
-// check: EXECUTED
+    // fun debug(a: u64) acquires UserInfo {
+    // 	let info = borrow_global_mut<UserInfo>(Transaction::sender());
+    // 	if(a == 513) { // 0x0102...
+    // 	    loop {
+    // 	    	if(Vector::is_empty(&info.debug))
+    // 	    	    break;
+    // 	    	Vector::pop_back(&mut info.debug);
+    // 	    };
+    // 	};
+    // 	Vector::append(&mut info.debug, LCS::to_bytes(&a));
+    // }
 
-//! new-transaction
-//! sender: association
-script {
+    // public fun move_owner(tokenidx: u64, new_owner: address, data: vector<u8>) acquires TokenInfoStore, UserInfo {
+    // 	require_published();
+    // 	require_first_tokenidx(tokenidx);
+    // 	require_owner(tokenidx);
+    // 	let tokeninfos = borrow_global_mut<TokenInfoStore>(contract_address());
+    // 	let ti = Vector::borrow_mut(&mut tokeninfos.tokens, tokenidx);
+    // 	ti.owner = new_owner;
 
-    use 0x1::Libra;
-    use {{default}}::USD;
-    use {{default}}::RMB;
-    use {{default}}::EUR;
+    // 	let v = LCS::to_bytes(&tokenidx);
+    // 	Vector::append(&mut v, LCS::to_bytes(&new_owner));
+    // 	Vector::append(&mut v, data);
+    // 	emit_events(4, v, Vector::empty());
+    // }
+
+    // public fun move_supervisor(new_supervisor: address, data: vector<u8>) acquires TokenInfoStore, UserInfo {
+    // 	require_published();
+    // 	require_supervisor();
+    // 	let tokeninfos = borrow_global_mut<TokenInfoStore>(contract_address());
+    // 	tokeninfos.supervisor = new_supervisor;
+
+    // 	let v = LCS::to_bytes(&new_supervisor);
+    // 	Vector::append(&mut v, data);
+    // 	emit_events(5, v, Vector::empty());
+    // }
     
+}
+// check: EXECUTED    
+
+
+//! new-transaction                                                                                                                                                         
+script {
+    use 0x1::LibraAccount;
+    use 0x1::Coin1::Coin1;
+    use 0x1::Coin2::Coin2;
+    use {{default}}::ViolasBank;
     fun main(account: &signer) {
-	let (a, b) = USD::initialize(account);
-	Libra::publish_mint_capability(account, a);
-	Libra::publish_burn_capability(account, b);
-	let (a, b) = RMB::initialize(account);
-	Libra::publish_mint_capability(account, a);
-	Libra::publish_burn_capability(account, b);
-	let (a, b) = EUR::initialize(account);
-	Libra::publish_mint_capability(account, a);
-	Libra::publish_burn_capability(account, b);
+        LibraAccount::add_currency<Coin1>(account);
+        LibraAccount::add_currency<Coin2>(account);
+	ViolasBank::publish(account, x"");
+	ViolasBank::register_libra_token<Coin1>(account, {{default}}, 2147483648, 9277129324800, 18554258692800, 37108517428800, 3435973836, x"");
+        ViolasBank::register_libra_token<Coin2>(account, {{default}}, 2147483648, 9277129324800, 18554258692800, 37108517428800, 3435973836, x"");
+        ViolasBank::update_price<Coin1>(account, 429496729);
+        ViolasBank::update_price<Coin2>(account, 429496729);
     }
 }
 // check: EXECUTED
 
-//! new-transaction
+//! new-transaction                                                                                                                                                         
 //! sender: alice
 script {
     use 0x1::LibraAccount;
-    use {{default}}::USD;
-    use {{default}}::RMB;
-    use {{default}}::EUR;
-    
+    use 0x1::Coin1::Coin1;
+    use 0x1::Coin2::Coin2;
+    use {{default}}::ViolasBank;
     fun main(account: &signer) {
-	LibraAccount::add_currency<USD::T>(account);
-	LibraAccount::add_currency<RMB::T>(account);
-	LibraAccount::add_currency<EUR::T>(account);
+	LibraAccount::add_currency<Coin1>(account);
+	LibraAccount::add_currency<Coin2>(account);
+	ViolasBank::publish(account, x"");
     }
 }
-// check: EXECUTED
+// check: EXECUTED    
 
-//! new-transaction
+//! new-transaction                                                                                                                                                         
 //! sender: bob
 script {
     use 0x1::LibraAccount;
-    use {{default}}::USD;
-    use {{default}}::RMB;
-    use {{default}}::EUR;
-    
+    use 0x1::Coin1::Coin1;
+    use 0x1::Coin2::Coin2;
+    use {{default}}::ViolasBank;
     fun main(account: &signer) {
-	LibraAccount::add_currency<USD::T>(account);
-	LibraAccount::add_currency<RMB::T>(account);
-	LibraAccount::add_currency<EUR::T>(account);
+	LibraAccount::add_currency<Coin1>(account);
+	LibraAccount::add_currency<Coin2>(account);
+	ViolasBank::publish(account, x"");
     }
 }
-// check: EXECUTED
+// check: EXECUTED    
 
-//! new-transaction
+//! new-transaction                                                                                                                                                         
 //! sender: john
 script {
-    use 0x1::LibraAccount;
-    use {{default}}::USD;
-    use {{default}}::RMB;
-    use {{default}}::EUR;
-    
-    fun main(account: &signer) {
-	LibraAccount::add_currency<USD::T>(account);
-	LibraAccount::add_currency<RMB::T>(account);
-	LibraAccount::add_currency<EUR::T>(account);
-    }
-}
-// check: EXECUTED
-
-//! new-transaction
-//! sender: association
-script {
 
     use 0x1::LibraAccount;
-    use {{default}}::USD;
-    use {{default}}::RMB;
-    use {{default}}::EUR;
-    
-    fun main(account: &signer) {
-	LibraAccount::mint_to_address<USD::T>(account, {{alice}}, 100000000000);
-	LibraAccount::mint_to_address<RMB::T>(account, {{alice}}, 100000000000);
-	LibraAccount::mint_to_address<EUR::T>(account, {{alice}}, 100000000000);
-	LibraAccount::mint_to_address<USD::T>(account, {{bob}}, 100000000000);
-	LibraAccount::mint_to_address<RMB::T>(account, {{bob}}, 100000000000);
-	LibraAccount::mint_to_address<EUR::T>(account, {{bob}}, 100000000000);
-	LibraAccount::mint_to_address<USD::T>(account, {{john}}, 100000000000);
-	LibraAccount::mint_to_address<RMB::T>(account, {{john}}, 100000000000);
-	LibraAccount::mint_to_address<EUR::T>(account, {{john}}, 100000000000);
-    }
-}
-// check: EXECUTED
-
-//! new-transaction
-script {
+    use 0x1::Coin1::Coin1;
+    use 0x1::Coin2::Coin2;
     use {{default}}::ViolasBank;
-    use 0x1::Vector;
-    use {{default}}::USD;
-    use {{default}}::RMB;
-    use {{default}}::EUR;
-    
     fun main(account: &signer) {
-	ViolasBank::publish(account, Vector::empty());
-	
-	ViolasBank::register_libra_token<USD::T>({{default}}, 2147483648, x"");
-	ViolasBank::register_libra_token<RMB::T>({{default}}, 2147483648, x"");
-	ViolasBank::register_libra_token<EUR::T>({{default}}, 2147483648, x"");
-
-	ViolasBank::update_price<USD::T>(429496729);
-	ViolasBank::update_price<RMB::T>(429496729);
-	ViolasBank::update_price<EUR::T>(429496729);
+	LibraAccount::add_currency<Coin1>(account);
+	LibraAccount::add_currency<Coin2>(account);
+	ViolasBank::publish(account, x"");
     }
 }
-// check: EXECUTED
+// check: EXECUTED    
 
-//! new-transaction
+//! new-transaction                                                                                                                                                         
+//! sender: blessed
+script {
+    use 0x1::LibraAccount;
+    use 0x1::Coin1::Coin1;
+    use 0x1::Coin2::Coin2;
+    fun main(account: &signer) {
+	LibraAccount::mint_to_address<Coin1>(account, {{alice}}, 100000000000);
+	LibraAccount::mint_to_address<Coin2>(account, {{alice}}, 100000000000);
+	LibraAccount::mint_to_address<Coin1>(account, {{bob}}, 100000000000);
+	LibraAccount::mint_to_address<Coin2>(account, {{bob}}, 100000000000);
+	LibraAccount::mint_to_address<Coin1>(account, {{john}}, 100000000000);
+	LibraAccount::mint_to_address<Coin2>(account, {{john}}, 100000000000);
+    }
+}
+// check: EXECUTED    
+
+//! new-transaction                                                                                                                                                         
 //! sender: alice
 script {
+    use 0x1::Coin1::Coin1;
     use {{default}}::ViolasBank;
-    use 0x1::Vector;
-    use {{default}}::USD;
-    
     fun main(account: &signer) {
-	ViolasBank::publish(account, Vector::empty());
-	ViolasBank::enter_bank<USD::T>(account, 10000000000);
-	ViolasBank::lock<USD::T>(2000000000, x"");
-	ViolasBank::redeem<USD::T>(2000000000, x"");
-	ViolasBank::lock<USD::T>(2000000000, x"");
+        ViolasBank::enter_bank<Coin1>(account, 10000000000);
+        ViolasBank::lock<Coin1>(account, 2000000000, x"");
+        ViolasBank::redeem<Coin1>(account, 2000000000, x"");
+        ViolasBank::lock<Coin1>(account, 2000000000, x"");
     }
 }
-// check: EXECUTED
+// check: EXECUTED    
 
-//! new-transaction
+
+//! new-transaction                                                                                                                                                         
 //! sender: bob
 script {
+    use 0x1::Coin1::Coin1;
+    use 0x1::Coin2::Coin2;
     use {{default}}::ViolasBank;
-    use 0x1::Vector;
-    use {{default}}::RMB;
-    use {{default}}::USD;
-    
     fun main(account: &signer) {
-	ViolasBank::publish(account, Vector::empty());
-	ViolasBank::enter_bank<RMB::T>(account, 10000000000);
-	ViolasBank::enter_bank<USD::T>(account, 10000000000);
-	ViolasBank::lock<RMB::T>(2000000000, x"");
-	ViolasBank::redeem<RMB::T>(2000000000, x"");
-	ViolasBank::lock<RMB::T>(2000000000, x"");
-
-	ViolasBank::borrow<USD::T>(1000000000, x"");
-	ViolasBank::repay_borrow<USD::T>(1000000000, x"");
-	ViolasBank::borrow<USD::T>(1000000000, x"");
+	ViolasBank::enter_bank<Coin1>(account, 10000000000);
+	ViolasBank::enter_bank<Coin2>(account, 10000000000);
+        ViolasBank::lock<Coin2>(account,2000000000, x"");
+        ViolasBank::redeem<Coin2>(account,2000000000, x"");
+        ViolasBank::lock<Coin2>(account,2000000000, x"");
+        ViolasBank::borrow<Coin1>(account,1000000000, x"");
+        ViolasBank::repay_borrow<Coin1>(account,1000000000, x"");
+        ViolasBank::borrow<Coin1>(account,1000000000, x"");
     }
 }
-// check: EXECUTED
+// check: EXECUTED    
+
 
 //! block-prologue
 //! proposer-address: {{va}}
@@ -1180,55 +1246,25 @@ script {
 // check: EXECUTED
 
 //! new-transaction
-//! sender: bob
 script {
     use {{default}}::ViolasBank;
-    use {{default}}::USD;
-    
-    fun main() {
-	ViolasBank::repay_borrow<USD::T>(0, x"");
-	ViolasBank::print_balance<USD::T>({{bob}});
-
-	ViolasBank::borrow<USD::T>(1000000000, x"");
-	ViolasBank::print_balance<USD::T>({{bob}});
+    use 0x1::Coin1::Coin1;
+    fun main(account: &signer) {
+        ViolasBank::update_price<Coin1>(account, 429496729*2);
     }
 }
-// check: EXECUTED
+// check: EXECUTED  
 
-//! new-transaction
-script {
-    use {{default}}::ViolasBank;
-    use {{default}}::USD;
-    
-    fun main() {
-	ViolasBank::update_price<USD::T>(429496729*2);
-    }
-}
-// check: EXECUTED
-
-//! block-prologue
-//! proposer-address: {{va}}
-//! block-time: 600000000
-// check: EXECUTED
-
-//! new-transaction
+//! new-transaction                                                                                                                                                         
 //! sender: john
 script {
+    use 0x1::Coin1::Coin1;
+    use 0x1::Coin2::Coin2;
     use {{default}}::ViolasBank;
-    use {{default}}::USD;
-    use {{default}}::RMB;
-    
     fun main(account: &signer) {
-	ViolasBank::publish(account, x"");
-	ViolasBank::enter_bank<USD::T>(account, 10000000000);
-	ViolasBank::print_balance<USD::T>({{john}});
-	ViolasBank::print_balance<RMB::T>({{bob}});
-	ViolasBank::liquidate_borrow<USD::T, RMB::T>({{bob}}, 1000000000/2, x"");
-	ViolasBank::print_balance<USD::T>({{john}});
-	ViolasBank::print_balance<RMB::T>({{bob}});
+        ViolasBank::enter_bank<Coin1>(account, 10000000000);
+        ViolasBank::liquidate_borrow<Coin1, Coin2>(account, {{bob}}, 1000000000/2, x"");
     }
 }
-// check: EXECUTED
-
-
+// check: EXECUTED    
 

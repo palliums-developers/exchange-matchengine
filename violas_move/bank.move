@@ -11,7 +11,7 @@ module ViolasBank {
     use 0x1::Debug;
     use 0x1::LibraBlock;
     use 0x1::Signer;
-    use 0x1::LBR;
+    //use 0x1::LBR;
     
     resource struct LibraToken<Token> {
 	coin: Libra::Libra<Token>,
@@ -257,6 +257,13 @@ module ViolasBank {
     }
 
     ///////////////////////////////////////////////////////////////////////////////////
+
+    // public fun print_balance<CoinType>(account: address) acquires LibraToken, Tokens {
+    // 	let libratoken = borrow_global<LibraToken<CoinType>>(contract_address());
+    // 	Debug::print(&x"01010101");
+    // 	Debug::print(&balance_of(libratoken.index, account));
+    // 	Debug::print(&balance_of(libratoken.index+1, account));
+    // }
     
     public fun balance_of(tokenidx: u64, account: address) : u64 acquires Tokens {
 	let tokens = borrow_global<Tokens>(account);
@@ -347,10 +354,10 @@ module ViolasBank {
 	let info = borrow_global_mut<UserInfo>(sender);
 	Event::emit_event<ViolasEvent>(&mut info.violas_events, ViolasEvent{ etype: etype, paras: *&paras, data: *&data});
 
-	let input = ViolasEvent{ etype: etype, paras: *&paras, data: *&data };
-	let payer_withdrawal_cap = LibraAccount::extract_withdraw_capability(account);
-	LibraAccount::pay_from_with_metadata<LBR::LBR>(&payer_withdrawal_cap, sender, 1, LCS::to_bytes(&input), Vector::empty());
-	LibraAccount::restore_withdraw_capability(payer_withdrawal_cap);
+	// let input = ViolasEvent{ etype: etype, paras: *&paras, data: *&data };
+	// let payer_withdrawal_cap = LibraAccount::extract_withdraw_capability(account);
+	// LibraAccount::pay_from_with_metadata<LBR::LBR>(&payer_withdrawal_cap, sender, 1, LCS::to_bytes(&input), Vector::empty());
+	// LibraAccount::restore_withdraw_capability(payer_withdrawal_cap);
     }
 
     ///////////////////////////////////////////////////////////////////////////////////
@@ -777,7 +784,7 @@ module ViolasBank {
 	emit_events(account, 9, LCS::to_bytes(&input), Vector::empty());
     }
 
-    fun repay_borrow_for(sender: address, tokenidx: u64, borrower: address, amount: u64) acquires Tokens, TokenInfoStore {
+    fun repay_borrow_for(sender: address, tokenidx: u64, borrower: address, amount: u64) :u64 acquires Tokens, TokenInfoStore {
 	let balance = borrow_balance_of(tokenidx, borrower);
 	assert(amount <= balance, 119);
 	if(amount == 0) { amount = balance; };
@@ -792,6 +799,7 @@ module ViolasBank {
 	borrowinfo.interest_index = ti.borrow_index;
 	    
 	pay_from(tokenidx, sender, contract_address(), amount);
+	amount
     }
 
     public fun repay_borrow<CoinType>(account: &signer, amount: u64, data: vector<u8>) acquires Tokens, TokenInfoStore, UserInfo, LibraToken {
@@ -808,7 +816,7 @@ module ViolasBank {
 	extend_user_tokens(sender);
 	
 	accrue_interest(tokenidx);
-	repay_borrow_for(sender, tokenidx, sender, amount);
+	amount = repay_borrow_for(sender, tokenidx, sender, amount);
 
 	let input = EventRepayBorrow {
 	    currency_code: currency_code,
@@ -955,14 +963,6 @@ module ViolasBank {
     // 	    let order = Vector::swap_remove(&mut info.orders, idx);
     // 	    let Order { t: T { index:_, value:_ }, peer_token_idx:_, peer_token_amount:_ } = order;
     // 	};
-	
-    // 	let v = LCS::to_bytes(&idxa);
-    // 	Vector::append(&mut v, LCS::to_bytes(&amounta));
-    // 	Vector::append(&mut v, LCS::to_bytes(&idxb));
-    // 	Vector::append(&mut v, LCS::to_bytes(&amountb));
-    // 	Vector::append(&mut v, data);
-    // 	emit_events(4, v, LCS::to_bytes(&idx));
-
     // 	idx
     // }
 
@@ -981,13 +981,6 @@ module ViolasBank {
 	
     // 	let Order { t: t, peer_token_idx:_, peer_token_amount:_ } = order;
     // 	deposit(Transaction::sender(), t);
-	
-    // 	let v = LCS::to_bytes(&idxa);
-    // 	Vector::append(&mut v, LCS::to_bytes(&amounta));
-    // 	Vector::append(&mut v, LCS::to_bytes(&idxb));
-    // 	Vector::append(&mut v, LCS::to_bytes(&amountb));
-    // 	Vector::append(&mut v, data);
-    // 	emit_events(5, v, Vector::empty());
     // }
     
     // public fun take_order(maker: address, orderidx: u64, idxa: u64, amounta: u64, idxb: u64, amountb: u64, data: vector<u8>) acquires TokenInfoStore, Tokens, UserInfo {
@@ -1014,15 +1007,6 @@ module ViolasBank {
     // 	} else {
     // 	    Vector::push_back(&mut info.order_freeslots, orderidx);
     // 	};
-
-    // 	let v = LCS::to_bytes(&maker);
-    // 	Vector::append(&mut v, LCS::to_bytes(&orderidx));
-    // 	Vector::append(&mut v, LCS::to_bytes(&idxa));
-    // 	Vector::append(&mut v, LCS::to_bytes(&amounta));
-    // 	Vector::append(&mut v, LCS::to_bytes(&idxb));
-    // 	Vector::append(&mut v, LCS::to_bytes(&amountb));
-    // 	Vector::append(&mut v, data);
-    // 	emit_events(6, v, Vector::empty());
     // }
     
     // public fun update_first_bulletin(tokenidx: u64, data: vector<u8>) acquires TokenInfoStore, UserInfo {
