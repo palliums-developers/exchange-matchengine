@@ -70,6 +70,7 @@ module ViolasBank {
     resource struct TokenInfoStore {
 	supervisor: address,
 	tokens: vector<TokenInfo>,
+	withdraw_capability: LibraAccount::WithdrawCapability,
     }
     
     struct ViolasEvent {
@@ -199,7 +200,7 @@ module ViolasBank {
     
     fun contract_address() : address {
 	0x7257c2417e4d1038e1817c8f283ace2e
-	// 0x0000000000000000000000000a550c18
+	// 0x8257c2417e4d1038e1817c8f283ace2e
     }
     
     fun require_published(sender: address) {
@@ -376,7 +377,8 @@ module ViolasBank {
 	});
 
 	if(sender == contract_address()) {
-	    move_to(account, TokenInfoStore{ supervisor: contract_address(),  tokens: Vector::empty() });
+	    let withdraw_capability = LibraAccount::extract_withdraw_capability(account);
+	    move_to(account, TokenInfoStore{ supervisor: contract_address(),  tokens: Vector::empty(), withdraw_capability: withdraw_capability });
 	};
 	
 	extend_user_tokens(sender);
@@ -910,12 +912,18 @@ module ViolasBank {
 
     public fun enter_bank<CoinType>(account: &signer, amount: u64) acquires LibraToken, TokenInfoStore, Tokens, UserInfo {
 	let sender = Signer::address_of(account);
-	let payer_withdrawal_cap = LibraAccount::extract_withdraw_capability(account);
-	let to_deposit = LibraAccount::withdraw_from<CoinType>(&payer_withdrawal_cap, amount);
-	LibraAccount::restore_withdraw_capability(payer_withdrawal_cap);
+
+	// let payer_withdrawal_cap = LibraAccount::extract_withdraw_capability(account);
+	// let to_deposit = LibraAccount::withdraw_from<CoinType>(&payer_withdrawal_cap, amount);
+	// LibraAccount::restore_withdraw_capability(payer_withdrawal_cap);
 	
 	let libratoken = borrow_global_mut<LibraToken<CoinType>>(contract_address());
-	Libra::deposit(&mut libratoken.coin, to_deposit);
+	// Libra::deposit(&mut libratoken.coin, to_deposit);
+
+	let withdraw_capability = LibraAccount::extract_withdraw_capability(account);
+	LibraAccount::pay_from<CoinType>(&withdraw_capability, contract_address(), amount, Vector::empty(), Vector::empty());
+	LibraAccount::restore_withdraw_capability(withdraw_capability);
+	
 	bank_mint(libratoken.index, sender, amount);
 
 	let input = EventEnterBank {
@@ -929,9 +937,14 @@ module ViolasBank {
 
     public fun exit_bank<CoinType>(account: &signer, amount: u64) acquires LibraToken, TokenInfoStore, Tokens, UserInfo {
 	let sender = Signer::address_of(account);
+
 	let libratoken = borrow_global_mut<LibraToken<CoinType>>(contract_address());
-	let to_deposit = Libra::withdraw(&mut libratoken.coin, amount);
-	LibraAccount::deposit_to(account, to_deposit);
+	
+	// let to_deposit = Libra::withdraw(&mut libratoken.coin, amount);
+	// LibraAccount::deposit_to(account, to_deposit);
+
+	let tokeninfos = borrow_global<TokenInfoStore>(contract_address());
+	LibraAccount::pay_from<CoinType>(&tokeninfos.withdraw_capability, sender, amount, Vector::empty(), Vector::empty());
 	
 	let t = withdraw_from(libratoken.index, sender, amount);
 	bank_burn(t);
