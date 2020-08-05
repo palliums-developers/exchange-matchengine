@@ -26,7 +26,7 @@ std::vector<std::string> read_lines(const char* file) {
 std::vector<std::string> gaccounts;
 
 int gen_accounts() {
-  FILE * fp = popen("./cli.sh", "w");
+  FILE * fp = popen("./dcli.sh", "w");
   const char* s = "a c\n";
   fputs(s, fp);
   fputs(s, fp);
@@ -98,7 +98,7 @@ std::string purple_color(const char* str) {
 }
 
 int do_job() {
-  FILE * fp = popen("./cli.sh", "w");
+  FILE * fp = popen("./dcli.sh", "w");
   const char* s = "a c\n";
   fputs(s, fp);
   fputs(s, fp);
@@ -157,6 +157,15 @@ std::vector<std::string> extract_account_address() {
   return v;
 }
 
+void print_mantissa() {
+  long one = 4*1024*1024*1024L;
+  long i = 5;
+  while(i <= 100) {
+    printf("%ld%% - %ld - %ld\n", i, one*i/100, one*i/100*(60*24*30));
+    i += 5;
+  }
+}
+
 int main(int argc, char* argv[]) {
 
   std::string type(argv[1]);
@@ -171,4 +180,8 @@ int main(int argc, char* argv[]) {
   
   if(type == "1")
     gen_accounts();
+
+  if(type == "2")
+    print_mantissa();
+
 }

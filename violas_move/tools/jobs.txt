@@ -1,30 +1,116 @@
+a acb 0 USD
+a acb 1 USD
+a acb 2 USD
+a acb 3 USD
+
+a acb 0 EUR
+a acb 1 EUR
+a acb 2 EUR
+a acb 3 EUR
+
+a acb 0 SGD
+a acb 1 SGD
+a acb 2 SGD
+a acb 3 SGD
+
+a m 1 1000 USD
+a m 2 1000 USD
+a m 3 1000 USD
+
+a m 1 1000 EUR
+a m 2 1000 EUR
+a m 3 1000 EUR
+
+a m 1 1000 SGD
+a m 2 1000 SGD
+a m 3 1000 SGD
+
 
 dev publish 0 /home/ops/lmf/move/bank.mv
 
 sleep 3
 
-dev execute 0 /home/ops/lmf/move/publish.mv b"00"
-dev execute 1 /home/ops/lmf/move/publish.mv b"00"
-dev execute 2 /home/ops/lmf/move/publish.mv b"00"
-dev execute 3 /home/ops/lmf/move/publish.mv b"00"
+dev execute 0 /home/ops/lmf/move/publish.mv xxx b"00"
+dev execute 1 /home/ops/lmf/move/publish.mv xxx b"00"
+dev execute 2 /home/ops/lmf/move/publish.mv xxx b"00"
+dev execute 3 /home/ops/lmf/move/publish.mv xxx b"00"
+
+dev execute 0 /home/ops/lmf/move/register_libra_token.mv 00000000000000000000000000000001_USD_USD @0 2147483648 9277129359360 18554258718720 37108517437440 3435973836 b"00"
+dev execute 0 /home/ops/lmf/move/register_libra_token.mv 00000000000000000000000000000001_EUR_EUR @0 2147483648 9277129359360 18554258718720 37108517437440 3435973836 b"00"
+dev execute 0 /home/ops/lmf/move/register_libra_token.mv 00000000000000000000000000000001_SGD_SGD @0 2147483648 9277129359360 18554258718720 37108517437440 3435973836 b"00"
+
+dev execute 0 /home/ops/lmf/move/update_price.mv 00000000000000000000000000000001_USD_USD 429496729
+dev execute 0 /home/ops/lmf/move/update_price.mv 00000000000000000000000000000001_EUR_EUR 429496729
+dev execute 0 /home/ops/lmf/move/update_price.mv 00000000000000000000000000000001_SGD_SGD 429496729
 
 
-dev execute 0 /home/ops/lmf/move/create_token.mv b"00" @0 @0 2147483648 9277129359360 18554258718720 37108517437440 3435973836 b"00"
-dev execute 0 /home/ops/lmf/move/update_price_index.mv 0 429496729
+dev execute 1 /home/ops/lmf/move/enter_bank.mv 00000000000000000000000000000001_USD_USD 300,000,000
+dev execute 2 /home/ops/lmf/move/enter_bank.mv 00000000000000000000000000000001_EUR_EUR 300,000,000
 
-dev execute 0 /home/ops/lmf/move/mint.mv 0 @1 10000000000 b"00"
-dev execute 0 /home/ops/lmf/move/mint.mv 0 @2 10000000000 b"00"
-dev execute 0 /home/ops/lmf/move/mint.mv 0 @3 10000000000 b"00"
+dev execute 1 /home/ops/lmf/move/lock.mv 00000000000000000000000000000001_USD_USD 200,000,000 b"00"
+dev execute 2 /home/ops/lmf/move/lock.mv 00000000000000000000000000000001_EUR_EUR 200,000,000 b"00"
 
-dev execute 1 /home/ops/lmf/move/lock_index.mv 0 2000000000 b"00"
-dev execute 2 /home/ops/lmf/move/lock_index.mv 0 2000000000 b"00"
-dev execute 3 /home/ops/lmf/move/lock_index.mv 0 2000000000 b"00"
+dev execute 1 /home/ops/lmf/move/borrow.mv 00000000000000000000000000000001_EUR_EUR 100,000,000 b"00"
 
-dev execute 1 /home/ops/lmf/move/borrow_index.mv 0 1000000000 b"00"
-sleep 120
-dev execute 1 /home/ops/lmf/move/repay_borrow_index.mv 0 1000000000 b"00"
+sleep 65
 
-dev execute 1 /home/ops/lmf/move/borrow_index.mv 0 1000000000 b"00"
-dev execute 1 /home/ops/lmf/move/borrow_index.mv 0 1000000000 b"00"
+dev execute 1 /home/ops/lmf/move/repay_borrow.mv 00000000000000000000000000000001_EUR_EUR 100,000,000 b"00"
 
 
+
+#########################################################################################################################
+
+# dev publish 0 /home/ops/lmf/move/bank.mv
+
+# sleep 3
+
+# dev execute 0 /home/ops/lmf/move/publish.mv b"00"
+# dev execute 1 /home/ops/lmf/move/publish.mv b"00"
+# dev execute 2 /home/ops/lmf/move/publish.mv b"00"
+# dev execute 3 /home/ops/lmf/move/publish.mv b"00"
+
+# dev execute 0 /home/ops/lmf/move/create_token.mv b"00" @0 @0 2147483648 9277129359360 18554258718720 37108517437440 3435973836 b"00"
+# dev execute 0 /home/ops/lmf/move/update_price_index.mv 0 429496729
+
+# dev execute 0 /home/ops/lmf/move/mint.mv 0 @1 10,000,000,000 b"00"
+# dev execute 0 /home/ops/lmf/move/mint.mv 0 @2 10,000,000,000 b"00"
+# dev execute 0 /home/ops/lmf/move/mint.mv 0 @3 10,000,000,000 b"00"
+
+# dev execute 1 /home/ops/lmf/move/lock_index.mv 0 2,000,000,000 b"00"
+# dev execute 2 /home/ops/lmf/move/lock_index.mv 0 2,000,000,000 b"00"
+# dev execute 3 /home/ops/lmf/move/lock_index.mv 0 2,000,000,000 b"00"
+
+# dev execute 3 /home/ops/lmf/move/borrow_index.mv 0 100,000,000 b"00"
+# dev execute 3 /home/ops/lmf/move/redeem_index.mv 0 0 b"00"
+# exit
+
+# dev execute 1 /home/ops/lmf/move/borrow_index.mv 0 1,000,000,000 b"00"
+# sleep 65
+# dev execute 1 /home/ops/lmf/move/repay_borrow_index.mv 0 1,000,000,000 b"00"
+
+# dev execute 1 /home/ops/lmf/move/borrow_index.mv 0 1,000,000,000 b"00"
+# dev execute 1 /home/ops/lmf/move/borrow_index.mv 0 1,000,000,000 b"00"
+
+
+#########################################################################################################################
+
+# 5% - 214748364 - 9277129324800
+# 10% - 429496729 - 18554258692800
+# 15% - 644245094 - 27831388060800
+# 20% - 858993459 - 37108517428800
+# 25% - 1073741824 - 46385646796800
+# 30% - 1288490188 - 55662776121600
+# 35% - 1503238553 - 64939905489600
+# 40% - 1717986918 - 74217034857600
+# 45% - 1932735283 - 83494164225600
+# 50% - 2147483648 - 92771293593600
+# 55% - 2362232012 - 102048422918400
+# 60% - 2576980377 - 111325552286400
+# 65% - 2791728742 - 120602681654400
+# 70% - 3006477107 - 129879811022400
+# 75% - 3221225472 - 139156940390400
+# 80% - 3435973836 - 148434069715200
+# 85% - 3650722201 - 157711199083200
+# 90% - 3865470566 - 166988328451200
+# 95% - 4080218931 - 176265457819200
+# 100% - 4294967296 - 185542587187200
