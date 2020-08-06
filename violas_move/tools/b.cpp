@@ -62,6 +62,11 @@ int main() {
       "borrow_index",
       "repay_borrow_index",
       "liquidate_borrow_index",
+
+      "lock2",
+      "redeem2",
+      "borrow2",
+      "repay_borrow2",
       };
 
   for(int i=0; i<scripts.size(); ++i) {

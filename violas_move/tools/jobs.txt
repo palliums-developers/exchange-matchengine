@@ -43,18 +43,20 @@ dev execute 0 /home/ops/lmf/move/update_price.mv 0000000000000000000000000000000
 dev execute 0 /home/ops/lmf/move/update_price.mv 00000000000000000000000000000001_EUR_EUR 429496729
 dev execute 0 /home/ops/lmf/move/update_price.mv 00000000000000000000000000000001_SGD_SGD 429496729
 
+# dev execute 1 /home/ops/lmf/move/enter_bank.mv 00000000000000000000000000000001_USD_USD 300,000,000
+# dev execute 2 /home/ops/lmf/move/enter_bank.mv 00000000000000000000000000000001_EUR_EUR 300,000,000
+# dev execute 1 /home/ops/lmf/move/lock.mv 00000000000000000000000000000001_USD_USD 200,000,000 b"00"
+# dev execute 2 /home/ops/lmf/move/lock.mv 00000000000000000000000000000001_EUR_EUR 200,000,000 b"00"
+# dev execute 1 /home/ops/lmf/move/borrow.mv 00000000000000000000000000000001_EUR_EUR 100,000,000 b"00"
+# sleep 65
+# dev execute 1 /home/ops/lmf/move/repay_borrow.mv 00000000000000000000000000000001_EUR_EUR 100,000,000 b"00"
 
-dev execute 1 /home/ops/lmf/move/enter_bank.mv 00000000000000000000000000000001_USD_USD 300,000,000
-dev execute 2 /home/ops/lmf/move/enter_bank.mv 00000000000000000000000000000001_EUR_EUR 300,000,000
-
-dev execute 1 /home/ops/lmf/move/lock.mv 00000000000000000000000000000001_USD_USD 200,000,000 b"00"
-dev execute 2 /home/ops/lmf/move/lock.mv 00000000000000000000000000000001_EUR_EUR 200,000,000 b"00"
-
-dev execute 1 /home/ops/lmf/move/borrow.mv 00000000000000000000000000000001_EUR_EUR 100,000,000 b"00"
-
+dev execute 1 /home/ops/lmf/move/lock2.mv 00000000000000000000000000000001_USD_USD 200,000,000 b"00"
+dev execute 2 /home/ops/lmf/move/lock2.mv 00000000000000000000000000000001_EUR_EUR 200,000,000 b"00"
+dev execute 1 /home/ops/lmf/move/borrow2.mv 00000000000000000000000000000001_EUR_EUR 100,000,000 b"00"
 sleep 65
-
-dev execute 1 /home/ops/lmf/move/repay_borrow.mv 00000000000000000000000000000001_EUR_EUR 100,000,000 b"00"
+dev execute 1 /home/ops/lmf/move/repay_borrow2.mv 00000000000000000000000000000001_EUR_EUR 100,000,000 b"00"
+dev execute 1 /home/ops/lmf/move/redeem2.mv 00000000000000000000000000000001_USD_USD 200,000,000 b"00"
 
 
 

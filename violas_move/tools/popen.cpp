@@ -122,7 +122,7 @@ int do_job() {
     if(!line.empty()) {
       printf("%s: %s", green_color("command").c_str(), line.c_str());
       fputs(line.c_str(), fp);
-      fflush(fp); sleep(1);
+      fflush(fp); usleep(500*1000);
     }
   }
   

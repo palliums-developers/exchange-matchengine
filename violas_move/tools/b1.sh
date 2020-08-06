@@ -1,12 +1,5 @@
-addr=$1
-
-rm -f *.move
 rm -f *.mv
-rm -f *.mv.1
-cp /home/ops/lmf/exchange-matchengine/violas_move/*.move ./
-
-sed -i "s/7257c2417e4d1038e1817c8f283ace2e/$addr/g" *.move
-
+addr=0000000000000000000000000a550c18
 
 ../move-build bank.move -s 0x$addr -d /home/ops/lmf/move/stdlib/modules/SlidingNonce.move /home/ops/lmf/move/stdlib/modules/ChainId.move /home/ops/lmf/move/stdlib/modules/LibraVMConfig.move /home/ops/lmf/move/stdlib/modules/LibraVersion.move /home/ops/lmf/move/stdlib/modules/Coin1.move /home/ops/lmf/move/stdlib/modules/Offer.move /home/ops/lmf/move/stdlib/modules/Hash.move /home/ops/lmf/move/stdlib/modules/RecoveryAddress.move /home/ops/lmf/move/stdlib/modules/Vector.move /home/ops/lmf/move/stdlib/modules/AccountFreezing.move /home/ops/lmf/move/stdlib/modules/DesignatedDealer.move /home/ops/lmf/move/stdlib/modules/Genesis.move /home/ops/lmf/move/stdlib/modules/Roles.move /home/ops/lmf/move/stdlib/modules/LibraConfig.move /home/ops/lmf/move/stdlib/modules/Compare.move /home/ops/lmf/move/stdlib/modules/VASP.move /home/ops/lmf/move/stdlib/modules/Coin2.move /home/ops/lmf/move/stdlib/modules/Authenticator.move /home/ops/lmf/move/stdlib/modules/LBR.move /home/ops/lmf/move/stdlib/modules/Signature.move /home/ops/lmf/move/stdlib/modules/Debug.move /home/ops/lmf/move/stdlib/modules/TransactionFee.move /home/ops/lmf/move/stdlib/modules/LibraWriteSetManager.move /home/ops/lmf/move/stdlib/modules/AccountLimits.move /home/ops/lmf/move/stdlib/modules/DualAttestation.move /home/ops/lmf/move/stdlib/modules/ValidatorOperatorConfig.move /home/ops/lmf/move/stdlib/modules/LibraTimestamp.move /home/ops/lmf/move/stdlib/modules/Option.move /home/ops/lmf/move/stdlib/modules/LibraAccount.move /home/ops/lmf/move/stdlib/modules/SharedEd25519PublicKey.move /home/ops/lmf/move/stdlib/modules/LCS.move /home/ops/lmf/move/stdlib/modules/ValidatorConfig.move /home/ops/lmf/move/stdlib/modules/RegisteredCurrencies.move /home/ops/lmf/move/stdlib/modules/LibraTransactionTimeout.move /home/ops/lmf/move/stdlib/modules/Libra.move /home/ops/lmf/move/stdlib/modules/CoreAddresses.move /home/ops/lmf/move/stdlib/modules/Signer.move /home/ops/lmf/move/stdlib/modules/LibraBlock.move /home/ops/lmf/move/stdlib/modules/LibraSystem.move /home/ops/lmf/move/stdlib/modules/FixedPoint32.move /home/ops/lmf/move/stdlib/modules/Event.move  
 

@@ -259,12 +259,18 @@ module ViolasBank {
 
     ///////////////////////////////////////////////////////////////////////////////////
 
-    // public fun print_balance<CoinType>(account: address) acquires LibraToken, Tokens {
-    // 	let libratoken = borrow_global<LibraToken<CoinType>>(contract_address());
-    // 	Debug::print(&x"01010101");
-    // 	Debug::print(&balance_of(libratoken.index, account));
-    // 	Debug::print(&balance_of(libratoken.index+1, account));
-    // }
+    public fun print_balance<CoinType>(account: address) acquires LibraToken, Tokens {
+    	let libratoken = borrow_global<LibraToken<CoinType>>(contract_address());
+	let tokens = borrow_global<Tokens>(account);
+	let borrowinfo = Vector::borrow(& tokens.borrows, libratoken.index);
+	let principal = borrowinfo.principal;
+	let interest_index = borrowinfo.interest_index;
+    	Debug::print(&x"01010101");
+    	Debug::print(&balance_of(libratoken.index, account));
+    	Debug::print(&balance_of(libratoken.index+1, account));
+    	Debug::print(&principal);
+    	Debug::print(&interest_index);
+    }
     
     public fun balance_of(tokenidx: u64, account: address) : u64 acquires Tokens {
 	let tokens = borrow_global<Tokens>(account);
@@ -807,6 +813,7 @@ module ViolasBank {
     public fun repay_borrow<CoinType>(account: &signer, amount: u64, data: vector<u8>) acquires Tokens, TokenInfoStore, UserInfo, LibraToken {
 	let libratoken = borrow_global<LibraToken<CoinType>>(contract_address());
 	repay_borrow_index(account, Libra::currency_code<CoinType>(), libratoken.index, amount, data);
+	print_balance<CoinType>(Signer::address_of(account));
     }
     
     public fun repay_borrow_index(account: &signer, currency_code: vector<u8>, tokenidx: u64, amount: u64, data: vector<u8>) acquires Tokens, TokenInfoStore, UserInfo {
