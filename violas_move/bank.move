@@ -12,6 +12,8 @@ module ViolasBank {
     use 0x1::LibraBlock;
     use 0x1::Signer;
     //use 0x1::LBR;
+    use 0x1::FixedPoint32;
+    use 0x1::Oracle;
     
     resource struct LibraToken<Token> {
 	coin: Libra::Libra<Token>,
@@ -646,7 +648,13 @@ module ViolasBank {
     }
     
     ///////////////////////////////////////////////////////////////////////////////////
-
+    fun update_price_from_oracle<CoinType>() acquires TokenInfoStore, LibraToken {
+	let (value, _) = Oracle::get_exchange_rate<CoinType>();
+	let libratoken = borrow_global<LibraToken<CoinType>>(contract_address());
+	let tokeninfos = borrow_global_mut<TokenInfoStore>(contract_address());
+	let ti = Vector::borrow_mut(&mut tokeninfos.tokens, libratoken.index);
+	ti.price = FixedPoint32::get_raw_value(value);
+    }
 
     public fun update_price<CoinType>(account: &signer, price: u64) acquires TokenInfoStore, UserInfo, LibraToken {
 	let libratoken = borrow_global<LibraToken<CoinType>>(contract_address());
@@ -673,6 +681,7 @@ module ViolasBank {
     }
 
     public fun lock<CoinType>(account: &signer, amount: u64, data: vector<u8>) acquires Tokens, TokenInfoStore, UserInfo, LibraToken {
+	update_price_from_oracle<CoinType>();
 	let libratoken = borrow_global<LibraToken<CoinType>>(contract_address());
 	lock_index(account, Libra::currency_code<CoinType>(), libratoken.index, amount, data);
     }
@@ -703,6 +712,7 @@ module ViolasBank {
     }
 
     public fun redeem<CoinType>(account: &signer, amount: u64, data: vector<u8>) acquires Tokens, TokenInfoStore, UserInfo, LibraToken {
+	update_price_from_oracle<CoinType>();
 	let libratoken = borrow_global<LibraToken<CoinType>>(contract_address());
 	redeem_index(account, Libra::currency_code<CoinType>(), libratoken.index, amount, data);
     }
@@ -751,6 +761,7 @@ module ViolasBank {
     }
 
     public fun borrow<CoinType>(account: &signer, amount: u64, data: vector<u8>) acquires Tokens, TokenInfoStore, UserInfo, LibraToken {
+	update_price_from_oracle<CoinType>();
 	let libratoken = borrow_global<LibraToken<CoinType>>(contract_address());
 	borrow_index(account, Libra::currency_code<CoinType>(), libratoken.index, amount, data);
     }
@@ -811,6 +822,7 @@ module ViolasBank {
     }
 
     public fun repay_borrow<CoinType>(account: &signer, amount: u64, data: vector<u8>) acquires Tokens, TokenInfoStore, UserInfo, LibraToken {
+	update_price_from_oracle<CoinType>();
 	let libratoken = borrow_global<LibraToken<CoinType>>(contract_address());
 	repay_borrow_index(account, Libra::currency_code<CoinType>(), libratoken.index, amount, data);
 	print_balance<CoinType>(Signer::address_of(account));
@@ -838,6 +850,8 @@ module ViolasBank {
     }
 
     public fun liquidate_borrow<CoinType1, CoinType2>(account: &signer, borrower: address, amount: u64, data: vector<u8>) acquires Tokens, TokenInfoStore, UserInfo, LibraToken {
+	update_price_from_oracle<CoinType1>();
+	update_price_from_oracle<CoinType2>();
 	let libratoken1 = borrow_global<LibraToken<CoinType1>>(contract_address());
 	let libratoken2 = borrow_global<LibraToken<CoinType2>>(contract_address());
 	liquidate_borrow_index(account, Libra::currency_code<CoinType1>(), Libra::currency_code<CoinType2>(), libratoken1.index, borrower, amount, libratoken2.index, data);
