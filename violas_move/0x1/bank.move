@@ -1,4 +1,4 @@
-address 0x7257c2417e4d1038e1817c8f283ace2e {
+address 0x1 {
 
 module ViolasBank {
     use 0x1::Libra;
@@ -210,8 +210,8 @@ module ViolasBank {
     ///////////////////////////////////////////////////////////////////////////////////
     
     fun contract_address() : address {
+	//0x1
 	0x7257c2417e4d1038e1817c8f283ace2e
-	// 0x8257c2417e4d1038e1817c8f283ace2e
     }
     
     fun require_published(sender: address) {
