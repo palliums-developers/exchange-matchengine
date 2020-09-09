@@ -151,6 +151,7 @@ module ViolasBank {
 	borrower: address,
 	amount: u64,
 	collateral_tokenidx: u64,
+	collateral_amount: u64,
 	data: vector<u8>,	    
     }
 
@@ -277,25 +278,33 @@ module ViolasBank {
 	let principal = borrowinfo.principal;
 	let interest_index = borrowinfo.interest_index;
     	Debug::print(&x"01010101");
-    	Debug::print(&balance_of(libratoken.index, account));
-    	Debug::print(&balance_of(libratoken.index+1, account));
+    	Debug::print(&balance_of_index(libratoken.index, account));
+    	Debug::print(&balance_of_index(libratoken.index+1, account));
     	Debug::print(&principal);
     	Debug::print(&interest_index);
     }
+
+    public fun balance<CoinType>(account: &signer) : u64 acquires LibraToken, Tokens {
+    	let libratoken = borrow_global<LibraToken<CoinType>>(contract_address());
+	let sender = Signer::address_of(account);
+	balance_of_index(libratoken.index, sender)
+    }
     
-    public fun balance_of(tokenidx: u64, account: address) : u64 acquires Tokens {
+    public fun balance_of_index(tokenidx: u64, account: address) : u64 acquires Tokens {
 	let tokens = borrow_global<Tokens>(account);
 	if(tokenidx < Vector::length(&tokens.ts)) {
 	    let t = Vector::borrow(& tokens.ts, tokenidx);
 	    t.value
 	} else { 0 }
     }
-    
-    // public fun balance(tokenidx: u64) : u64 acquires Tokens {
-    // 	balance_of(tokenidx, Transaction::sender())
-    // }
 
-    fun borrow_balance_of(tokenidx: u64, account: address) : u64 acquires Tokens, TokenInfoStore {
+    public fun borrow_balance<CoinType>(account: &signer) : u64 acquires LibraToken, Tokens, TokenInfoStore {
+    	let libratoken = borrow_global<LibraToken<CoinType>>(contract_address());
+	let sender = Signer::address_of(account);
+	borrow_balance_of_index(libratoken.index, sender)
+    }
+    
+    public fun borrow_balance_of_index(tokenidx: u64, account: address) : u64 acquires Tokens, TokenInfoStore {
 	// recentBorrowBalance = borrower.borrowBalance * market.borrowIndex / borrower.borrowIndex
 	let tokens = borrow_global<Tokens>(account);
 	let borrowinfo = Vector::borrow(& tokens.borrows, tokenidx);
@@ -307,10 +316,6 @@ module ViolasBank {
 	mantissa_div(mantissa_mul(borrowinfo.principal, ti.borrow_index), borrowinfo.interest_index)
     }
 
-    // fun borrow_balance(tokenidx: u64) : u64 acquires Tokens, TokenInfoStore {
-    // 	borrow_balance_of(tokenidx, Transaction::sender())
-    // }
-    
     public fun token_count() : u64 acquires TokenInfoStore {
 	let tokeninfos = borrow_global<TokenInfoStore>(contract_address());
 	Vector::length(&tokeninfos.tokens)
@@ -379,6 +384,11 @@ module ViolasBank {
     }
 
     ///////////////////////////////////////////////////////////////////////////////////
+
+    public fun is_published(account: &signer) : bool {
+	let sender = Signer::address_of(account);
+	exists<Tokens>(sender)
+    }
     
     public fun publish(account: &signer, userdata: vector<u8>) acquires Tokens, TokenInfoStore, UserInfo {
 	let sender = Signer::address_of(account);
@@ -630,9 +640,9 @@ module ViolasBank {
 	loop {
 	    if(i == len) break;
 
-	    let balance = balance_of(i+1, account);
+	    let balance = balance_of_index(i+1, account);
 	    let exchange_rate = exchange_rate(i);
-	    let borrow_balance = borrow_balance_of(i, account);
+	    let borrow_balance = borrow_balance_of_index(i, account);
 	    
 	    let tokeninfos = borrow_global<TokenInfoStore>(contract_address());
 	    let ti = Vector::borrow(& tokeninfos.tokens, i);
@@ -745,7 +755,7 @@ module ViolasBank {
 
 	let token_amount = mantissa_div(amount, er);
 	if(amount == 0) {
-	    token_amount = balance_of(tokenidx+1, sender);
+	    token_amount = balance_of_index(tokenidx+1, sender);
 	    amount = mantissa_mul(token_amount, er);
 	};
 
@@ -790,7 +800,7 @@ module ViolasBank {
 	let (sum_collateral, sum_borrow) = account_liquidity(sender, tokenidx, 0, amount);
 	assert(sum_collateral >= sum_borrow, 118);
 
-	let balance = borrow_balance_of(tokenidx, sender);
+	let balance = borrow_balance_of_index(tokenidx, sender);
 
 	let tokens = borrow_global_mut<Tokens>(sender);
 	let borrowinfo = Vector::borrow_mut(&mut tokens.borrows, tokenidx);
@@ -815,7 +825,7 @@ module ViolasBank {
     }
 
     fun repay_borrow_for(sender: address, tokenidx: u64, borrower: address, amount: u64) :u64 acquires Tokens, TokenInfoStore {
-	let balance = borrow_balance_of(tokenidx, borrower);
+	let balance = borrow_balance_of_index(tokenidx, borrower);
 	assert(amount <= balance, 119);
 	if(amount == 0) { amount = balance; };
 
@@ -884,7 +894,7 @@ module ViolasBank {
 	let (sum_collateral, sum_borrow) = account_liquidity(borrower, 99999, 0, 0);
 	assert(sum_collateral < sum_borrow, 120);
 
-	let borrowed = borrow_balance_of(tokenidx, borrower);
+	let borrowed = borrow_balance_of_index(tokenidx, borrower);
 	assert(amount <= borrowed, 121);
 
 	if(amount == 0) { amount = borrowed; };
@@ -912,6 +922,7 @@ module ViolasBank {
 	    borrower: borrower,
 	    amount: amount,
 	    collateral_tokenidx: collateral_tokenidx,
+	    collateral_amount: value,
 	    data: data,	    
 	};
 

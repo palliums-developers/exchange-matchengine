@@ -1,7 +1,7 @@
 script {
-use 0x1::ViolasBank;
+use 0x1::ViolasBank2;
 
 fun main(account: &signer, userdata: vector<u8>) {
-    ViolasBank::publish(account, userdata)
+    ViolasBank2::publish(account, userdata)
 }
 }
