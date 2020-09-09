@@ -667,7 +667,7 @@ module ViolasBank {
     }
     
     ///////////////////////////////////////////////////////////////////////////////////
-    fun update_price_from_oracle<CoinType>() acquires TokenInfoStore, LibraToken {
+    public fun update_price_from_oracle<CoinType>() acquires TokenInfoStore, LibraToken {
 	let (value, _) = Oracle::get_exchange_rate<CoinType>();
 	let libratoken = borrow_global<LibraToken<CoinType>>(contract_address());
 	let tokeninfos = borrow_global_mut<TokenInfoStore>(contract_address());
