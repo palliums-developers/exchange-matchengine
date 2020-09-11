@@ -1,7 +1,7 @@
 script {
-use 0x1::ViolasBank2;
+use 0x1::ViolasBank;
 
 fun main<Token>(payer: &signer, amount: u64) {
-    ViolasBank2::enter_bank<Token>(payer, amount);
+    ViolasBank::enter_bank<Token>(payer, amount);
 }
 }

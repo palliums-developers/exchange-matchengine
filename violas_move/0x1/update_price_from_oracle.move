@@ -1,7 +1,7 @@
 script {
-use 0x1::ViolasBank2;
+use 0x1::ViolasBank;
 
-fun main<Token>(_account: &signer) {
-    ViolasBank2::update_price_from_oracle<Token>();
+fun main<Token>(account: &signer) {
+    ViolasBank::update_price_from_oracle<Token>(account);
 }
 }

@@ -1,7 +1,7 @@
 script {
-use 0x1::ViolasBank2;
+use 0x1::ViolasBank;
 
 fun main<Token>(account: &signer, amount: u64, data: vector<u8>) {
-    ViolasBank2::redeem<Token>(account, amount, data);
+    ViolasBank::redeem<Token>(account, amount, data);
 }
 }
