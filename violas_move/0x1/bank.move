@@ -979,9 +979,9 @@ module ViolasBank {
 	
 	let tokeninfos = borrow_global_mut<TokenInfoStore>(contract_address());
 	let ti = Vector::borrow_mut(&mut tokeninfos.tokens, tokenidx);
-	ti.base_rate = base_rate;
-	ti.rate_multiplier = rate_multiplier;
-	ti.rate_jump_multiplier = rate_jump_multiplier;
+	ti.base_rate = base_rate/(365*24*60);
+	ti.rate_multiplier = rate_multiplier/(365*24*60);
+	ti.rate_jump_multiplier = rate_jump_multiplier/(365*24*60);
 	ti.rate_kink = rate_kink;
 	
 	let input = EventUpdateRateModel {
