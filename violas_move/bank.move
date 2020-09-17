@@ -11,9 +11,13 @@ module ViolasBank {
     use 0x1::Debug;
     use 0x1::LibraBlock;
     use 0x1::Signer;
+    use 0x1::Option::{Self, Option};
     //use 0x1::LBR;
     use 0x1::FixedPoint32;
     use 0x1::Oracle;
+
+    //use 0x1::ViolasBank as PViolasBank;
+
     
     resource struct LibraToken<Token> {
 	coin: Libra::Libra<Token>,
@@ -72,11 +76,15 @@ module ViolasBank {
     resource struct TokenInfoStore {
 	supervisor: address,
 	tokens: vector<TokenInfo>,
-	withdraw_capability: LibraAccount::WithdrawCapability,
+	withdraw_capability: Option<LibraAccount::WithdrawCapability>,
+	disabled: bool,
+	migrated: bool,
+	version: u64,
     }
     
     struct ViolasEvent {
 	etype: u64,
+	timestamp: u64,
 	paras: vector<u8>,
 	data:  vector<u8>,
     }
@@ -221,6 +229,8 @@ module ViolasBank {
 	// 0x8257c2417e4d1038e1817c8f283ace2e
 	// 0x00000000000000000000000042414e4b
     }
+
+    public fun version() :u64 { 1 }
     
     fun require_published(sender: address) {
 	assert(exists<Tokens>(sender), 102);
@@ -229,6 +239,11 @@ module ViolasBank {
     fun require_supervisor(sender: address) acquires TokenInfoStore {
 	let tokeninfos = borrow_global<TokenInfoStore>(contract_address());
 	assert(sender == tokeninfos.supervisor, 103);
+    }
+
+    fun require_enabled() acquires TokenInfoStore {
+	let tokeninfos = borrow_global<TokenInfoStore>(contract_address());
+	assert(false == tokeninfos.disabled, 1030);
     }
     
     fun require_owner(sender: address, tokenidx: u64) acquires TokenInfoStore {
@@ -246,6 +261,53 @@ module ViolasBank {
 	let ti = Vector::borrow(& tokeninfos.tokens, tokenidx);
 	assert(ti.price != 0, 107);
     }
+    
+    ///////////////////////////////////////////////////////////////////////////////////
+
+    //public fun migrate_data(account: &signer) acquires Tokens, TokenInfoStore {
+    public fun migrate_data(account: &signer) acquires TokenInfoStore {
+	let sender = Signer::address_of(account);
+	require_supervisor(sender);
+	let tokeninfos = borrow_global<TokenInfoStore>(contract_address());
+	assert(tokeninfos.migrated == false, 1070);
+	
+	migrate_data_impl(account);
+	let tokeninfos = borrow_global_mut<TokenInfoStore>(contract_address());
+	tokeninfos.migrated = true;
+    }
+
+    fun migrate_data_impl(_account: &signer) {}
+    
+    // fun migrate_data_impl(account: &signer) acquires Tokens, TokenInfoStore {
+    // 	let sender = Signer::address_of(account);
+    // 	let len = token_count();
+    // 	let i = 0;
+    // 	loop {
+    // 	    if(i == len) break;
+	    
+    // 	    let (value, principal, interest_index) = PViolasBank::balance_and_borrow(account, i);
+
+    // 	    let tokens = borrow_global_mut<Tokens>(sender);
+    // 	    let t = Vector::borrow_mut(&mut tokens.ts, i);
+    // 	    t.value = value;
+    // 	    let borrowinfo = Vector::borrow_mut(&mut tokens.borrows, i);
+    // 	    borrowinfo.principal = principal;
+    // 	    borrowinfo.interest_index = interest_index;
+
+    // 	    if(sender == contract_address()) {
+    // 		let (total_supply, total_reserves, total_borrows, borrow_index) = PViolasBank::token_info(account, i);
+    // 		let tokeninfos = borrow_global_mut<TokenInfoStore>(contract_address());
+    // 		let token = Vector::borrow_mut(&mut tokeninfos.tokens, i);
+    // 		token.total_supply = total_supply;
+    // 		token.total_reserves = total_reserves;
+    // 		token.total_borrows = total_borrows;
+    // 		token.borrow_index = borrow_index;
+    // 	    };
+	    
+    // 	    i = i + 1;
+    // 	}
+    // }
+    
     
     ///////////////////////////////////////////////////////////////////////////////////
     
@@ -278,6 +340,21 @@ module ViolasBank {
 
     ///////////////////////////////////////////////////////////////////////////////////
 
+    public fun balance_and_borrow(account: &signer, tokenidx: u64): (u64, u64, u64) acquires Tokens {
+	let sender = Signer::address_of(account);
+	let tokens = borrow_global<Tokens>(sender);
+	let t = Vector::borrow(& tokens.ts, tokenidx);
+	let borrowinfo = Vector::borrow(& tokens.borrows, tokenidx);
+	(t.value, borrowinfo.principal, borrowinfo.interest_index)
+    }
+
+    public fun token_info(account: &signer, tokenidx: u64): (u64, u64, u64, u64) acquires TokenInfoStore {
+	let _ = Signer::address_of(account);
+	let tokeninfos = borrow_global<TokenInfoStore>(contract_address());
+	let token = Vector::borrow(& tokeninfos.tokens, tokenidx);
+	(token.total_supply, token.total_reserves, token.total_borrows, token.borrow_index)
+    }
+    
     public fun print_balance<CoinType>(account: address) acquires LibraToken, Tokens {
     	let libratoken = borrow_global<LibraToken<CoinType>>(contract_address());
 	let tokens = borrow_global<Tokens>(account);
@@ -382,7 +459,7 @@ module ViolasBank {
     fun emit_events(account: &signer, etype: u64, paras: vector<u8>, data: vector<u8>) acquires UserInfo {
 	let sender = Signer::address_of(account);
 	let info = borrow_global_mut<UserInfo>(sender);
-	Event::emit_event<ViolasEvent>(&mut info.violas_events, ViolasEvent{ etype: etype, paras: *&paras, data: *&data});
+	Event::emit_event<ViolasEvent>(&mut info.violas_events, ViolasEvent{ etype: etype, timestamp: LibraTimestamp::now_microseconds(), paras: *&paras, data: *&data});
 
 	// let input = ViolasEvent{ etype: etype, paras: *&paras, data: *&data };
 	// let payer_withdrawal_cap = LibraAccount::extract_withdraw_capability(account);
@@ -395,6 +472,17 @@ module ViolasBank {
     public fun is_published(account: &signer) : bool {
 	let sender = Signer::address_of(account);
 	exists<Tokens>(sender)
+    }
+
+    public fun disable(account: &signer) acquires TokenInfoStore {
+	let sender = Signer::address_of(account);
+	require_published(sender);
+	require_supervisor(sender);
+	let tokeninfos = borrow_global_mut<TokenInfoStore>(contract_address());
+	if(tokeninfos.disabled == false) {
+	    tokeninfos.disabled = true;
+	    LibraAccount::restore_withdraw_capability(Option::extract(&mut tokeninfos.withdraw_capability));
+	}
     }
     
     public fun publish(account: &signer, userdata: vector<u8>) acquires Tokens, TokenInfoStore, UserInfo {
@@ -412,10 +500,17 @@ module ViolasBank {
 
 	if(sender == contract_address()) {
 	    let withdraw_capability = LibraAccount::extract_withdraw_capability(account);
-	    move_to(account, TokenInfoStore{ supervisor: contract_address(),  tokens: Vector::empty(), withdraw_capability: withdraw_capability });
+	    move_to(account, TokenInfoStore{
+		supervisor: contract_address(),
+		tokens: Vector::empty(),
+		withdraw_capability: Option::some(withdraw_capability),
+		disabled: false,
+		migrated: false,
+		version: version() });
+	} else {
+	    extend_user_tokens(sender);
+	    migrate_data_impl(account);
 	};
-	
-	extend_user_tokens(sender);
 
 	let input = EventPublish{ userdata: userdata };
 	emit_events(account, 0, LCS::to_bytes(&input), Vector::empty());
@@ -727,6 +822,7 @@ module ViolasBank {
 	require_published(sender);
 	require_first_tokenidx(tokenidx);
 	require_price(tokenidx);
+	require_enabled();
 	
 	extend_user_tokens(sender);
 
@@ -761,6 +857,7 @@ module ViolasBank {
 	require_published(sender);
 	require_first_tokenidx(tokenidx);
 	require_price(tokenidx);
+	require_enabled();
 
 	extend_user_tokens(sender);
 
@@ -808,6 +905,7 @@ module ViolasBank {
 	require_published(sender);
 	require_first_tokenidx(tokenidx);
 	require_price(tokenidx);
+	require_enabled();
 
 	extend_user_tokens(sender);
 
@@ -870,6 +968,7 @@ module ViolasBank {
 	require_published(sender);
 	require_first_tokenidx(tokenidx);
 	require_price(tokenidx);
+	require_enabled();
 
 	extend_user_tokens(sender);
 	
@@ -901,6 +1000,7 @@ module ViolasBank {
 	require_first_tokenidx(collateral_tokenidx);
 	require_price(tokenidx);
 	require_price(collateral_tokenidx);
+	require_enabled();
 
 	extend_user_tokens(sender);
 	extend_user_tokens(borrower);
@@ -1000,7 +1100,8 @@ module ViolasBank {
     
     public fun enter_bank<CoinType>(account: &signer, amount: u64) acquires LibraToken, TokenInfoStore, Tokens, UserInfo {
 	let sender = Signer::address_of(account);
-
+	require_published(sender);
+	require_enabled();
 	// let payer_withdrawal_cap = LibraAccount::extract_withdraw_capability(account);
 	// let to_deposit = LibraAccount::withdraw_from<CoinType>(&payer_withdrawal_cap, amount);
 	// LibraAccount::restore_withdraw_capability(payer_withdrawal_cap);
@@ -1025,6 +1126,8 @@ module ViolasBank {
 
     public fun exit_bank<CoinType>(account: &signer, amount: u64) acquires LibraToken, TokenInfoStore, Tokens, UserInfo {
 	let sender = Signer::address_of(account);
+	require_published(sender);
+	require_enabled();
 
 	let libratoken = borrow_global_mut<LibraToken<CoinType>>(contract_address());
 	
@@ -1032,7 +1135,7 @@ module ViolasBank {
 	// LibraAccount::deposit_to(account, to_deposit);
 
 	let tokeninfos = borrow_global<TokenInfoStore>(contract_address());
-	LibraAccount::pay_from<CoinType>(&tokeninfos.withdraw_capability, sender, amount, Vector::empty(), Vector::empty());
+	LibraAccount::pay_from<CoinType>(Option::borrow(&tokeninfos.withdraw_capability), sender, amount, Vector::empty(), Vector::empty());
 	
 	let t = withdraw_from(libratoken.index, sender, amount);
 	bank_burn(t);
