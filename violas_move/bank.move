@@ -14,7 +14,8 @@ module ViolasBank {
     use 0x1::Option::{Self, Option};
     use 0x1::FixedPoint32;
     use 0x1::Oracle;
-
+    use 0x1::VLS::VLS;
+    
     //use 0x7257c2417e4d1038e1817c8f283ace2e::ViolasBank as PBank;
 
     
@@ -36,6 +37,7 @@ module ViolasBank {
     resource struct Tokens {
 	ts: vector<T>,
 	borrows: vector<BorrowInfo>,
+	last_exchange_rates: vector<u64>,
     }
 
     resource struct Order {
@@ -456,6 +458,7 @@ module ViolasBank {
     	    if(usercnt >= tokencnt) break;
     	    Vector::push_back(&mut tokens.ts, T{ index: usercnt, value: 0});
     	    Vector::push_back(&mut tokens.borrows, BorrowInfo{ principal: 0, interest_index: new_mantissa(1,1)});
+    	    Vector::push_back(&mut tokens.last_exchange_rates, 0);
     	    usercnt = usercnt + 1;
     	}
     }
@@ -505,7 +508,7 @@ module ViolasBank {
 	
     	let sender = Signer::address_of(account);
     	assert(!exists<Tokens>(sender), 113);
-    	move_to(account, Tokens{ ts: Vector::empty(), borrows: Vector::empty() });
+    	move_to(account, Tokens{ ts: Vector::empty(), borrows: Vector::empty(), last_exchange_rates: Vector::empty() });
 
     	move_to(account, UserInfo{
     	    violas_events: Event::new_event_handle<ViolasEvent>(account),
@@ -849,6 +852,27 @@ module ViolasBank {
     	let libratoken = borrow_global<LibraToken<CoinType>>(contract_address());
     	lock_index(account, Libra::currency_code<CoinType>(), libratoken.index, amount, data);
     }
+
+    fun lock_incentive(sender: address, tokenidx: u64)  acquires Tokens, TokenInfoStore {
+	let lock_amount = balance_of_index(tokenidx+1, sender);
+	let curr_exchange_rate = exchange_rate(tokenidx);
+    	let tokens = borrow_global_mut<Tokens>(sender);
+    	let last_exchange_rate = Vector::borrow_mut(&mut tokens.last_exchange_rates, tokenidx);
+
+	let rate_diff = mantissa_div(safe_sub(curr_exchange_rate,*last_exchange_rate), *last_exchange_rate);
+	let lock_interest = mantissa_mul(lock_amount, rate_diff);
+	let amount = mantissa_mul(lock_interest, *last_exchange_rate);
+	
+    	let price = token_price(tokenidx);
+    	let base_amount = mantissa_mul(amount, price);
+
+	*last_exchange_rate = curr_exchange_rate;
+	
+	if(base_amount > 0 && LibraAccount::balance<VLS>(contract_address()) > base_amount) {
+    	    let tokeninfos = borrow_global<TokenInfoStore>(contract_address());
+    	    LibraAccount::pay_from<VLS>(Option::borrow(&tokeninfos.withdraw_capability), sender, base_amount, Vector::empty(), Vector::empty());
+	};
+    }
     
     public fun lock_index(account: &signer, currency_code: vector<u8>, tokenidx: u64, amount: u64, data: vector<u8>) acquires Tokens, TokenInfoStore, UserInfo {
     	let sender = Signer::address_of(account);
@@ -860,6 +884,9 @@ module ViolasBank {
     	extend_user_tokens(sender);
 
     	accrue_interest(tokenidx);
+
+	lock_incentive(sender, tokenidx);
+	
     	let er = exchange_rate(tokenidx);
     	pay_from(tokenidx, sender, contract_address(), amount);
 
@@ -897,6 +924,8 @@ module ViolasBank {
 
     	accrue_interest(tokenidx);
 
+	lock_incentive(sender, tokenidx);
+
     	let er = exchange_rate(tokenidx);
 
     	assert(amount > 0, 1161);
@@ -930,6 +959,24 @@ module ViolasBank {
     	let libratoken = borrow_global<LibraToken<CoinType>>(contract_address());
     	borrow_index(account, Libra::currency_code<CoinType>(), libratoken.index, amount, data);
     }
+
+    fun borrow_incentive(sender: address, tokenidx: u64)  acquires Tokens, TokenInfoStore {
+
+    	let balance = borrow_balance_of_index(tokenidx, sender);
+
+    	let tokens = borrow_global<Tokens>(sender);
+    	let borrowinfo = Vector::borrow(& tokens.borrows, tokenidx);
+
+    	let amount = safe_sub(balance, borrowinfo.principal);
+	
+    	let price = token_price(tokenidx);
+    	let base_amount = mantissa_mul(amount, price);
+
+	if(base_amount > 0 && LibraAccount::balance<VLS>(contract_address()) > base_amount) {
+    	    let tokeninfos = borrow_global<TokenInfoStore>(contract_address());
+    	    LibraAccount::pay_from<VLS>(Option::borrow(&tokeninfos.withdraw_capability), sender, base_amount, Vector::empty(), Vector::empty());
+	};
+    }
     
     public fun borrow_index(account: &signer, currency_code: vector<u8>, tokenidx: u64, amount: u64, data: vector<u8>) acquires Tokens, TokenInfoStore, UserInfo {
     	let sender = Signer::address_of(account);
@@ -942,6 +989,8 @@ module ViolasBank {
 
     	accrue_interest(tokenidx);
 
+	borrow_incentive(sender, tokenidx);
+	
     	let (sum_collateral, sum_borrow) = account_liquidity(sender, tokenidx, 0, amount);
     	assert(sum_collateral >= sum_borrow, 118);
 
@@ -1004,6 +1053,9 @@ module ViolasBank {
     	extend_user_tokens(sender);
 	
     	accrue_interest(tokenidx);
+
+	borrow_incentive(sender, tokenidx);
+	
     	amount = repay_borrow_for(sender, tokenidx, sender, amount);
 
     	let input = EventRepayBorrow {
