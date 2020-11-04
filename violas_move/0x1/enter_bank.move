@@ -1,7 +1,10 @@
 script {
 use 0x1::ViolasBank;
 
-fun main<Token>(payer: &signer, amount: u64) {
-    ViolasBank::enter_bank<Token>(payer, amount);
+fun main<Token>(account: &signer, amount: u64) {
+    if(ViolasBank::is_published(account) == false) {
+	ViolasBank::publish(account, x"00");
+    };
+    ViolasBank::enter_bank<Token>(account, amount);
 }
 }

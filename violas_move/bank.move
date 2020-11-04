@@ -8,8 +8,8 @@ module ViolasBank {
     use 0x1::Vector;
     use 0x1::LCS;
     use 0x1::LibraTimestamp;
-    // use 0x1::Debug;
-    // use 0x1::LibraBlock;
+    //use 0x1::Debug;
+    use 0x1::LibraBlock;
     use 0x1::Signer;
     use 0x1::Option::{Self, Option};
     use 0x1::FixedPoint32;
@@ -136,6 +136,7 @@ module ViolasBank {
 	tokenidx: u64,
 	amount: u64,
 	data: vector<u8>,
+	incentive: u64,
     }
 
     struct EventRedeem {
@@ -143,6 +144,7 @@ module ViolasBank {
 	tokenidx: u64,
 	amount: u64,
 	data: vector<u8>,
+	incentive: u64,
     }
 
     struct EventBorrow {
@@ -150,6 +152,7 @@ module ViolasBank {
 	tokenidx: u64,
 	amount: u64,
 	data: vector<u8>,
+	incentive: u64,
     }
 
     struct EventRepayBorrow {
@@ -157,6 +160,7 @@ module ViolasBank {
 	tokenidx: u64,
 	amount: u64,
 	data: vector<u8>,
+	incentive: u64,
     }
 
     struct EventLiquidateBorrow {
@@ -341,6 +345,12 @@ module ViolasBank {
 
     ///////////////////////////////////////////////////////////////////////////////////
 
+    fun debug_print<T>(_x: &T) {
+	//Debug::print(x);
+    }
+
+    ///////////////////////////////////////////////////////////////////////////////////
+    
     public fun balance_and_borrow(account: &signer, tokenidx: u64): (u64, u64, u64) acquires Tokens {
     	let sender = Signer::address_of(account);
     	let tokens = borrow_global<Tokens>(sender);
@@ -363,15 +373,12 @@ module ViolasBank {
     	let principal = borrowinfo.principal;
     	let interest_index = borrowinfo.interest_index;
 
-	_ = principal;
-	_ = interest_index;
-	
-    	// Debug::print(&x"01010101");
-    	// Debug::print(&LibraTimestamp::now_seconds());
-    	// Debug::print(&balance_of_index(libratoken.index, account));
-    	// Debug::print(&balance_of_index(libratoken.index+1, account));
-    	// Debug::print(&principal);
-    	// Debug::print(&interest_index);
+	debug_print(&x"01010101");
+    	debug_print(&LibraTimestamp::now_seconds());
+    	debug_print(&balance_of_index(libratoken.index, account));
+    	debug_print(&balance_of_index(libratoken.index+1, account));
+    	debug_print(&principal);
+    	debug_print(&interest_index);
     }
 
     public fun balance<CoinType>(account: &signer) : u64 acquires LibraToken, Tokens {
@@ -458,7 +465,7 @@ module ViolasBank {
     	    if(usercnt >= tokencnt) break;
     	    Vector::push_back(&mut tokens.ts, T{ index: usercnt, value: 0});
     	    Vector::push_back(&mut tokens.borrows, BorrowInfo{ principal: 0, interest_index: new_mantissa(1,1)});
-    	    Vector::push_back(&mut tokens.last_exchange_rates, 0);
+    	    Vector::push_back(&mut tokens.last_exchange_rates, new_mantissa(1, 100));
     	    usercnt = usercnt + 1;
     	}
     }
@@ -470,18 +477,14 @@ module ViolasBank {
     	let banktokens = borrow_global<Tokens>(contract_address());
     	let tokeninfos = borrow_global<TokenInfoStore>(contract_address());
 
-	_ = tokens;
-	_ = banktokens;
-	_ = tokeninfos;
-	
-    	// Debug::print(&x"63636363");
-    	// Debug::print(&sender);
-    	// Debug::print(&LibraAccount::sequence_number(sender));
-    	// Debug::print(&etype);
-    	// Debug::print(&LibraTimestamp::now_seconds());
-    	// Debug::print(tokens);
-    	// Debug::print(banktokens);
-    	// Debug::print(&tokeninfos.tokens);
+    	debug_print(&x"63636363");
+    	debug_print(&sender);
+    	debug_print(&LibraAccount::sequence_number(sender));
+    	debug_print(&etype);
+    	debug_print(&LibraTimestamp::now_seconds());
+    	debug_print(tokens);
+    	debug_print(banktokens);
+    	debug_print(&tokeninfos.tokens);
     	Event::emit_event<ViolasEvent>(&mut info.violas_events, ViolasEvent{ etype: etype, timestamp: LibraTimestamp::now_microseconds(), paras: *&paras, data: *&data});
     }
 
@@ -504,7 +507,7 @@ module ViolasBank {
     }
     
     public fun publish(account: &signer, userdata: vector<u8>) acquires Tokens, TokenInfoStore, UserInfo {
-    	// Debug::print(&LibraBlock::get_current_block_height());
+    	debug_print(&LibraBlock::get_current_block_height());
 	
     	let sender = Signer::address_of(account);
     	assert(!exists<Tokens>(sender), 113);
@@ -534,7 +537,7 @@ module ViolasBank {
 
     	let input = EventPublish{ userdata: userdata };
     	emit_events(account, 0, LCS::to_bytes(&input), Vector::empty());
-    	//Debug::print(&input);
+    	debug_print(&input);
     }
 
     public fun register_libra_token<CoinType>(account: &signer, price_oracle: address, collateral_factor: u64, base_rate: u64, rate_multiplier: u64, rate_jump_multiplier: u64, rate_kink: u64, tokendata: vector<u8>) : u64 acquires TokenInfoStore, Tokens, UserInfo {
@@ -611,7 +614,7 @@ module ViolasBank {
     	};
 	
     	emit_events(account, 1, LCS::to_bytes(&input), Vector::empty());
-    	//Debug::print(&input);
+    	debug_print(&input);
     	len
     }
     
@@ -640,7 +643,7 @@ module ViolasBank {
     	};
 	
     	emit_events(account, 2, LCS::to_bytes(&input), Vector::empty());
-    	//Debug::print(&input);
+    	debug_print(&input);
     }
 
     fun bank_mint(tokenidx: u64, payee: address, amount: u64) acquires TokenInfoStore, Tokens {
@@ -682,7 +685,7 @@ module ViolasBank {
     	};
 	
     	emit_events(account, 3, LCS::to_bytes(&input), Vector::empty());
-    	//Debug::print(&input);
+    	debug_print(&input);
     }
 
     ///////////////////////////////////////////////////////////////////////////////////
@@ -772,14 +775,14 @@ module ViolasBank {
     	    let tokeninfos = borrow_global<TokenInfoStore>(contract_address());
     	    let ti = Vector::borrow(& tokeninfos.tokens, i);
 
-    	    // Debug::print(&x"03030303");
-    	    // Debug::print(&LibraTimestamp::now_seconds());
-    	    // Debug::print(&i);
-    	    // Debug::print(&balance);
-    	    // Debug::print(&exchange_rate);
-    	    // Debug::print(&borrow_balance);
-    	    // Debug::print(&ti.collateral_factor);
-    	    // Debug::print(&ti.price);
+    	    debug_print(&x"03030303");
+    	    debug_print(&LibraTimestamp::now_seconds());
+    	    debug_print(&i);
+    	    debug_print(&balance);
+    	    debug_print(&exchange_rate);
+    	    debug_print(&borrow_balance);
+    	    debug_print(&ti.collateral_factor);
+    	    debug_print(&ti.price);
 	    
     	    sum_collateral = sum_collateral + bank_token_2_base(balance, exchange_rate, ti.collateral_factor, ti.price);
 
@@ -811,15 +814,15 @@ module ViolasBank {
     	    price: FixedPoint32::get_raw_value(*&value),
     	};
     	emit_events(account, 16, LCS::to_bytes(&input), Vector::empty());
-    	//Debug::print(&input);
+    	debug_print(&input);
 
     	let tokeninfos = borrow_global_mut<TokenInfoStore>(contract_address());
     	let ti = Vector::borrow_mut(&mut tokeninfos.tokens, libratoken.index);
     	ti.price = FixedPoint32::get_raw_value(value);
 	
-    	// Debug::print(&x"02020202");
-    	// Debug::print(&LibraTimestamp::now_seconds());
-    	// Debug::print(&ti.price);
+    	debug_print(&x"02020202");
+    	debug_print(&LibraTimestamp::now_seconds());
+    	debug_print(&ti.price);
     }
 
     public fun update_price<CoinType>(account: &signer, price: u64) acquires TokenInfoStore, UserInfo, LibraToken, Tokens {
@@ -844,7 +847,7 @@ module ViolasBank {
     	};
 	
     	emit_events(account, 6, LCS::to_bytes(&input), Vector::empty());
-    	//Debug::print(&input);
+    	debug_print(&input);
     }
 
     public fun lock<CoinType>(account: &signer, amount: u64, data: vector<u8>) acquires Tokens, TokenInfoStore, UserInfo, LibraToken {
@@ -853,7 +856,7 @@ module ViolasBank {
     	lock_index(account, Libra::currency_code<CoinType>(), libratoken.index, amount, data);
     }
 
-    fun lock_incentive(sender: address, tokenidx: u64)  acquires Tokens, TokenInfoStore {
+    fun lock_incentive(sender: address, tokenidx: u64) : u64  acquires Tokens, TokenInfoStore {
 	let lock_amount = balance_of_index(tokenidx+1, sender);
 	let curr_exchange_rate = exchange_rate(tokenidx);
     	let tokens = borrow_global_mut<Tokens>(sender);
@@ -871,7 +874,8 @@ module ViolasBank {
 	if(base_amount > 0 && LibraAccount::balance<VLS>(contract_address()) > base_amount) {
     	    let tokeninfos = borrow_global<TokenInfoStore>(contract_address());
     	    LibraAccount::pay_from<VLS>(Option::borrow(&tokeninfos.withdraw_capability), sender, base_amount, Vector::empty(), Vector::empty());
-	};
+	} else { base_amount = 0; };
+	base_amount
     }
     
     public fun lock_index(account: &signer, currency_code: vector<u8>, tokenidx: u64, amount: u64, data: vector<u8>) acquires Tokens, TokenInfoStore, UserInfo {
@@ -885,7 +889,7 @@ module ViolasBank {
 
     	accrue_interest(tokenidx);
 
-	lock_incentive(sender, tokenidx);
+	let incentive = lock_incentive(sender, tokenidx);
 	
     	let er = exchange_rate(tokenidx);
     	pay_from(tokenidx, sender, contract_address(), amount);
@@ -898,10 +902,11 @@ module ViolasBank {
     	    tokenidx: tokenidx,
     	    amount: amount,
     	    data: data,
+	    incentive: incentive,
     	};
 
     	emit_events(account, 7, LCS::to_bytes(&input), Vector::empty());
-    	//Debug::print(&input);
+    	debug_print(&input);
     }
 
     public fun redeem<CoinType>(account: &signer, amount: u64, data: vector<u8>) acquires Tokens, TokenInfoStore, UserInfo, LibraToken {
@@ -913,7 +918,7 @@ module ViolasBank {
     public fun redeem_index(account: &signer, currency_code: vector<u8>, tokenidx: u64, amount: u64, data: vector<u8>) acquires Tokens, TokenInfoStore, UserInfo {
     	let sender = Signer::address_of(account);
 
-    	//Debug::print(&LibraBlock::get_current_block_height());
+    	debug_print(&LibraBlock::get_current_block_height());
 	
     	require_published(sender);
     	require_first_tokenidx(tokenidx);
@@ -924,7 +929,7 @@ module ViolasBank {
 
     	accrue_interest(tokenidx);
 
-	lock_incentive(sender, tokenidx);
+	let incentive = lock_incentive(sender, tokenidx);
 
     	let er = exchange_rate(tokenidx);
 
@@ -948,10 +953,11 @@ module ViolasBank {
     	    tokenidx: tokenidx,
     	    amount: amount,
     	    data: data,
+	    incentive: incentive,
     	};
 
     	emit_events(account, 8, LCS::to_bytes(&input), Vector::empty());
-    	//Debug::print(&input);
+    	debug_print(&input);
     }
 
     public fun borrow<CoinType>(account: &signer, amount: u64, data: vector<u8>) acquires Tokens, TokenInfoStore, UserInfo, LibraToken {
@@ -960,7 +966,7 @@ module ViolasBank {
     	borrow_index(account, Libra::currency_code<CoinType>(), libratoken.index, amount, data);
     }
 
-    fun borrow_incentive(sender: address, tokenidx: u64)  acquires Tokens, TokenInfoStore {
+    fun borrow_incentive(sender: address, tokenidx: u64) : u64  acquires Tokens, TokenInfoStore {
 
     	let balance = borrow_balance_of_index(tokenidx, sender);
 
@@ -975,7 +981,8 @@ module ViolasBank {
 	if(base_amount > 0 && LibraAccount::balance<VLS>(contract_address()) > base_amount) {
     	    let tokeninfos = borrow_global<TokenInfoStore>(contract_address());
     	    LibraAccount::pay_from<VLS>(Option::borrow(&tokeninfos.withdraw_capability), sender, base_amount, Vector::empty(), Vector::empty());
-	};
+	} else { base_amount = 0; };
+	base_amount
     }
     
     public fun borrow_index(account: &signer, currency_code: vector<u8>, tokenidx: u64, amount: u64, data: vector<u8>) acquires Tokens, TokenInfoStore, UserInfo {
@@ -989,7 +996,7 @@ module ViolasBank {
 
     	accrue_interest(tokenidx);
 
-	borrow_incentive(sender, tokenidx);
+	let incentive = borrow_incentive(sender, tokenidx);
 	
     	let (sum_collateral, sum_borrow) = account_liquidity(sender, tokenidx, 0, amount);
     	assert(sum_collateral >= sum_borrow, 118);
@@ -1013,10 +1020,11 @@ module ViolasBank {
     	    tokenidx: tokenidx,
     	    amount: amount,
     	    data: data,
+	    incentive: incentive,
     	};
 
     	emit_events(account, 9, LCS::to_bytes(&input), Vector::empty());
-    	//Debug::print(&input);
+    	debug_print(&input);
     }
 
     fun repay_borrow_for(sender: address, tokenidx: u64, borrower: address, amount: u64) :u64 acquires Tokens, TokenInfoStore {
@@ -1054,7 +1062,7 @@ module ViolasBank {
 	
     	accrue_interest(tokenidx);
 
-	borrow_incentive(sender, tokenidx);
+	let incentive = borrow_incentive(sender, tokenidx);
 	
     	amount = repay_borrow_for(sender, tokenidx, sender, amount);
 
@@ -1063,10 +1071,11 @@ module ViolasBank {
     	    tokenidx: tokenidx,
     	    amount: amount,
     	    data: data,
+	    incentive: incentive,
     	};
 
     	emit_events(account, 10, LCS::to_bytes(&input), Vector::empty());
-    	//Debug::print(&input);
+    	debug_print(&input);
     }
 
     public fun liquidate_borrow<CoinType1, CoinType2>(account: &signer, borrower: address, amount: u64, data: vector<u8>) acquires Tokens, TokenInfoStore, UserInfo, LibraToken {
@@ -1125,7 +1134,7 @@ module ViolasBank {
     	};
 
     	emit_events(account, 11, LCS::to_bytes(&input), Vector::empty());
-    	//Debug::print(&input);
+    	debug_print(&input);
     }
 
     public fun update_collateral_factor<CoinType>(account: &signer, factor: u64) acquires TokenInfoStore, UserInfo, LibraToken, Tokens {
@@ -1150,7 +1159,7 @@ module ViolasBank {
     	};
 	
     	emit_events(account, 12, LCS::to_bytes(&input), Vector::empty());
-    	//Debug::print(&input);
+    	debug_print(&input);
     }
 
     public fun update_rate_model<CoinType>(account: &signer, base_rate: u64, rate_multiplier: u64, rate_jump_multiplier: u64, rate_kink: u64) acquires TokenInfoStore, UserInfo, LibraToken, Tokens {
@@ -1181,7 +1190,7 @@ module ViolasBank {
     	};
 	
     	emit_events(account, 15, LCS::to_bytes(&input), Vector::empty());
-    	//Debug::print(&input);
+    	debug_print(&input);
     }
     
     public fun enter_bank<CoinType>(account: &signer, amount: u64) acquires LibraToken, TokenInfoStore, Tokens, UserInfo {
@@ -1204,7 +1213,7 @@ module ViolasBank {
     	};
 	
     	emit_events(account, 13, LCS::to_bytes(&input), Vector::empty());
-    	//Debug::print(&input);
+    	debug_print(&input);
     }
 
     public fun exit_bank<CoinType>(account: &signer, amount: u64) acquires LibraToken, TokenInfoStore, Tokens, UserInfo {
@@ -1227,7 +1236,7 @@ module ViolasBank {
     	};
 
     	emit_events(account, 14, LCS::to_bytes(&input), Vector::empty());
-    	//Debug::print(&input);
+    	debug_print(&input);
     }
     
     ///////////////////////////////////////////////////////////////////////////////////
