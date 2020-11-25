@@ -38,6 +38,7 @@ module ViolasBank {
 	ts: vector<T>,
 	borrows: vector<BorrowInfo>,
 	last_exchange_rates: vector<u64>,
+	incentive_supply_indexes: vector<u64>,
     }
 
     resource struct Order {
@@ -69,6 +70,11 @@ module ViolasBank {
 	rate_jump_multiplier: u64,
 	rate_kink: u64,
 	last_minute: u64,
+
+	incentive_supply_index: u64,
+	incentive_supply_timestamp: u64,
+	incentive_speed: u64,
+	
 	data: vector<u8>,
 	bulletin_first: vector<u8>,
 	bulletins: vector<vector<u8>>,
@@ -81,6 +87,7 @@ module ViolasBank {
 	disabled: bool,
 	migrated: bool,
 	version: u64,
+	incentive_rate: u64,
     }
     
     struct ViolasEvent {
@@ -199,6 +206,81 @@ module ViolasBank {
 	currency_code: vector<u8>,
 	tokenidx: u64,
 	amount: u64,
+    }
+
+    struct EventSetIncentiveRate {
+	rate: u64,
+    }
+
+
+    ///////////////////////////////////////////////////////////////////////////////////
+    
+    fun refresh_incentive_speeds() acquires TokenInfoStore {
+    	let len = token_count();
+    	let i = 0;
+    	loop {
+    	    if(i == len) break;
+	    udpate_incentive_supply_index(i);
+	    i = i + 2;
+	};
+
+	let utilities : vector<u64> = Vector::empty();
+	let total_utility =  0;
+	i = 0;
+	loop {
+    	    if(i == len) break;
+	    let tokeninfos = borrow_global<TokenInfoStore>(contract_address());
+	    let ti = Vector::borrow(& tokeninfos.tokens, i);
+	    let utility = mantissa_mul(ti.total_borrows, token_price(i));
+	    Vector::push_back(&mut utilities, utility);
+	    total_utility = total_utility + utility; 
+	    i = i + 2;
+	};
+
+	i = 0;
+	loop {
+    	    if(i == len) break;
+	    let tokeninfos = borrow_global_mut<TokenInfoStore>(contract_address());
+	    let utility = Vector::borrow(&utilities, i/2);
+	    let ti = Vector::borrow_mut(&mut tokeninfos.tokens, i);
+	    ti.incentive_speed = 0;
+	    if (total_utility > 0) {
+		ti.incentive_speed = mantissa_mul(tokeninfos.incentive_rate, mantissa_div(*utility, total_utility))
+	    };
+	    i = i + 2;
+	};
+    }
+
+    fun udpate_incentive_supply_index(tokenidx: u64) acquires TokenInfoStore {
+	let total_supply = total_supply(tokenidx+1);
+	let tokeninfos = borrow_global_mut<TokenInfoStore>(contract_address());
+	let ti = Vector::borrow_mut(&mut tokeninfos.tokens, tokenidx);
+	let now = LibraTimestamp::now_microseconds() / (60*1000*1000);
+	let delta_minutes = safe_sub(now, ti.incentive_supply_timestamp);
+	if(delta_minutes > 0) {
+	    let accured = ti.incentive_speed * delta_minutes;
+	    let ratio = 0;
+	    if (total_supply > 0) {
+		ratio = mantissa_div(accured, total_supply);
+	    };
+	    ti.incentive_supply_index = ti.incentive_supply_index + ratio;
+	    ti.incentive_supply_timestamp = now;
+	}
+    }
+
+    fun distribute_supply_incentive(tokenidx: u64, sender: address) acquires TokenInfoStore, Tokens {
+	let tokeninfos = borrow_global<TokenInfoStore>(contract_address());
+	let ti = Vector::borrow(& tokeninfos.tokens, tokenidx);
+
+	let tokens = borrow_global_mut<Tokens>(sender);
+    	let index = Vector::borrow_mut(&mut tokens.incentive_supply_indexes, tokenidx);
+	
+	let delta_index = safe_sub(ti.incentive_supply_index, *index);
+	let delta_vls = mantissa_mul(balance_of_index(tokenidx+1, sender), delta_index);
+
+	if(delta_vls > 0 && LibraAccount::balance<VLS>(contract_address()) > delta_vls) {
+    	    LibraAccount::pay_from<VLS>(Option::borrow(&tokeninfos.withdraw_capability), sender, delta_vls, Vector::empty(), Vector::empty());
+	} 
     }
     
     ///////////////////////////////////////////////////////////////////////////////////
@@ -466,6 +548,7 @@ module ViolasBank {
     	    Vector::push_back(&mut tokens.ts, T{ index: usercnt, value: 0});
     	    Vector::push_back(&mut tokens.borrows, BorrowInfo{ principal: 0, interest_index: new_mantissa(1,1)});
     	    Vector::push_back(&mut tokens.last_exchange_rates, new_mantissa(1, 100));
+    	    Vector::push_back(&mut tokens.incentive_supply_indexes, new_mantissa(1, 1));
     	    usercnt = usercnt + 1;
     	}
     }
@@ -511,7 +594,7 @@ module ViolasBank {
 	
     	let sender = Signer::address_of(account);
     	assert(!exists<Tokens>(sender), 113);
-    	move_to(account, Tokens{ ts: Vector::empty(), borrows: Vector::empty(), last_exchange_rates: Vector::empty() });
+    	move_to(account, Tokens{ ts: Vector::empty(), borrows: Vector::empty(), last_exchange_rates: Vector::empty(), incentive_supply_indexes: Vector::empty() });
 
     	move_to(account, UserInfo{
     	    violas_events: Event::new_event_handle<ViolasEvent>(account),
@@ -529,7 +612,9 @@ module ViolasBank {
     		withdraw_capability: Option::some(withdraw_capability),
     		disabled: false,
     		migrated: false,
-    		version: version() });
+    		version: version(),
+		incentive_rate: 0
+	    });
     	} else {
     	    extend_user_tokens(sender);
     	    migrate_data_impl(account);
@@ -576,6 +661,9 @@ module ViolasBank {
     	    rate_jump_multiplier: rate_jump_multiplier/(365*24*60),
     	    rate_kink: rate_kink,
     	    last_minute: LibraTimestamp::now_microseconds() / (60*1000*1000),
+	    incentive_supply_index: mantissa_one,
+	    incentive_supply_timestamp: LibraTimestamp::now_microseconds() / (60*1000*1000),
+	    incentive_speed: 0,
     	    data: *&tokendata,
     	    bulletin_first: Vector::empty(),
     	    bulletins: Vector::empty()
@@ -595,6 +683,9 @@ module ViolasBank {
     	    rate_jump_multiplier: rate_jump_multiplier/(365*24*60),
     	    rate_kink: rate_kink,
     	    last_minute: LibraTimestamp::now_microseconds() / (60*1000*1000),
+	    incentive_supply_index: mantissa_one,
+	    incentive_supply_timestamp: LibraTimestamp::now_microseconds() / (60*1000*1000),
+	    incentive_speed: 0,
     	    data: *&tokendata,
     	    bulletin_first: Vector::empty(),
     	    bulletins: Vector::empty()
@@ -1238,9 +1329,20 @@ module ViolasBank {
     	emit_events(account, 14, LCS::to_bytes(&input), Vector::empty());
     	debug_print(&input);
     }
-    
-    ///////////////////////////////////////////////////////////////////////////////////
-    
+	       
+    public fun set_incentive_rate(account: &signer, rate: u64) acquires TokenInfoStore, Tokens, UserInfo {
+    	let sender = Signer::address_of(account);
+    	require_published(sender);
+    	require_supervisor(sender);
+    	let tokeninfos = borrow_global_mut<TokenInfoStore>(contract_address());
+	tokeninfos.incentive_rate = rate;
+    	let input = EventSetIncentiveRate {
+    	    rate: rate,
+    	};
+    	emit_events(account, 17, LCS::to_bytes(&input), Vector::empty());
+    	debug_print(&input);
+    }
+	       
 }
 
 }
