@@ -217,18 +217,30 @@ module ViolasBank {
     }
 
     struct EventClaimIncentive {
-	currency_code: vector<u8>,
-    	tokenidx: u64,
-	supply_incentive: u64,
-	borrow_incentive: u64,
+	incentive: u64,
     }
     
     ///////////////////////////////////////////////////////////////////////////////////
+	       
+    public fun set_incentive_rate(account: &signer, rate: u64) acquires TokenInfoStore, Tokens, UserInfo {
+    	let sender = Signer::address_of(account);
+    	require_published(sender);
+    	require_supervisor(sender);
+    	let tokeninfos = borrow_global_mut<TokenInfoStore>(contract_address());
+	tokeninfos.incentive_rate = rate/(2*24*60);
+    	let input = EventSetIncentiveRate {
+    	    rate: rate,
+    	};
+    	emit_events(account, 17, LCS::to_bytes(&input), Vector::empty());
+    	debug_print(&input);
+    }
+    
     fun check_for_incentive_speeds_refresh() acquires TokenInfoStore {
 	let now = LibraTimestamp::now_microseconds() / (60*1000*1000);
     	let tokeninfos = borrow_global<TokenInfoStore>(contract_address());
 	let delta = safe_sub(now, tokeninfos.incentive_refresh_speeds_last_minute);
-	if(delta > 60) {
+	//if(delta > 60) {
+	if(delta > 0) { // lmf_test
 	    refresh_incentive_speeds();
     	    let tokeninfos1 = borrow_global_mut<TokenInfoStore>(contract_address());
 	    tokeninfos1.incentive_refresh_speeds_last_minute = now;
@@ -270,6 +282,7 @@ module ViolasBank {
 	    };
 	    i = i + 2;
 	};
+
     }
 
     fun update_incentive_supply_index(tokenidx: u64) acquires TokenInfoStore {
@@ -345,21 +358,24 @@ module ViolasBank {
 	delta_vls
     }
 
-    public fun claim_incentive<CoinType>(account: &signer) acquires LibraToken, TokenInfoStore, Tokens, UserInfo {
+
+    public fun claim_incentive(account: &signer) acquires TokenInfoStore, Tokens, UserInfo {
     	let sender = Signer::address_of(account);	
-    	let libratoken = borrow_global<LibraToken<CoinType>>(contract_address());
-    	let tokenidx = libratoken.index;
-
-    	update_incentive_supply_index(tokenidx);
-    	let v1 = distribute_supply_incentive(tokenidx, sender);
-    	update_incentive_borrow_index(tokenidx);
-    	let v2 = distribute_borrow_incentive(tokenidx, sender);
-
+	let total = 0;
+    	let len = token_count();
+    	let i = 0;
+    	loop {
+    	    if(i == len) break;
+    	    update_incentive_supply_index(i);
+    	    let v1 = distribute_supply_incentive(i, sender);
+    	    update_incentive_borrow_index(i);
+    	    let v2 = distribute_borrow_incentive(i, sender);
+	    total = total + v1 + v2;
+	    i = i + 2;
+	};
+	
     	let input = EventClaimIncentive {
-	    currency_code: Libra::currency_code<CoinType>(),
-    	    tokenidx: tokenidx,
-	    supply_incentive: v1,
-	    borrow_incentive: v2,
+	    incentive: total,
     	};
 	
     	emit_events(account, 18, LCS::to_bytes(&input), Vector::empty());
@@ -1428,19 +1444,6 @@ module ViolasBank {
     	};
 
     	emit_events(account, 14, LCS::to_bytes(&input), Vector::empty());
-    	debug_print(&input);
-    }
-	       
-    public fun set_incentive_rate(account: &signer, rate: u64) acquires TokenInfoStore, Tokens, UserInfo {
-    	let sender = Signer::address_of(account);
-    	require_published(sender);
-    	require_supervisor(sender);
-    	let tokeninfos = borrow_global_mut<TokenInfoStore>(contract_address());
-	tokeninfos.incentive_rate = rate/(2*365*24*60);
-    	let input = EventSetIncentiveRate {
-    	    rate: rate,
-    	};
-    	emit_events(account, 17, LCS::to_bytes(&input), Vector::empty());
     	debug_print(&input);
     }
 	       
