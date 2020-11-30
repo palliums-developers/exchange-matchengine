@@ -228,6 +228,7 @@ module ViolasBank {
     	require_supervisor(sender);
     	let tokeninfos = borrow_global_mut<TokenInfoStore>(contract_address());
 	tokeninfos.incentive_rate = rate/(2*24*60);
+	refresh_incentive_speeds();
     	let input = EventSetIncentiveRate {
     	    rate: rate,
     	};
@@ -239,8 +240,7 @@ module ViolasBank {
 	let now = LibraTimestamp::now_microseconds() / (60*1000*1000);
     	let tokeninfos = borrow_global<TokenInfoStore>(contract_address());
 	let delta = safe_sub(now, tokeninfos.incentive_refresh_speeds_last_minute);
-	//if(delta > 60) {
-	if(delta > 0) { // lmf_test
+	if(delta > 10) { 
 	    refresh_incentive_speeds();
     	    let tokeninfos1 = borrow_global_mut<TokenInfoStore>(contract_address());
 	    tokeninfos1.incentive_refresh_speeds_last_minute = now;
