@@ -92,6 +92,7 @@ module ViolasBank {
 	version: u64,
 	incentive_rate: u64,
 	incentive_refresh_speeds_last_minute: u64,
+	incentive_rate_last_minute: u64,
     }
     
     struct ViolasEvent {
@@ -225,9 +226,17 @@ module ViolasBank {
     public fun set_incentive_rate(account: &signer, rate: u64) acquires TokenInfoStore, Tokens, UserInfo {
     	let sender = Signer::address_of(account);
     	require_published(sender);
-    	require_supervisor(sender);
+    	// require_supervisor(sender);
+	assert(sender == 0x0000000000000000000000000000dd01, 501);
+	
     	let tokeninfos = borrow_global_mut<TokenInfoStore>(contract_address());
 	tokeninfos.incentive_rate = rate/(2*24*60);
+	tokeninfos.incentive_rate_last_minute = LibraTimestamp::now_microseconds() / (60*1000*1000);
+	
+    	let withdraw_capability = LibraAccount::extract_withdraw_capability(account);
+    	LibraAccount::pay_from<VLS>(&withdraw_capability, contract_address(), rate, Vector::empty(), Vector::empty());
+    	LibraAccount::restore_withdraw_capability(withdraw_capability);
+	
 	refresh_incentive_speeds();
     	let input = EventSetIncentiveRate {
     	    rate: rate,
@@ -235,16 +244,41 @@ module ViolasBank {
     	emit_events(account, 17, LCS::to_bytes(&input), Vector::empty());
     	debug_print(&input);
     }
+
+    public fun set_incentive_rate2(account: &signer, rate: u64) acquires TokenInfoStore {
+    	let sender = Signer::address_of(account);
+    	require_published(sender);
+    	require_supervisor(sender);
+	
+    	let tokeninfos = borrow_global_mut<TokenInfoStore>(contract_address());
+	tokeninfos.incentive_rate = rate/(2*24*60);
+	tokeninfos.incentive_rate_last_minute = LibraTimestamp::now_microseconds() / (60*1000*1000);
+	
+	refresh_incentive_speeds();
+    }
     
     fun check_for_incentive_speeds_refresh() acquires TokenInfoStore {
 	let now = LibraTimestamp::now_microseconds() / (60*1000*1000);
     	let tokeninfos = borrow_global<TokenInfoStore>(contract_address());
+
 	let delta = safe_sub(now, tokeninfos.incentive_refresh_speeds_last_minute);
+	let delta1 = 0;
+	if(tokeninfos.incentive_rate_last_minute > 0) {
+	    delta1 = safe_sub(now, tokeninfos.incentive_rate_last_minute);
+	};
+	
 	if(delta > 10) { 
 	    refresh_incentive_speeds();
     	    let tokeninfos1 = borrow_global_mut<TokenInfoStore>(contract_address());
 	    tokeninfos1.incentive_refresh_speeds_last_minute = now;
 	};
+
+	if(delta1 > 24*60) {
+    	    let tokeninfos1 = borrow_global_mut<TokenInfoStore>(contract_address());
+	    tokeninfos1.incentive_rate = 0;
+	    tokeninfos1.incentive_rate_last_minute = 0;
+	    refresh_incentive_speeds();
+	}
     }
     
     fun refresh_incentive_speeds() acquires TokenInfoStore {
@@ -715,6 +749,7 @@ module ViolasBank {
     		version: version(),
 		incentive_rate: 0,
 		incentive_refresh_speeds_last_minute: LibraTimestamp::now_microseconds() / (60*1000*1000),
+		incentive_rate_last_minute: 0,
 	    });
     	} else {
     	    extend_user_tokens(sender);
