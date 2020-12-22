@@ -2,14 +2,14 @@ address 0x1 {
 
     
 module ViolasBank {
-    use 0x1::Libra;
-    use 0x1::LibraAccount;
+    use 0x1::Diem;
+    use 0x1::DiemAccount;
     use 0x1::Event;
     use 0x1::Vector;
-    use 0x1::LCS;
-    use 0x1::LibraTimestamp;
+    use 0x1::BCS;
+    use 0x1::DiemTimestamp;
     //use 0x1::Debug;
-    use 0x1::LibraBlock;
+    use 0x1::DiemBlock;
     use 0x1::Signer;
     use 0x1::Option::{Self, Option};
     use 0x1::FixedPoint32;
@@ -19,8 +19,8 @@ module ViolasBank {
     //use 0x1::ViolasBank as PBank;
 
     
-    resource struct LibraToken<Token> {
-	coin: Libra::Libra<Token>,
+    resource struct DiemToken<Token> {
+	coin: Diem::Diem<Token>,
 	index: u64,
     }
 
@@ -86,7 +86,7 @@ module ViolasBank {
     resource struct TokenInfoStore {
 	supervisor: address,
 	tokens: vector<TokenInfo>,
-	withdraw_capability: Option<LibraAccount::WithdrawCapability>,
+	withdraw_capability: Option<DiemAccount::WithdrawCapability>,
 	disabled: bool,
 	migrated: bool,
 	version: u64,
@@ -106,7 +106,7 @@ module ViolasBank {
 	userdata: vector<u8>,
     }
 
-    struct EventRegisterLibraToken {
+    struct EventRegisterDiemToken {
 	currency_code: vector<u8>,
 	price_oracle: address,
 	collateral_factor: u64,
@@ -227,21 +227,21 @@ module ViolasBank {
     	let sender = Signer::address_of(account);
     	require_published(sender);
     	// require_supervisor(sender);
-	assert(sender == 0x0000000000000000000000000000dd01, 501);
-	
+	assert(sender == 0x000000000000000000000000564c5301, 501);
+
     	let tokeninfos = borrow_global_mut<TokenInfoStore>(contract_address());
 	tokeninfos.incentive_rate = rate/(2*24*60);
-	tokeninfos.incentive_rate_last_minute = LibraTimestamp::now_microseconds() / (60*1000*1000);
+	tokeninfos.incentive_rate_last_minute = DiemTimestamp::now_microseconds() / (60*1000*1000);
 	
-    	let withdraw_capability = LibraAccount::extract_withdraw_capability(account);
-    	LibraAccount::pay_from<VLS>(&withdraw_capability, contract_address(), rate, Vector::empty(), Vector::empty());
-    	LibraAccount::restore_withdraw_capability(withdraw_capability);
+    	let withdraw_capability = DiemAccount::extract_withdraw_capability(account);
+    	DiemAccount::pay_from<VLS>(&withdraw_capability, contract_address(), rate, Vector::empty(), Vector::empty());
+    	DiemAccount::restore_withdraw_capability(withdraw_capability);
 	
 	refresh_incentive_speeds();
     	let input = EventSetIncentiveRate {
     	    rate: rate,
     	};
-    	emit_events(account, 17, LCS::to_bytes(&input), Vector::empty());
+    	emit_events(account, 17, BCS::to_bytes(&input), Vector::empty());
     	debug_print(&input);
     }
 
@@ -252,13 +252,13 @@ module ViolasBank {
 	
     	let tokeninfos = borrow_global_mut<TokenInfoStore>(contract_address());
 	tokeninfos.incentive_rate = rate/(2*24*60);
-	tokeninfos.incentive_rate_last_minute = LibraTimestamp::now_microseconds() / (60*1000*1000);
+	tokeninfos.incentive_rate_last_minute = DiemTimestamp::now_microseconds() / (60*1000*1000);
 	
 	refresh_incentive_speeds();
     }
     
     fun check_for_incentive_speeds_refresh() acquires TokenInfoStore {
-	let now = LibraTimestamp::now_microseconds() / (60*1000*1000);
+	let now = DiemTimestamp::now_microseconds() / (60*1000*1000);
     	let tokeninfos = borrow_global<TokenInfoStore>(contract_address());
 
 	let delta = safe_sub(now, tokeninfos.incentive_refresh_speeds_last_minute);
@@ -323,7 +323,7 @@ module ViolasBank {
 	let total_supply = total_supply(tokenidx+1);
 	let tokeninfos = borrow_global_mut<TokenInfoStore>(contract_address());
 	let ti = Vector::borrow_mut(&mut tokeninfos.tokens, tokenidx);
-	let now = LibraTimestamp::now_microseconds() / (60*1000*1000);
+	let now = DiemTimestamp::now_microseconds() / (60*1000*1000);
 	let delta_minutes = safe_sub(now, ti.incentive_supply_timestamp);
 	if(delta_minutes > 0) {
 	    let accured = ti.incentive_speed * delta_minutes;
@@ -339,7 +339,7 @@ module ViolasBank {
     fun update_incentive_borrow_index(tokenidx: u64) acquires TokenInfoStore {
 	let tokeninfos = borrow_global_mut<TokenInfoStore>(contract_address());
 	let ti = Vector::borrow_mut(&mut tokeninfos.tokens, tokenidx);
-	let now = LibraTimestamp::now_microseconds() / (60*1000*1000);
+	let now = DiemTimestamp::now_microseconds() / (60*1000*1000);
 	let delta_minutes = safe_sub(now, ti.incentive_borrow_timestamp);
 	if(delta_minutes > 0) {
 	    let borrow_amount = mantissa_div(ti.total_borrows, ti.borrow_index);
@@ -364,8 +364,8 @@ module ViolasBank {
 	let delta_index = safe_sub(ti.incentive_supply_index, *index);
 	let delta_vls = mantissa_mul(supply, delta_index);
 
-	if(delta_vls > 0 && LibraAccount::balance<VLS>(contract_address()) > delta_vls) {
-    	    LibraAccount::pay_from<VLS>(Option::borrow(&tokeninfos.withdraw_capability), sender, delta_vls, Vector::empty(), Vector::empty());
+	if(delta_vls > 0 && DiemAccount::balance<VLS>(contract_address()) > delta_vls) {
+    	    DiemAccount::pay_from<VLS>(Option::borrow(&tokeninfos.withdraw_capability), sender, delta_vls, Vector::empty(), Vector::empty());
 	} else { delta_vls = 0; };
 
 	*index = ti.incentive_supply_index;
@@ -384,8 +384,8 @@ module ViolasBank {
 	let delta_index = safe_sub(ti.incentive_borrow_index, *index);
 	let delta_vls = mantissa_mul(borrow, delta_index);
 
-	if(delta_vls > 0 && LibraAccount::balance<VLS>(contract_address()) > delta_vls) {
-    	    LibraAccount::pay_from<VLS>(Option::borrow(&tokeninfos.withdraw_capability), sender, delta_vls, Vector::empty(), Vector::empty());
+	if(delta_vls > 0 && DiemAccount::balance<VLS>(contract_address()) > delta_vls) {
+    	    DiemAccount::pay_from<VLS>(Option::borrow(&tokeninfos.withdraw_capability), sender, delta_vls, Vector::empty(), Vector::empty());
 	} else { delta_vls = 0; };
 
 	*index = ti.incentive_borrow_index;
@@ -412,7 +412,7 @@ module ViolasBank {
 	    incentive: total,
     	};
 	
-    	emit_events(account, 18, LCS::to_bytes(&input), Vector::empty());
+    	emit_events(account, 18, BCS::to_bytes(&input), Vector::empty());
     	debug_print(&input);
     }
     
@@ -579,23 +579,23 @@ module ViolasBank {
     	(token.total_supply, token.total_reserves, token.total_borrows, token.borrow_index)
     }
     
-    public fun print_balance<CoinType>(account: address) acquires LibraToken, Tokens {
-    	let libratoken = borrow_global<LibraToken<CoinType>>(contract_address());
+    public fun print_balance<CoinType>(account: address) acquires DiemToken, Tokens {
+    	let libratoken = borrow_global<DiemToken<CoinType>>(contract_address());
     	let tokens = borrow_global<Tokens>(account);
     	let borrowinfo = Vector::borrow(& tokens.borrows, libratoken.index);
     	let principal = borrowinfo.principal;
     	let interest_index = borrowinfo.interest_index;
 
 	debug_print(&x"01010101");
-    	debug_print(&LibraTimestamp::now_seconds());
+    	debug_print(&DiemTimestamp::now_seconds());
     	debug_print(&balance_of_index(libratoken.index, account));
     	debug_print(&balance_of_index(libratoken.index+1, account));
     	debug_print(&principal);
     	debug_print(&interest_index);
     }
 
-    public fun balance<CoinType>(account: &signer) : u64 acquires LibraToken, Tokens {
-    	let libratoken = borrow_global<LibraToken<CoinType>>(contract_address());
+    public fun balance<CoinType>(account: &signer) : u64 acquires DiemToken, Tokens {
+    	let libratoken = borrow_global<DiemToken<CoinType>>(contract_address());
     	let sender = Signer::address_of(account);
     	balance_of_index(libratoken.index, sender)
     }
@@ -608,8 +608,8 @@ module ViolasBank {
     	} else { 0 }
     }
 
-    public fun borrow_balance<CoinType>(account: &signer) : u64 acquires LibraToken, Tokens, TokenInfoStore {
-    	let libratoken = borrow_global<LibraToken<CoinType>>(contract_address());
+    public fun borrow_balance<CoinType>(account: &signer) : u64 acquires DiemToken, Tokens, TokenInfoStore {
+    	let libratoken = borrow_global<DiemToken<CoinType>>(contract_address());
     	let sender = Signer::address_of(account);
     	borrow_balance_of_index(libratoken.index, sender)
     }
@@ -694,13 +694,13 @@ module ViolasBank {
 
     	debug_print(&x"63636363");
     	debug_print(&sender);
-    	debug_print(&LibraAccount::sequence_number(sender));
+    	debug_print(&DiemAccount::sequence_number(sender));
     	debug_print(&etype);
-    	debug_print(&LibraTimestamp::now_seconds());
+    	debug_print(&DiemTimestamp::now_seconds());
     	debug_print(tokens);
     	debug_print(banktokens);
     	debug_print(&tokeninfos.tokens);
-    	Event::emit_event<ViolasEvent>(&mut info.violas_events, ViolasEvent{ etype: etype, timestamp: LibraTimestamp::now_microseconds(), paras: *&paras, data: *&data});
+    	Event::emit_event<ViolasEvent>(&mut info.violas_events, ViolasEvent{ etype: etype, timestamp: DiemTimestamp::now_microseconds(), paras: *&paras, data: *&data});
     }
 
     ///////////////////////////////////////////////////////////////////////////////////
@@ -717,12 +717,12 @@ module ViolasBank {
     	let tokeninfos = borrow_global_mut<TokenInfoStore>(contract_address());
     	if(tokeninfos.disabled == false) {
     	    tokeninfos.disabled = true;
-    	    LibraAccount::restore_withdraw_capability(Option::extract(&mut tokeninfos.withdraw_capability));
+    	    DiemAccount::restore_withdraw_capability(Option::extract(&mut tokeninfos.withdraw_capability));
     	}
     }
     
     public fun publish(account: &signer, userdata: vector<u8>) acquires Tokens, TokenInfoStore, UserInfo {
-    	debug_print(&LibraBlock::get_current_block_height());
+    	debug_print(&DiemBlock::get_current_block_height());
 	
     	let sender = Signer::address_of(account);
     	assert(!exists<Tokens>(sender), 113);
@@ -737,7 +737,7 @@ module ViolasBank {
     	});
 
     	if(sender == contract_address()) {
-    	    let withdraw_capability = LibraAccount::extract_withdraw_capability(account);
+    	    let withdraw_capability = DiemAccount::extract_withdraw_capability(account);
     	    move_to(account, TokenInfoStore{
     		supervisor: contract_address(),
     		tokens: Vector::empty(),
@@ -746,7 +746,7 @@ module ViolasBank {
     		migrated: false,
     		version: version(),
 		incentive_rate: 0,
-		incentive_refresh_speeds_last_minute: LibraTimestamp::now_microseconds() / (60*1000*1000),
+		incentive_refresh_speeds_last_minute: DiemTimestamp::now_microseconds() / (60*1000*1000),
 		incentive_rate_last_minute: 0,
 	    });
     	} else {
@@ -755,7 +755,7 @@ module ViolasBank {
     	};
 
     	let input = EventPublish{ userdata: userdata };
-    	emit_events(account, 0, LCS::to_bytes(&input), Vector::empty());
+    	emit_events(account, 0, BCS::to_bytes(&input), Vector::empty());
     	debug_print(&input);
     }
 
@@ -765,8 +765,8 @@ module ViolasBank {
     	require_supervisor(sender);
     	let tokeninfos = borrow_global_mut<TokenInfoStore>(contract_address());
     	let len = Vector::length(&tokeninfos.tokens);
-    	move_to(account, LibraToken<CoinType> { coin: Libra::zero<CoinType>(), index: len });
-    	create_token(account, Libra::currency_code<CoinType>(), 0x0, price_oracle, collateral_factor, base_rate, rate_multiplier, rate_jump_multiplier, rate_kink, tokendata)
+    	move_to(account, DiemToken<CoinType> { coin: Diem::zero<CoinType>(), index: len });
+    	create_token(account, Diem::currency_code<CoinType>(), 0x0, price_oracle, collateral_factor, base_rate, rate_multiplier, rate_jump_multiplier, rate_kink, tokendata)
     }
     
     public fun create_token(account: &signer, currency_code: vector<u8>, owner: address, price_oracle: address, collateral_factor: u64, base_rate: u64, rate_multiplier: u64, rate_jump_multiplier: u64, rate_kink: u64, tokendata: vector<u8>) : u64 acquires Tokens, TokenInfoStore, UserInfo {
@@ -794,12 +794,12 @@ module ViolasBank {
     	    rate_multiplier: rate_multiplier/(365*24*60),
     	    rate_jump_multiplier: rate_jump_multiplier/(365*24*60),
     	    rate_kink: rate_kink,
-    	    last_minute: LibraTimestamp::now_microseconds() / (60*1000*1000),
+    	    last_minute: DiemTimestamp::now_microseconds() / (60*1000*1000),
 	    incentive_supply_index: mantissa_one,
-	    incentive_supply_timestamp: LibraTimestamp::now_microseconds() / (60*1000*1000),
+	    incentive_supply_timestamp: DiemTimestamp::now_microseconds() / (60*1000*1000),
 	    incentive_speed: 0,
 	    incentive_borrow_index: mantissa_one,
-	    incentive_borrow_timestamp: LibraTimestamp::now_microseconds() / (60*1000*1000),
+	    incentive_borrow_timestamp: DiemTimestamp::now_microseconds() / (60*1000*1000),
     	    data: *&tokendata,
     	    bulletin_first: Vector::empty(),
     	    bulletins: Vector::empty()
@@ -818,12 +818,12 @@ module ViolasBank {
     	    rate_multiplier: rate_multiplier/(365*24*60),
     	    rate_jump_multiplier: rate_jump_multiplier/(365*24*60),
     	    rate_kink: rate_kink,
-    	    last_minute: LibraTimestamp::now_microseconds() / (60*1000*1000),
+    	    last_minute: DiemTimestamp::now_microseconds() / (60*1000*1000),
 	    incentive_supply_index: mantissa_one,
-	    incentive_supply_timestamp: LibraTimestamp::now_microseconds() / (60*1000*1000),
+	    incentive_supply_timestamp: DiemTimestamp::now_microseconds() / (60*1000*1000),
 	    incentive_speed: 0,
 	    incentive_borrow_index: mantissa_one,
-	    incentive_borrow_timestamp: LibraTimestamp::now_microseconds() / (60*1000*1000),
+	    incentive_borrow_timestamp: DiemTimestamp::now_microseconds() / (60*1000*1000),
     	    data: *&tokendata,
     	    bulletin_first: Vector::empty(),
     	    bulletins: Vector::empty()
@@ -831,7 +831,7 @@ module ViolasBank {
 
     	extend_user_tokens(contract_address());
 
-    	let input = EventRegisterLibraToken {
+    	let input = EventRegisterDiemToken {
     	    currency_code: currency_code,
     	    price_oracle: price_oracle,
     	    collateral_factor: collateral_factor,
@@ -842,7 +842,7 @@ module ViolasBank {
     	    tokendata: tokendata,
     	};
 	
-    	emit_events(account, 1, LCS::to_bytes(&input), Vector::empty());
+    	emit_events(account, 1, BCS::to_bytes(&input), Vector::empty());
     	debug_print(&input);
     	len
     }
@@ -871,7 +871,7 @@ module ViolasBank {
     	    data: data,
     	};
 	
-    	emit_events(account, 2, LCS::to_bytes(&input), Vector::empty());
+    	emit_events(account, 2, BCS::to_bytes(&input), Vector::empty());
     	debug_print(&input);
     }
 
@@ -913,7 +913,7 @@ module ViolasBank {
     	    data: data,
     	};
 	
-    	emit_events(account, 3, LCS::to_bytes(&input), Vector::empty());
+    	emit_events(account, 3, BCS::to_bytes(&input), Vector::empty());
     	debug_print(&input);
     }
 
@@ -967,7 +967,7 @@ module ViolasBank {
     	let tokeninfos = borrow_global_mut<TokenInfoStore>(contract_address());
     	let ti = Vector::borrow_mut(&mut tokeninfos.tokens, tokenidx);
 
-    	let minute = LibraTimestamp::now_microseconds() / (60*1000*1000);
+    	let minute = DiemTimestamp::now_microseconds() / (60*1000*1000);
     	let cnt = safe_sub(minute, ti.last_minute);
     	borrowrate = borrowrate*cnt;
     	ti.last_minute = minute;
@@ -1005,7 +1005,7 @@ module ViolasBank {
     	    let ti = Vector::borrow(& tokeninfos.tokens, i);
 
     	    debug_print(&x"03030303");
-    	    debug_print(&LibraTimestamp::now_seconds());
+    	    debug_print(&DiemTimestamp::now_seconds());
     	    debug_print(&i);
     	    debug_print(&balance);
     	    debug_print(&exchange_rate);
@@ -1033,16 +1033,16 @@ module ViolasBank {
     }
     
     ///////////////////////////////////////////////////////////////////////////////////
-    public fun update_price_from_oracle<CoinType>(account: &signer) acquires TokenInfoStore, LibraToken, UserInfo, Tokens {
+    public fun update_price_from_oracle<CoinType>(account: &signer) acquires TokenInfoStore, DiemToken, UserInfo, Tokens {
     	let (value, _) = Oracle::get_exchange_rate<CoinType>();
-    	let libratoken = borrow_global<LibraToken<CoinType>>(contract_address());
+    	let libratoken = borrow_global<DiemToken<CoinType>>(contract_address());
 
     	let input = EventUpdatePriceFromOracle {
-    	    currency_code: Libra::currency_code<CoinType>(),
+    	    currency_code: Diem::currency_code<CoinType>(),
     	    tokenidx: libratoken.index,
     	    price: FixedPoint32::get_raw_value(*&value),
     	};
-    	emit_events(account, 16, LCS::to_bytes(&input), Vector::empty());
+    	emit_events(account, 16, BCS::to_bytes(&input), Vector::empty());
     	debug_print(&input);
 
     	let tokeninfos = borrow_global_mut<TokenInfoStore>(contract_address());
@@ -1050,13 +1050,13 @@ module ViolasBank {
     	ti.price = FixedPoint32::get_raw_value(value);
 	
     	debug_print(&x"02020202");
-    	debug_print(&LibraTimestamp::now_seconds());
+    	debug_print(&DiemTimestamp::now_seconds());
     	debug_print(&ti.price);
     }
 
-    public fun update_price<CoinType>(account: &signer, price: u64) acquires TokenInfoStore, UserInfo, LibraToken, Tokens {
-    	let libratoken = borrow_global<LibraToken<CoinType>>(contract_address());
-    	update_price_index(account, Libra::currency_code<CoinType>(), libratoken.index, price);
+    public fun update_price<CoinType>(account: &signer, price: u64) acquires TokenInfoStore, UserInfo, DiemToken, Tokens {
+    	let libratoken = borrow_global<DiemToken<CoinType>>(contract_address());
+    	update_price_index(account, Diem::currency_code<CoinType>(), libratoken.index, price);
     }
     
     public fun update_price_index(account: &signer, currency_code: vector<u8>, tokenidx: u64, price: u64) acquires TokenInfoStore, UserInfo, Tokens {
@@ -1075,14 +1075,14 @@ module ViolasBank {
     	    price: price,
     	};
 	
-    	emit_events(account, 6, LCS::to_bytes(&input), Vector::empty());
+    	emit_events(account, 6, BCS::to_bytes(&input), Vector::empty());
     	debug_print(&input);
     }
 
-    public fun lock<CoinType>(account: &signer, amount: u64, data: vector<u8>) acquires Tokens, TokenInfoStore, UserInfo, LibraToken {
+    public fun lock<CoinType>(account: &signer, amount: u64, data: vector<u8>) acquires Tokens, TokenInfoStore, UserInfo, DiemToken {
     	update_price_from_oracle<CoinType>(account);
-    	let libratoken = borrow_global<LibraToken<CoinType>>(contract_address());
-    	lock_index(account, Libra::currency_code<CoinType>(), libratoken.index, amount, data);
+    	let libratoken = borrow_global<DiemToken<CoinType>>(contract_address());
+    	lock_index(account, Diem::currency_code<CoinType>(), libratoken.index, amount, data);
     }
 
     fun lock_incentive(sender: address, tokenidx: u64) : u64  acquires Tokens, TokenInfoStore {
@@ -1100,9 +1100,9 @@ module ViolasBank {
 
 	*last_exchange_rate = curr_exchange_rate;
 	
-	if(base_amount > 0 && LibraAccount::balance<VLS>(contract_address()) > base_amount) {
+	if(base_amount > 0 && DiemAccount::balance<VLS>(contract_address()) > base_amount) {
     	    let tokeninfos = borrow_global<TokenInfoStore>(contract_address());
-    	    LibraAccount::pay_from<VLS>(Option::borrow(&tokeninfos.withdraw_capability), sender, base_amount, Vector::empty(), Vector::empty());
+    	    DiemAccount::pay_from<VLS>(Option::borrow(&tokeninfos.withdraw_capability), sender, base_amount, Vector::empty(), Vector::empty());
 	} else { base_amount = 0; };
 	base_amount
     }
@@ -1137,20 +1137,20 @@ module ViolasBank {
 	    incentive: incentive,
     	};
 
-    	emit_events(account, 7, LCS::to_bytes(&input), Vector::empty());
+    	emit_events(account, 7, BCS::to_bytes(&input), Vector::empty());
     	debug_print(&input);
     }
 
-    public fun redeem<CoinType>(account: &signer, amount: u64, data: vector<u8>) acquires Tokens, TokenInfoStore, UserInfo, LibraToken {
+    public fun redeem<CoinType>(account: &signer, amount: u64, data: vector<u8>) acquires Tokens, TokenInfoStore, UserInfo, DiemToken {
     	update_price_from_oracle<CoinType>(account);
-    	let libratoken = borrow_global<LibraToken<CoinType>>(contract_address());
-    	redeem_index(account, Libra::currency_code<CoinType>(), libratoken.index, amount, data);
+    	let libratoken = borrow_global<DiemToken<CoinType>>(contract_address());
+    	redeem_index(account, Diem::currency_code<CoinType>(), libratoken.index, amount, data);
     }
     
     public fun redeem_index(account: &signer, currency_code: vector<u8>, tokenidx: u64, amount: u64, data: vector<u8>) acquires Tokens, TokenInfoStore, UserInfo {
     	let sender = Signer::address_of(account);
 
-    	debug_print(&LibraBlock::get_current_block_height());
+    	debug_print(&DiemBlock::get_current_block_height());
 	
     	require_published(sender);
     	require_first_tokenidx(tokenidx);
@@ -1191,14 +1191,14 @@ module ViolasBank {
 	    incentive: incentive,
     	};
 
-    	emit_events(account, 8, LCS::to_bytes(&input), Vector::empty());
+    	emit_events(account, 8, BCS::to_bytes(&input), Vector::empty());
     	debug_print(&input);
     }
 
-    public fun borrow<CoinType>(account: &signer, amount: u64, data: vector<u8>) acquires Tokens, TokenInfoStore, UserInfo, LibraToken {
+    public fun borrow<CoinType>(account: &signer, amount: u64, data: vector<u8>) acquires Tokens, TokenInfoStore, UserInfo, DiemToken {
     	update_price_from_oracle<CoinType>(account);
-    	let libratoken = borrow_global<LibraToken<CoinType>>(contract_address());
-    	borrow_index(account, Libra::currency_code<CoinType>(), libratoken.index, amount, data);
+    	let libratoken = borrow_global<DiemToken<CoinType>>(contract_address());
+    	borrow_index(account, Diem::currency_code<CoinType>(), libratoken.index, amount, data);
     }
 
     fun borrow_incentive(sender: address, tokenidx: u64) : u64  acquires Tokens, TokenInfoStore {
@@ -1213,9 +1213,9 @@ module ViolasBank {
     	let price = token_price(tokenidx);
     	let base_amount = mantissa_mul(amount, price);
 
-	if(base_amount > 0 && LibraAccount::balance<VLS>(contract_address()) > base_amount) {
+	if(base_amount > 0 && DiemAccount::balance<VLS>(contract_address()) > base_amount) {
     	    let tokeninfos = borrow_global<TokenInfoStore>(contract_address());
-    	    LibraAccount::pay_from<VLS>(Option::borrow(&tokeninfos.withdraw_capability), sender, base_amount, Vector::empty(), Vector::empty());
+    	    DiemAccount::pay_from<VLS>(Option::borrow(&tokeninfos.withdraw_capability), sender, base_amount, Vector::empty(), Vector::empty());
 	} else { base_amount = 0; };
 	base_amount
     }
@@ -1261,7 +1261,7 @@ module ViolasBank {
 	    incentive: incentive,
     	};
 
-    	emit_events(account, 9, LCS::to_bytes(&input), Vector::empty());
+    	emit_events(account, 9, BCS::to_bytes(&input), Vector::empty());
     	debug_print(&input);
     }
 
@@ -1282,10 +1282,10 @@ module ViolasBank {
     	amount
     }
 
-    public fun repay_borrow<CoinType>(account: &signer, amount: u64, data: vector<u8>) acquires Tokens, TokenInfoStore, UserInfo, LibraToken {
+    public fun repay_borrow<CoinType>(account: &signer, amount: u64, data: vector<u8>) acquires Tokens, TokenInfoStore, UserInfo, DiemToken {
     	update_price_from_oracle<CoinType>(account);
-    	let libratoken = borrow_global<LibraToken<CoinType>>(contract_address());
-    	repay_borrow_index(account, Libra::currency_code<CoinType>(), libratoken.index, amount, data);
+    	let libratoken = borrow_global<DiemToken<CoinType>>(contract_address());
+    	repay_borrow_index(account, Diem::currency_code<CoinType>(), libratoken.index, amount, data);
     	print_balance<CoinType>(Signer::address_of(account));
     }
     
@@ -1315,16 +1315,16 @@ module ViolasBank {
 	    incentive: incentive,
     	};
 
-    	emit_events(account, 10, LCS::to_bytes(&input), Vector::empty());
+    	emit_events(account, 10, BCS::to_bytes(&input), Vector::empty());
     	debug_print(&input);
     }
 
-    public fun liquidate_borrow<CoinType1, CoinType2>(account: &signer, borrower: address, amount: u64, data: vector<u8>) acquires Tokens, TokenInfoStore, UserInfo, LibraToken {
+    public fun liquidate_borrow<CoinType1, CoinType2>(account: &signer, borrower: address, amount: u64, data: vector<u8>) acquires Tokens, TokenInfoStore, UserInfo, DiemToken {
     	update_price_from_oracle<CoinType1>(account);
     	update_price_from_oracle<CoinType2>(account);
-    	let libratoken1 = borrow_global<LibraToken<CoinType1>>(contract_address());
-    	let libratoken2 = borrow_global<LibraToken<CoinType2>>(contract_address());
-    	liquidate_borrow_index(account, Libra::currency_code<CoinType1>(), Libra::currency_code<CoinType2>(), libratoken1.index, borrower, amount, libratoken2.index, data);
+    	let libratoken1 = borrow_global<DiemToken<CoinType1>>(contract_address());
+    	let libratoken2 = borrow_global<DiemToken<CoinType2>>(contract_address());
+    	liquidate_borrow_index(account, Diem::currency_code<CoinType1>(), Diem::currency_code<CoinType2>(), libratoken1.index, borrower, amount, libratoken2.index, data);
     }
     
     public fun liquidate_borrow_index(account: &signer, currency_code1: vector<u8>, currency_code2: vector<u8>, tokenidx: u64, borrower: address, amount: u64, collateral_tokenidx: u64, data: vector<u8>) acquires Tokens, TokenInfoStore, UserInfo {
@@ -1374,13 +1374,13 @@ module ViolasBank {
     	    data: data,	    
     	};
 
-    	emit_events(account, 11, LCS::to_bytes(&input), Vector::empty());
+    	emit_events(account, 11, BCS::to_bytes(&input), Vector::empty());
     	debug_print(&input);
     }
 
-    public fun update_collateral_factor<CoinType>(account: &signer, factor: u64) acquires TokenInfoStore, UserInfo, LibraToken, Tokens {
-    	let libratoken = borrow_global<LibraToken<CoinType>>(contract_address());
-    	update_collateral_factor_index(account, Libra::currency_code<CoinType>(), libratoken.index, factor);
+    public fun update_collateral_factor<CoinType>(account: &signer, factor: u64) acquires TokenInfoStore, UserInfo, DiemToken, Tokens {
+    	let libratoken = borrow_global<DiemToken<CoinType>>(contract_address());
+    	update_collateral_factor_index(account, Diem::currency_code<CoinType>(), libratoken.index, factor);
     }
 
     public fun update_collateral_factor_index(account: &signer, currency_code: vector<u8>, tokenidx: u64, factor: u64) acquires TokenInfoStore, UserInfo, Tokens {
@@ -1399,13 +1399,13 @@ module ViolasBank {
     	    factor: factor,
     	};
 	
-    	emit_events(account, 12, LCS::to_bytes(&input), Vector::empty());
+    	emit_events(account, 12, BCS::to_bytes(&input), Vector::empty());
     	debug_print(&input);
     }
 
-    public fun update_rate_model<CoinType>(account: &signer, base_rate: u64, rate_multiplier: u64, rate_jump_multiplier: u64, rate_kink: u64) acquires TokenInfoStore, UserInfo, LibraToken, Tokens {
-    	let libratoken = borrow_global<LibraToken<CoinType>>(contract_address());
-    	update_rate_model_index(account, Libra::currency_code<CoinType>(), libratoken.index, base_rate, rate_multiplier, rate_jump_multiplier, rate_kink);
+    public fun update_rate_model<CoinType>(account: &signer, base_rate: u64, rate_multiplier: u64, rate_jump_multiplier: u64, rate_kink: u64) acquires TokenInfoStore, UserInfo, DiemToken, Tokens {
+    	let libratoken = borrow_global<DiemToken<CoinType>>(contract_address());
+    	update_rate_model_index(account, Diem::currency_code<CoinType>(), libratoken.index, base_rate, rate_multiplier, rate_jump_multiplier, rate_kink);
     }
 
     public fun update_rate_model_index(account: &signer, currency_code: vector<u8>, tokenidx: u64, base_rate: u64, rate_multiplier: u64, rate_jump_multiplier: u64, rate_kink: u64) acquires TokenInfoStore, UserInfo, Tokens {
@@ -1430,53 +1430,53 @@ module ViolasBank {
     	    rate_kink: rate_kink,
     	};
 	
-    	emit_events(account, 15, LCS::to_bytes(&input), Vector::empty());
+    	emit_events(account, 15, BCS::to_bytes(&input), Vector::empty());
     	debug_print(&input);
     }
     
-    public fun enter_bank<CoinType>(account: &signer, amount: u64) acquires LibraToken, TokenInfoStore, Tokens, UserInfo {
+    public fun enter_bank<CoinType>(account: &signer, amount: u64) acquires DiemToken, TokenInfoStore, Tokens, UserInfo {
     	let sender = Signer::address_of(account);
     	require_published(sender);
     	require_enabled();
 	
-    	let libratoken = borrow_global_mut<LibraToken<CoinType>>(contract_address());
+    	let libratoken = borrow_global_mut<DiemToken<CoinType>>(contract_address());
 
-    	let withdraw_capability = LibraAccount::extract_withdraw_capability(account);
-    	LibraAccount::pay_from<CoinType>(&withdraw_capability, contract_address(), amount, Vector::empty(), Vector::empty());
-    	LibraAccount::restore_withdraw_capability(withdraw_capability);
+    	let withdraw_capability = DiemAccount::extract_withdraw_capability(account);
+    	DiemAccount::pay_from<CoinType>(&withdraw_capability, contract_address(), amount, Vector::empty(), Vector::empty());
+    	DiemAccount::restore_withdraw_capability(withdraw_capability);
 	
     	bank_mint(libratoken.index, sender, amount);
 
     	let input = EventEnterBank {
-    	    currency_code: Libra::currency_code<CoinType>(),
+    	    currency_code: Diem::currency_code<CoinType>(),
     	    tokenidx: libratoken.index,
     	    amount: amount,
     	};
 	
-    	emit_events(account, 13, LCS::to_bytes(&input), Vector::empty());
+    	emit_events(account, 13, BCS::to_bytes(&input), Vector::empty());
     	debug_print(&input);
     }
 
-    public fun exit_bank<CoinType>(account: &signer, amount: u64) acquires LibraToken, TokenInfoStore, Tokens, UserInfo {
+    public fun exit_bank<CoinType>(account: &signer, amount: u64) acquires DiemToken, TokenInfoStore, Tokens, UserInfo {
     	let sender = Signer::address_of(account);
     	require_published(sender);
     	require_enabled();
 
-    	let libratoken = borrow_global_mut<LibraToken<CoinType>>(contract_address());
+    	let libratoken = borrow_global_mut<DiemToken<CoinType>>(contract_address());
 	
     	let tokeninfos = borrow_global<TokenInfoStore>(contract_address());
-    	LibraAccount::pay_from<CoinType>(Option::borrow(&tokeninfos.withdraw_capability), sender, amount, Vector::empty(), Vector::empty());
+    	DiemAccount::pay_from<CoinType>(Option::borrow(&tokeninfos.withdraw_capability), sender, amount, Vector::empty(), Vector::empty());
 	
     	let t = withdraw_from(libratoken.index, sender, amount);
     	bank_burn(t);
 
     	let input = EventEnterBank {
-    	    currency_code: Libra::currency_code<CoinType>(),
+    	    currency_code: Diem::currency_code<CoinType>(),
     	    tokenidx: libratoken.index,
     	    amount: amount,
     	};
 
-    	emit_events(account, 14, LCS::to_bytes(&input), Vector::empty());
+    	emit_events(account, 14, BCS::to_bytes(&input), Vector::empty());
     	debug_print(&input);
     }
 	       
