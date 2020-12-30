@@ -77,6 +77,8 @@ module ViolasBank {
 	incentive_speed: u64,
 	incentive_borrow_index: u64,
 	incentive_borrow_timestamp: u64,
+
+	price_oracle_last_timestamp: u64,
 	
 	data: vector<u8>,
 	bulletin_first: vector<u8>,
@@ -229,7 +231,13 @@ module ViolasBank {
     	// require_supervisor(sender);
 	assert(sender == 0x000000000000000000000000564c5301, 501);
 
+	check_for_incentive_speeds_refresh();
+	
     	let tokeninfos = borrow_global_mut<TokenInfoStore>(contract_address());
+	if(tokeninfos.incentive_rate_last_minute > 0) {
+	    let delta_minutes = safe_sub(DiemTimestamp::now_microseconds()/(60*1000*1000), tokeninfos.incentive_rate_last_minute);
+	    assert(delta_minutes > 23*60, 602);
+	};
 	tokeninfos.incentive_rate = rate/(2*24*60);
 	tokeninfos.incentive_rate_last_minute = DiemTimestamp::now_microseconds() / (60*1000*1000);
 	
@@ -802,6 +810,7 @@ module ViolasBank {
 	    incentive_speed: 0,
 	    incentive_borrow_index: mantissa_one,
 	    incentive_borrow_timestamp: DiemTimestamp::now_microseconds() / (60*1000*1000),
+	    price_oracle_last_timestamp: 0,
     	    data: *&tokendata,
     	    bulletin_first: Vector::empty(),
     	    bulletins: Vector::empty()
@@ -826,6 +835,7 @@ module ViolasBank {
 	    incentive_speed: 0,
 	    incentive_borrow_index: mantissa_one,
 	    incentive_borrow_timestamp: DiemTimestamp::now_microseconds() / (60*1000*1000),
+	    price_oracle_last_timestamp: 0,
     	    data: *&tokendata,
     	    bulletin_first: Vector::empty(),
     	    bulletins: Vector::empty()
@@ -1036,7 +1046,7 @@ module ViolasBank {
     
     ///////////////////////////////////////////////////////////////////////////////////
     public fun update_price_from_oracle<CoinType>(account: &signer) acquires TokenInfoStore, DiemToken, UserInfo, Tokens {
-    	let (value, _) = Oracle::get_exchange_rate<CoinType>();
+    	let (value, timestamp) = Oracle::get_exchange_rate<CoinType>();
     	let libratoken = borrow_global<DiemToken<CoinType>>(contract_address());
 
     	let input = EventUpdatePriceFromOracle {
@@ -1050,6 +1060,13 @@ module ViolasBank {
     	let tokeninfos = borrow_global_mut<TokenInfoStore>(contract_address());
     	let ti = Vector::borrow_mut(&mut tokeninfos.tokens, libratoken.index);
     	ti.price = FixedPoint32::get_raw_value(value);
+
+	if(timestamp != ti.price_oracle_last_timestamp) {
+	    ti.price_oracle_last_timestamp = timestamp;
+	} else {
+	    let delta_minutes = safe_sub(DiemTimestamp::now_microseconds(), timestamp) / (60*1000*1000);
+	    assert(delta_minutes < 60, 601);
+	};
 	
     	debug_print(&x"02020202");
     	debug_print(&DiemTimestamp::now_seconds());
