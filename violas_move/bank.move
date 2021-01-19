@@ -580,6 +580,7 @@ address 0x7257c2417e4d1038e1817c8f283ace2e {
 	public fun borrow_balance<CoinType>(account: &signer) : u64 acquires DiemToken, Tokens, TokenInfoStore {
     	    let libratoken = borrow_global<DiemToken<CoinType>>(contract_address());
     	    let sender = Signer::address_of(account);
+	    accrue_interest(libratoken.index);
     	    borrow_balance_of_index(libratoken.index, sender)
 	}
 	
@@ -1073,13 +1074,13 @@ address 0x7257c2417e4d1038e1817c8f283ace2e {
     	    //debug_print(&input);
 	}
 
-	public fun redeem<CoinType>(account: &signer, amount: u64, data: vector<u8>) acquires Tokens, TokenInfoStore, UserInfo, DiemToken {
+	public fun redeem<CoinType>(account: &signer, amount: u64, data: vector<u8>) : u64 acquires Tokens, TokenInfoStore, UserInfo, DiemToken {
     	    update_price_from_oracle<CoinType>(account);
     	    let libratoken = borrow_global<DiemToken<CoinType>>(contract_address());
-    	    redeem_index(account, Diem::currency_code<CoinType>(), libratoken.index, amount, data);
+    	    redeem_index(account, Diem::currency_code<CoinType>(), libratoken.index, amount, data)
 	}
 	
-	public fun redeem_index(account: &signer, currency_code: vector<u8>, tokenidx: u64, amount: u64, data: vector<u8>) acquires Tokens, TokenInfoStore, UserInfo {
+	public fun redeem_index(account: &signer, currency_code: vector<u8>, tokenidx: u64, amount: u64, data: vector<u8>) : u64 acquires Tokens, TokenInfoStore, UserInfo {
     	    let sender = Signer::address_of(account);
 
     	    require_published(sender);
@@ -1096,10 +1097,16 @@ address 0x7257c2417e4d1038e1817c8f283ace2e {
 	    update_incentive_supply_index(tokenidx);
 	    let incentive = distribute_supply_incentive(tokenidx, sender);
 
+    	    //assert(amount > 0, 1161);
     	    let er = exchange_rate(tokenidx);
-
-    	    assert(amount > 0, 1161);
     	    let token_amount = mantissa_div(amount, er);
+
+	    if(amount == 0) {
+		let tokens = borrow_global<Tokens>(sender);
+    		let t = Vector::borrow(& tokens.ts, tokenidx+1);
+		token_amount = t.value;
+		amount = mantissa_mul(token_amount, er);
+	    };
 
     	    let (sum_collateral, sum_borrow) = account_liquidity(sender, tokenidx, token_amount, 0);
 
@@ -1123,6 +1130,8 @@ address 0x7257c2417e4d1038e1817c8f283ace2e {
 
     	    emit_events(account, 8, BCS::to_bytes(&input), Vector::empty());
     	    //debug_print(&input);
+
+	    amount
 	}
 
 	public fun borrow<CoinType>(account: &signer, amount: u64, data: vector<u8>) acquires Tokens, TokenInfoStore, UserInfo, DiemToken {
