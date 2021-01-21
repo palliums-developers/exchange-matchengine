@@ -220,7 +220,7 @@ address 0x7257c2417e4d1038e1817c8f283ace2e {
 	struct EventClaimIncentive {
 	    incentive: u64,
 	}
-	
+
 	///////////////////////////////////////////////////////////////////////////////////
 	
 	public fun set_incentive_rate(account: &signer, rate: u64) acquires TokenInfoStore, Tokens, UserInfo {
