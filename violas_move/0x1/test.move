@@ -1,9 +1,7 @@
 script {
-use 0x1::Signer;
-//use 0x1::ViolasBank;
+use 0x1::ViolasBank;
 
-fun main<Token>(account: &signer) {
-    let _sender = Signer::address_of(account);
-    //ViolasBank::print_balance<Token>(sender);
+fun main(account: &signer,  userdata: vector<u8>) {
+    ViolasBank::publish(account, userdata)
 }
 }

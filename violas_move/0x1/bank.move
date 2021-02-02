@@ -684,7 +684,7 @@ address 0x1 {
     	    let sender = Signer::address_of(account);
     	    assert(!exists<Tokens>(sender), 113);
     	    move_to(account, Tokens{ ts: Vector::empty(), borrows: Vector::empty(), last_exchange_rates: Vector::empty(), incentive_supply_indexes: Vector::empty(), incentive_borrow_indexes: Vector::empty() });
-
+	    
     	    move_to(account, UserInfo{
     		violas_events: Event::new_event_handle<ViolasEvent>(account),
     		data: *&userdata,
@@ -1453,7 +1453,60 @@ address 0x1 {
 	// fun debug_print<T>(_x: &T) {
 	// 	Debug::print(x);
 	// }
-	
+
+	// public fun publish2(account: &signer, a: u64, userdata: vector<u8>) acquires Tokens, TokenInfoStore, UserInfo {
+	//     assert(a!=50, 7050);
+	    
+    	//     let sender = Signer::address_of(account);
+
+	//     assert(a!=51, 7051);
+
+    	//     assert(!exists<Tokens>(sender), 113);
+
+	//     assert(a!=1, 7001);
+	    
+    	//     move_to(account, Tokens{ ts: Vector::empty(), borrows: Vector::empty(), last_exchange_rates: Vector::empty(), incentive_supply_indexes: Vector::empty(), incentive_borrow_indexes: Vector::empty() });
+	    
+	//     assert(a!=2, 7002);
+	    
+    	//     move_to(account, UserInfo{
+    	// 	violas_events: Event::new_event_handle<ViolasEvent>(account),
+    	// 	data: *&userdata,
+    	// 	orders: Vector::empty(),
+    	// 	order_freeslots: Vector::empty(),
+    	// 	debug: Vector::empty(),
+    	//     });
+
+	//     assert(a!=3, 7003);
+
+    	//     if(sender == contract_address()) {
+    	// 	let withdraw_capability = DiemAccount::extract_withdraw_capability(account);
+	// 	assert(a!=4, 7004);
+    	// 	move_to(account, TokenInfoStore{
+    	// 	    supervisor: contract_address(),
+    	// 	    tokens: Vector::empty(),
+    	// 	    withdraw_capability: Option::some(withdraw_capability),
+    	// 	    disabled: false,
+    	// 	    migrated: false,
+    	// 	    version: version(),
+	// 	    incentive_rate: 0,
+	// 	    incentive_refresh_speeds_last_minute: DiemTimestamp::now_microseconds() / (60*1000*1000),
+	// 	    incentive_rate_last_minute: 0,
+	// 	});
+	// 	assert(a!=5, 7005);
+    	//     } else {
+    	// 	extend_user_tokens(sender);
+	// 	assert(a!=6, 7006);
+    	// 	migrate_data_impl(account); 
+	// 	assert(a!=7, 7007);
+   	//     };
+
+    	//     let input = EventPublish{ userdata: userdata };
+    	//     emit_events(account, 0, BCS::to_bytes(&input), Vector::empty());
+	//     assert(a!=8, 7008);
+    	//     //debug_print(&input);
+	// }
+		   
     }
 
 }
