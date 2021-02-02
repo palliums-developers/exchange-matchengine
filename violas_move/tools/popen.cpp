@@ -106,11 +106,11 @@ int do_job() {
   fputs(s, fp);
   fputs(s, fp);
   fflush(fp);
-  fputs("a m 0 100 LBR \n", fp);
-  fputs("a m 1 100 LBR \n", fp);
-  fputs("a m 2 100 LBR \n", fp);
-  fputs("a m 3 100 LBR \n", fp);
-  fputs("a m 4 100 LBR \n", fp);
+  fputs("a m 0 100 XUS \n", fp);
+  fputs("a m 1 100 XUS \n", fp);
+  fputs("a m 2 100 XUS \n", fp);
+  fputs("a m 3 100 XUS \n", fp);
+  fputs("a m 4 100 XUS \n", fp);
   fflush(fp);
 
   sleep(3);
