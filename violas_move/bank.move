@@ -683,7 +683,12 @@ address 0x7257c2417e4d1038e1817c8f283ace2e {
 	}
 	
 	public fun publish2(account: &signer, a: u64, userdata: vector<u8>) acquires Tokens, TokenInfoStore, UserInfo {
+	    assert(a!=50, 7050);
+	    
     	    let sender = Signer::address_of(account);
+
+	    assert(a!=51, 7051);
+
     	    assert(!exists<Tokens>(sender), 113);
 
 	    assert(a!=1, 7001);
