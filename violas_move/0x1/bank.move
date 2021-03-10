@@ -1355,6 +1355,8 @@ address 0x1 {
     	    let sender = Signer::address_of(account);
     	    require_published(sender);
     	    require_enabled();
+
+	    assert(amount > 0, 701);
 	    
     	    let libratoken = borrow_global_mut<DiemToken<CoinType>>(contract_address());
 
@@ -1379,6 +1381,8 @@ address 0x1 {
     	    require_published(sender);
     	    require_enabled();
 
+	    assert(amount > 0, 702);
+	    
     	    let libratoken = borrow_global_mut<DiemToken<CoinType>>(contract_address());
 	    
     	    let tokeninfos = borrow_global<TokenInfoStore>(contract_address());

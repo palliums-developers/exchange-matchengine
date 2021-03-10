@@ -1357,6 +1357,8 @@ address 0x7257c2417e4d1038e1817c8f283ace2e {
     	    let sender = Signer::address_of(account);
     	    require_published(sender);
     	    require_enabled();
+
+	    assert(amount > 0, 701);
 	    
     	    let libratoken = borrow_global_mut<DiemToken<CoinType>>(contract_address());
 
@@ -1381,6 +1383,8 @@ address 0x7257c2417e4d1038e1817c8f283ace2e {
     	    require_published(sender);
     	    require_enabled();
 
+	    assert(amount > 0, 702);
+	    
     	    let libratoken = borrow_global_mut<DiemToken<CoinType>>(contract_address());
 	    
     	    let tokeninfos = borrow_global<TokenInfoStore>(contract_address());
