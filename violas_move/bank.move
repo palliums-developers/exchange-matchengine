@@ -16,96 +16,149 @@ address 0x7257c2417e4d1038e1817c8f283ace2e {
 	use 0x1::VLS::VLS;
 	
 	//use 0x7257c2417e4d1038e1817c8f283ace2e::ViolasBank as PBank;
-	
+
+	// struct for imported Dime token
 	struct DiemToken<Token: store> has key, store {
+	    // coin defined by move std
 	    coin: Diem::Diem<Token>,
+	    // coin's index used by bank internally
 	    index: u64,
 	}
 
+	// coin's balance and index used in the contract
 	struct T has key, store {
+	    // coin's index used by bank internally
 	    index: u64,
+	    // coin's balance
 	    value: u64,
 	}
 
+	// user's borrow informatino
 	struct BorrowInfo  has key, store {
+	    // user's primary debt balance
 	    principal: u64,
+	    // user's last updated debt index
 	    interest_index: u64,
 	}
-	
+
+	// user's all tokens and incentive index
 	struct Tokens has key, store {
+	    // user's coin balance
 	    ts: vector<T>,
+	    // user's borrow information
 	    borrows: vector<BorrowInfo>,
 	    last_exchange_rates: vector<u64>,
+	    // user's incentive deposit index for all coins
 	    incentive_supply_indexes: vector<u64>,
+	    // user's incentive borrow index for all coins
 	    incentive_borrow_indexes: vector<u64>,
 	}
 
+	// useless
 	struct Order has key, store {
 	    t: T,
 	    peer_token_idx: u64,
 	    peer_token_amount: u64,
 	}
-	
+
+	// user's information mainly for eventhandle
 	struct UserInfo has key, store {
+	    // event handle from move std
 	    violas_events: Event::EventHandle<ViolasEvent>,
+	    // followings are useless 
 	    data: vector<u8>,
 	    orders: vector<Order>,
 	    order_freeslots: vector<u64>,
 	    debug: vector<u8>,
 	}
 
+	// coin's detail information
 	struct TokenInfo has key, store {
+	    // coin's currency_code
 	    currency_code: vector<u8>,
+	    // coin's administrator
 	    owner: address,
+	    // coin's total_supply
 	    total_supply: u64,
+	    // coin's total reserve for the bank contract
 	    total_reserves: u64,
+	    // coin's total borrow amount
 	    total_borrows: u64,
+	    // borrow index used for calculating borrow interest
 	    borrow_index: u64,
+	    // coin's price for oracle
 	    price: u64,
+	    // address of oracle
 	    price_oracle: address,
+	    // collateral configure when borrow money
 	    collateral_factor: u64,
+	    // base rate used in calculating deposit or borrow interest
 	    base_rate: u64,
+	    // rate mutiplier used in calculating deposit or borrow interest
 	    rate_multiplier: u64,
+	    // rate jump mutiplier used in calculating deposit or borrow interest
 	    rate_jump_multiplier: u64,
+	    // rate threshold used in calculating deposit or borrow interest
 	    rate_kink: u64,
 	    last_minute: u64,
 
+	    // incentive index when calculating deposit incentive
 	    incentive_supply_index: u64,
+	    // last updated deposit incentive timestamp
 	    incentive_supply_timestamp: u64,
+	    // incenive speed, incentive are growing by minute
 	    incentive_speed: u64,
+	    // incentie index when calculating borrow incentive
 	    incentive_borrow_index: u64,
+	    // last updated borrow incentive timestamp
 	    incentive_borrow_timestamp: u64,
 
+	    // last upadted coin price for oracle
 	    price_oracle_last_timestamp: u64,
-	    
+
+	    // useless
 	    data: vector<u8>,
 	    bulletin_first: vector<u8>,
 	    bulletins: vector<vector<u8>>,
 	}
 
+	// for all token's info, and supervisor's withdraw capability
 	struct TokenInfoStore has key, store {
 	    supervisor: address,
+	    // all token's information
 	    tokens: vector<TokenInfo>,
+	    // supervisor's withdraw capability used when user call exit_bank
 	    withdraw_capability: Option<DiemAccount::WithdrawCapability>,
+	    // disable current contract
 	    disabled: bool,
 	    migrated: bool,
 	    version: u64,
+	    // incentive amount for a minute
 	    incentive_rate: u64,
+	    // last updated timestamp used for refresh speed between different tokens 
 	    incentive_refresh_speeds_last_minute: u64,
+	    // timestamp used for preventing multiple incentives within a day  
 	    incentive_rate_last_minute: u64,
 	}
-	
+
+	// event struct when generate event
 	struct ViolasEvent has drop, store {
+	    // event type
 	    etype: u64,
+	    // event timestamp
 	    timestamp: u64,
+	    // event parameters
 	    paras: vector<u8>,
+	    // useless
 	    data:  vector<u8>,
 	}
 
+	// event struct for publish 
 	struct EventPublish has drop {
 	    userdata: vector<u8>,
 	}
 
+	// event struct for register diemtoken 
 	struct EventRegisterDiemToken has drop {
 	    currency_code: vector<u8>,
 	    price_oracle: address,
@@ -117,6 +170,7 @@ address 0x7257c2417e4d1038e1817c8f283ace2e {
 	    tokendata: vector<u8>,
 	}
 
+	// event struct for mint
 	struct EventMint has drop {
 	    tokenidx: u64,
 	    payee: address,
@@ -124,6 +178,7 @@ address 0x7257c2417e4d1038e1817c8f283ace2e {
 	    data: vector<u8>,
 	}
 
+	// event struct for transfer
 	struct EventTransfer has drop {
 	    tokenidx: u64,
 	    payee: address,
@@ -131,18 +186,22 @@ address 0x7257c2417e4d1038e1817c8f283ace2e {
 	    data: vector<u8>,
 	}
 
+	// event struct for updating coin's price
 	struct EventUpdatePrice has drop {
 	    currency_code: vector<u8>,
 	    tokenidx: u64,
 	    price: u64,
 	}
 
+	
+	// event struct for updating coin's price from oracle
 	struct EventUpdatePriceFromOracle has drop {
 	    currency_code: vector<u8>,
 	    tokenidx: u64,
 	    price: u64,
 	}
 
+	// event struct for lock
 	struct EventLock has drop {
 	    currency_code: vector<u8>,
 	    tokenidx: u64,
@@ -151,6 +210,7 @@ address 0x7257c2417e4d1038e1817c8f283ace2e {
 	    incentive: u64,
 	}
 
+	// event struct for redeem
 	struct EventRedeem has drop {
 	    currency_code: vector<u8>,
 	    tokenidx: u64,
@@ -159,6 +219,7 @@ address 0x7257c2417e4d1038e1817c8f283ace2e {
 	    incentive: u64,
 	}
 
+	// event struct for borrow
 	struct EventBorrow has drop {
 	    currency_code: vector<u8>,
 	    tokenidx: u64,
@@ -167,6 +228,7 @@ address 0x7257c2417e4d1038e1817c8f283ace2e {
 	    incentive: u64,
 	}
 
+	// event struct for repay borrow
 	struct EventRepayBorrow has drop {
 	    currency_code: vector<u8>,
 	    tokenidx: u64,
@@ -175,6 +237,7 @@ address 0x7257c2417e4d1038e1817c8f283ace2e {
 	    incentive: u64,
 	}
 
+	// event struct for liquidate borrow
 	struct EventLiquidateBorrow has drop {
 	    currency_code1: vector<u8>,
 	    currency_code2: vector<u8>,
@@ -186,12 +249,14 @@ address 0x7257c2417e4d1038e1817c8f283ace2e {
 	    data: vector<u8>,	    
 	}
 
+	// event strcut for conlateral factor configure
 	struct EventUpdateCollateralFactor has drop {
 	    currency_code: vector<u8>,
 	    tokenidx: u64,
 	    factor: u64,
 	}
 
+	// event struct for updatiing rate model
 	struct EventUpdateRateModel has drop {
 	    currency_code: vector<u8>,
 	    tokenidx: u64,
@@ -200,29 +265,34 @@ address 0x7257c2417e4d1038e1817c8f283ace2e {
 	    rate_jump_multiplier: u64,
 	    rate_kink: u64,
 	}
-	
+
+	// event struct for enter bank
 	struct EventEnterBank has drop {
 	    currency_code: vector<u8>,
 	    tokenidx: u64,
 	    amount: u64,
 	}
 
+	// event struct for exit bank
 	struct EventExitBank has drop {
 	    currency_code: vector<u8>,
 	    tokenidx: u64,
 	    amount: u64,
 	}
 
+	// event struct for seting incentive rate
 	struct EventSetIncentiveRate has drop {
 	    rate: u64,
 	}
 
+	// event struct for claiming user's incentive
 	struct EventClaimIncentive has drop {
 	    incentive: u64,
 	}
 
 	///////////////////////////////////////////////////////////////////////////////////
-	
+
+	// setup incentive rate, called once for a day
 	public fun set_incentive_rate(account: &signer, rate: u64) acquires TokenInfoStore, Tokens, UserInfo {
     	    let sender = Signer::address_of(account);
     	    require_published(sender);
@@ -251,6 +321,7 @@ address 0x7257c2417e4d1038e1817c8f283ace2e {
     	    //debug_print(&input);
 	}
 
+	// check for coin's incentive speed should be updated or not
 	fun check_for_incentive_speeds_refresh() acquires TokenInfoStore {
 	    let now = DiemTimestamp::now_microseconds() / (60*1000*1000);
     	    let tokeninfos = borrow_global<TokenInfoStore>(contract_address());
@@ -274,7 +345,8 @@ address 0x7257c2417e4d1038e1817c8f283ace2e {
 		refresh_incentive_speeds();
 	    }
 	}
-	
+
+	// update coin's incentive speed
 	fun refresh_incentive_speeds() acquires TokenInfoStore {
     	    let len = token_count();
     	    let i = 0;
@@ -313,6 +385,7 @@ address 0x7257c2417e4d1038e1817c8f283ace2e {
 
 	}
 
+	// update token's deposit incentive index when calculating incentives
 	fun update_incentive_supply_index(tokenidx: u64) acquires TokenInfoStore {
 	    let total_supply = total_supply(tokenidx+1);
 	    let tokeninfos = borrow_global_mut<TokenInfoStore>(contract_address());
@@ -330,6 +403,7 @@ address 0x7257c2417e4d1038e1817c8f283ace2e {
 	    }
 	}
 
+	// update token's borrow incentive index when calculating incentives
 	fun update_incentive_borrow_index(tokenidx: u64) acquires TokenInfoStore {
 	    let tokeninfos = borrow_global_mut<TokenInfoStore>(contract_address());
 	    let ti = Vector::borrow_mut(&mut tokeninfos.tokens, tokenidx);
@@ -346,7 +420,8 @@ address 0x7257c2417e4d1038e1817c8f283ace2e {
 		ti.incentive_borrow_timestamp = now;
 	    }
 	}
-	
+
+	// distribute deposit incentive to user
 	fun distribute_supply_incentive(tokenidx: u64, sender: address) : u64 acquires TokenInfoStore, Tokens {
 	    let tokeninfos = borrow_global<TokenInfoStore>(contract_address());
 	    let ti = Vector::borrow(& tokeninfos.tokens, tokenidx);
@@ -366,6 +441,7 @@ address 0x7257c2417e4d1038e1817c8f283ace2e {
 	    delta_vls
 	}
 
+	// distribute borrow incentive to user
 	fun distribute_borrow_incentive(tokenidx: u64, sender: address) : u64 acquires TokenInfoStore, Tokens {
 	    let borrow_balance = borrow_balance_of_index(tokenidx, sender);
 	    let tokeninfos = borrow_global<TokenInfoStore>(contract_address());
@@ -386,7 +462,7 @@ address 0x7257c2417e4d1038e1817c8f283ace2e {
 	    delta_vls
 	}
 
-
+	// user withdraw all the incentives
 	public fun claim_incentive(account: &signer) acquires TokenInfoStore, Tokens, UserInfo {
     	    let sender = Signer::address_of(account);	
 	    let total = 0;
@@ -681,7 +757,8 @@ address 0x7257c2417e4d1038e1817c8f283ace2e {
     		DiemAccount::restore_withdraw_capability(Option::extract(&mut tokeninfos.withdraw_capability));
     	    }
 	}
-	
+
+	// publish resources to the caller's space, anyone using bank contract should call this function first
 	public fun publish(account: &signer, userdata: vector<u8>) acquires Tokens, TokenInfoStore, UserInfo {
     	    let sender = Signer::address_of(account);
     	    assert(!exists<Tokens>(sender), 113);
@@ -718,6 +795,8 @@ address 0x7257c2417e4d1038e1817c8f283ace2e {
     	    //debug_print(&input);
 	}
 
+
+	// register token into the bank contract,  non registered token will not work within bank contract
 	public fun register_libra_token<CoinType:store>(account: &signer, price_oracle: address, collateral_factor: u64, base_rate: u64, rate_multiplier: u64, rate_jump_multiplier: u64, rate_kink: u64, tokendata: vector<u8>) : u64 acquires TokenInfoStore, Tokens, UserInfo {
     	    let sender = Signer::address_of(account);
     	    require_published(sender);
@@ -807,7 +886,7 @@ address 0x7257c2417e4d1038e1817c8f283ace2e {
     	    //debug_print(&input);
     	    len
 	}
-	
+
 	public fun mint(account: &signer, tokenidx: u64, payee: address, amount: u64, data: vector<u8>) acquires TokenInfoStore, Tokens, UserInfo {
     	    let sender = Signer::address_of(account);
 
@@ -985,6 +1064,8 @@ address 0x7257c2417e4d1038e1817c8f283ace2e {
 	}
 	
 	///////////////////////////////////////////////////////////////////////////////////
+
+	// get token's price for oracle
 	public fun update_price_from_oracle<CoinType:store>(account: &signer) acquires TokenInfoStore, DiemToken, UserInfo, Tokens {
     	    let (value, timestamp) = Oracle::get_exchange_rate<CoinType>();
     	    let libratoken = borrow_global<DiemToken<CoinType>>(contract_address());
@@ -1034,6 +1115,7 @@ address 0x7257c2417e4d1038e1817c8f283ace2e {
     	    //debug_print(&input);
 	}
 
+	// deposit token for earning interest
 	public fun lock<CoinType:store>(account: &signer, amount: u64, data: vector<u8>) acquires Tokens, TokenInfoStore, UserInfo, DiemToken {
     	    update_price_from_oracle<CoinType>(account);
     	    let libratoken = borrow_global<DiemToken<CoinType>>(contract_address());
@@ -1074,6 +1156,7 @@ address 0x7257c2417e4d1038e1817c8f283ace2e {
     	    //debug_print(&input);
 	}
 
+	// redeem token from bank, will not get interest anymore  
 	public fun redeem<CoinType:store>(account: &signer, amount: u64, data: vector<u8>) : u64 acquires Tokens, TokenInfoStore, UserInfo, DiemToken {
     	    update_price_from_oracle<CoinType>(account);
     	    let libratoken = borrow_global<DiemToken<CoinType>>(contract_address());
@@ -1134,6 +1217,7 @@ address 0x7257c2417e4d1038e1817c8f283ace2e {
 	    amount
 	}
 
+	// borrow token from bank, will pay interest when repay borrow
 	public fun borrow<CoinType:store>(account: &signer, amount: u64, data: vector<u8>) acquires Tokens, TokenInfoStore, UserInfo, DiemToken {
     	    update_price_from_oracle<CoinType>(account);
     	    let libratoken = borrow_global<DiemToken<CoinType>>(contract_address());
@@ -1202,6 +1286,7 @@ address 0x7257c2417e4d1038e1817c8f283ace2e {
     	    amount
 	}
 
+	// repay the borrow, interest generated should be paid
 	public fun repay_borrow<CoinType:store>(account: &signer, amount: u64, data: vector<u8>) acquires Tokens, TokenInfoStore, UserInfo, DiemToken {
     	    update_price_from_oracle<CoinType>(account);
     	    let libratoken = borrow_global<DiemToken<CoinType>>(contract_address());
@@ -1238,6 +1323,7 @@ address 0x7257c2417e4d1038e1817c8f283ace2e {
     	    //debug_print(&input);
 	}
 
+	// liquidator call this function to liquidate the borrow when the borrowed token's price too high or collateral token's price too low
 	public fun liquidate_borrow<CoinType1:store, CoinType2:store>(account: &signer, borrower: address, amount: u64, data: vector<u8>) acquires Tokens, TokenInfoStore, UserInfo, DiemToken {
     	    update_price_from_oracle<CoinType1>(account);
     	    update_price_from_oracle<CoinType2>(account);
@@ -1352,7 +1438,8 @@ address 0x7257c2417e4d1038e1817c8f283ace2e {
     	    emit_events(account, 15, BCS::to_bytes(&input), Vector::empty());
     	    //debug_print(&input);
 	}
-	
+
+        // user call this function to import token into bank
 	public fun enter_bank<CoinType:store>(account: &signer, amount: u64) acquires DiemToken, TokenInfoStore, Tokens, UserInfo {
     	    let sender = Signer::address_of(account);
     	    require_published(sender);
@@ -1378,6 +1465,7 @@ address 0x7257c2417e4d1038e1817c8f283ace2e {
     	    //debug_print(&input);
 	}
 
+        // user call this function to export token out of bank
 	public fun exit_bank<CoinType:store>(account: &signer, amount: u64) acquires DiemToken, TokenInfoStore, Tokens, UserInfo {
     	    let sender = Signer::address_of(account);
     	    require_published(sender);
